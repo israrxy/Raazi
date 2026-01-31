@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+
+# OuterTune Dev Folder
+/OuterTune-dev
+/OuterTune-dev/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
