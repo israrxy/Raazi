@@ -44,7 +44,7 @@ class BlurTransformation(
     
     // Stack Blur Algorithm
     private fun fastBlur(sentBitmap: Bitmap, radius: Int): Bitmap {
-        val bitmap = sentBitmap.copy(sentBitmap.config, true)
+        val bitmap = sentBitmap.copy(sentBitmap.config ?: Bitmap.Config.ARGB_8888, true)
 
         if (radius < 1) {
             return (null) ?: sentBitmap
