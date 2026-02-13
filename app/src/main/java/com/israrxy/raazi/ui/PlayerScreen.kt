@@ -118,12 +118,23 @@ fun PlayerScreen(
         ) { track ->
             if (track != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    val isAndroid12 = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                    
                     AsyncImage(
-                        model = track.thumbnailUrl,
+                        model = if (isAndroid12) {
+                            track.thumbnailUrl
+                        } else {
+                            coil.request.ImageRequest.Builder(LocalContext.current)
+                                .data(track.thumbnailUrl)
+                                .transformations(
+                                    com.israrxy.raazi.utils.BlurTransformation(LocalContext.current, radius = 25, sampling = 6f)
+                                )
+                                .build()
+                        },
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
-                            .blur(radius = 60.dp)
+                            .then(if (isAndroid12) Modifier.blur(radius = 60.dp) else Modifier)
                             .graphicsLayer(alpha = backgroundAlpha),
                         contentScale = ContentScale.Crop
                     )

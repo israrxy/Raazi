@@ -371,7 +371,8 @@ class AdvancedDownloadManager(
      * Get available storage space.
      */
     fun getAvailableStorage(): Long {
-        val stat = StatFs(Environment.getExternalStorageDirectory().path)
+        val appDir = context.getExternalFilesDir(null) ?: return 0L
+        val stat = StatFs(appDir.path)
         return stat.availableBlocksLong * stat.blockSizeLong
     }
 
