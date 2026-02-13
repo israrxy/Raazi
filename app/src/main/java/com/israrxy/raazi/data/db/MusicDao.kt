@@ -12,8 +12,12 @@ import com.israrxy.raazi.data.db.SearchHistoryEntity
 @Dao
 interface MusicDao {
     // Favorites / Library tracks
-    @Query("SELECT * FROM tracks ORDER BY timestamp DESC")
+    // Favorites
+    @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY timestamp DESC")
     fun getAllTracks(): Flow<List<TrackEntity>>
+    
+    @Query("SELECT * FROM tracks WHERE id = :id")
+    fun getTrack(id: String): TrackEntity?
     
     @Query("SELECT * FROM tracks WHERE localPath IS NOT NULL ORDER BY timestamp DESC")
     fun getDownloadedTracks(): Flow<List<TrackEntity>>
@@ -44,13 +48,13 @@ interface MusicDao {
     fun removeTrackFromPlaylist(playlistId: String, trackId: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertPlaybackHistory(history: PlaybackHistoryEntity)
+    fun insertPlaybackHistory(history: PlaybackHistoryEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    fun insertRelatedSongs(relatedSongs: List<RelatedSongEntity>)
+    fun insertRelatedSongs(relatedSongs: List<RelatedSongEntity>): List<Long>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    fun insertTracks(tracks: List<TrackEntity>)
+    fun insertTracks(tracks: List<TrackEntity>): List<Long>
 
     // Smart Quick Picks: Recommendations based on last 20 played songs
     @Query("""
@@ -87,20 +91,73 @@ interface MusicDao {
     fun upsertPlaybackHistory(id: String, title: String, artist: String, thumbnailUrl: String, audioUrl: String, videoUrl: String, duration: Long, timestamp: Long)
 
     @Delete
-    fun deletePlaybackHistory(item: PlaybackHistoryEntity)
+    fun deletePlaybackHistory(item: PlaybackHistoryEntity): Int
 
     // Search History
     @Query("SELECT * FROM search_history WHERE query LIKE :query || '%' ORDER BY timestamp DESC")
     fun searchHistory(query: String = ""): Flow<List<SearchHistoryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertSearchHistory(searchHistory: SearchHistoryEntity)
+    fun insertSearchHistory(searchHistory: SearchHistoryEntity): Long
 
     @Delete
-    fun deleteSearchHistory(searchHistory: SearchHistoryEntity)
+    fun deleteSearchHistory(searchHistory: SearchHistoryEntity): Int
 
     @Query("DELETE FROM search_history")
-    fun clearSearchHistory()
+    fun clearSearchHistory(): Int
+
+    // Downloads Management
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertDownload(download: DownloadEntity): Long
+
+    @Query("UPDATE downloads SET progress = :progress, downloadedBytes = :downloadedBytes, status = 1 WHERE trackId = :trackId")
+    fun updateDownloadProgress(trackId: String, progress: Int, downloadedBytes: Long)
+
+    @Query("UPDATE downloads SET status = :status, filePath = :filePath, errorMessage = :errorMessage, completedAt = CASE WHEN :status = 2 THEN :completedAt ELSE NULL END WHERE trackId = :trackId")
+    fun updateDownloadStatus(trackId: String, status: Int, filePath: String? = null, errorMessage: String? = null, completedAt: Long? = System.currentTimeMillis())
+
+    @Query("UPDATE downloads SET downloadId = :downloadId, status = 1 WHERE trackId = :trackId")
+    fun updateDownloadId(trackId: String, downloadId: Long)
+
+    @Query("UPDATE downloads SET retryCount = retryCount + 1 WHERE trackId = :trackId")
+    fun incrementRetryCount(trackId: String)
+
+    @Query("SELECT * FROM downloads WHERE status IN (0, 1) ORDER BY createdAt ASC")
+    fun getActiveDownloads(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads WHERE status = 2 ORDER BY completedAt DESC")
+    fun getCompletedDownloads(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads WHERE status = 3 ORDER BY createdAt DESC")
+    fun getFailedDownloads(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads ORDER BY createdAt DESC")
+    fun getAllDownloads(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads WHERE trackId = :trackId")
+    fun getDownloadByTrackId(trackId: String): DownloadEntity?
+
+    @Query("DELETE FROM downloads WHERE trackId = :trackId")
+    fun deleteDownloadByTrackId(trackId: String)
+
+    @Query("SELECT COUNT(*) FROM downloads WHERE status IN (0, 1)")
+    fun getActiveDownloadCount(): Flow<Int>
+
+    @Query("UPDATE tracks SET localPath = :localPath WHERE id = :trackId")
+    fun updateTrackLocalPath(trackId: String, localPath: String)
+
+    @Query("UPDATE tracks SET localPath = NULL WHERE id = :trackId")
+    fun clearTrackLocalPath(trackId: String)
+
+    // Format / Codec Info
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun upsertFormat(format: FormatEntity): Long
+
+    @Query("SELECT * FROM format WHERE id = :trackId")
+    fun getFormat(trackId: String): FormatEntity?
+
+    @Query("SELECT * FROM format WHERE id = :trackId")
+    fun getFormatFlow(trackId: String): Flow<FormatEntity?>
 }
 
 data class PlaylistWithTracks(

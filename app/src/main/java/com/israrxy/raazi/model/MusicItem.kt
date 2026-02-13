@@ -10,6 +10,7 @@ data class MusicItem(
     val videoUrl: String,
     val isLive: Boolean = false,
     val localPath: String? = null,
+    val isFavorite: Boolean = false,
     val isPlaylist: Boolean = false,
     val artistId: String? = null
 )

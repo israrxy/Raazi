@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
 
 class MusicRepository(
     private val db: AppDatabase,
@@ -30,8 +31,8 @@ class MusicRepository(
         return extractor.getSearchSuggestions(query)
     }
 
-    suspend fun searchMusic(query: String): SearchResult {
-        return extractor.searchMusic(query)
+    suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult {
+        return extractor.searchMusic(query, serviceId)
     }
     
     suspend fun downloadTrack(item: MusicItem) {
@@ -42,7 +43,12 @@ class MusicRepository(
                 if (downloadId != null) {
                     // Save to DB with local path for offline playback
                     val path = downloadManager.getDownloadPath(item)
-                    val entity = item.copy(localPath = path, audioUrl = url).toEntity()
+                    
+                    // Check existing to preserve isFavorite
+                    val existing = db.musicDao().getTrack(item.id)
+                    val isFav = existing?.isFavorite ?: false
+                    
+                    val entity = item.copy(localPath = path, audioUrl = url, isFavorite = isFav).toEntity()
                     db.musicDao().insertTrack(entity)
                 }
             }
@@ -137,16 +143,83 @@ class MusicRepository(
 
     suspend fun addToFavorites(item: MusicItem) {
         withContext(Dispatchers.IO) {
-            db.musicDao().insertTrack(item.toEntity())
+            // Preserve existing data (like download path)
+            val existing = db.musicDao().getTrack(item.id)
+            val localPath = existing?.localPath
+            
+            // If we have an existing entity, we might want to keep its timestamp or other fields?
+            // For favorites, usually we update timestamp to now to show at top? Yes.
+            
+            val entity = item.copy(
+                isFavorite = true, 
+                localPath = localPath ?: item.localPath // Keep existing download if any
+            ).toEntity()
+            
+            db.musicDao().insertTrack(entity)
         }
     }
 
     suspend fun removeFromFavorites(item: MusicItem) {
         withContext(Dispatchers.IO) {
-            db.musicDao().deleteTrack(item.toEntity())
+            val existing = db.musicDao().getTrack(item.id)
+            if (existing != null) {
+                // Determine if we should delete or just unset flag
+                if (existing.localPath == null) {
+                    // Not downloaded, assume can be deleted from library if not favorite
+                    // But wait, what if it's in history? History is separate table now.
+                    // Tracks table is essentially "Library + Downloads". 
+                    // If not favorite and not downloaded, we can remove from 'tracks' table?
+                    // Actually, let's just unset the flag for safety. 
+                    // A proper implementation would check if it's referenced elsewhere or just keep it cached.
+                    // For "Liked Songs Count" fix, unsetting flag is sufficient.
+                     val updated = existing.copy(isFavorite = false)
+                     // If it's not downloaded and not favorite, we could delete it to clean up?
+                     // Let's stick to unsetting flag to be safe against deleting unintended data.
+                     db.musicDao().insertTrack(updated)
+                } else {
+                    // It is downloaded, MUST keep it, just unlike
+                    val updated = existing.copy(isFavorite = false)
+                    db.musicDao().insertTrack(updated)
+                }
+            }
         }
     }
     
+    // Playlists Management
+    val userPlaylists: Flow<List<PlaylistEntity>> = db.musicDao().getAllPlaylists()
+
+    suspend fun createPlaylist(name: String) {
+        withContext(Dispatchers.IO) {
+            val playlist = PlaylistEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                title = name,
+                description = "",
+                thumbnailUrl = ""
+            )
+            db.musicDao().insertPlaylist(playlist)
+        }
+    }
+
+    suspend fun addToPlaylist(track: MusicItem, playlist: PlaylistEntity) {
+        withContext(Dispatchers.IO) {
+            // Ensure track exists in DB
+            val trackEntity = track.toEntity()
+            db.musicDao().insertTrack(trackEntity)
+            
+            // Add relation
+            // Determine position - simplest is to put at end, but simpler is just 0 if we don't query order yet
+            // Ideally: val nextPos = db.musicDao().getMaxPosition(playlist.id) + 1
+            // For now, usage 0.
+            db.musicDao().insertPlaylistTrackCrossRef(
+                PlaylistTrackCrossRef(
+                    playlistId = playlist.id,
+                    trackId = track.id,
+                    position = 0 
+                )
+            )
+        }
+    }
+
     // History
     suspend fun addToHistory(item: MusicItem) {
         withContext(Dispatchers.IO) {
@@ -220,7 +293,8 @@ class MusicRepository(
             audioUrl = audioUrl,
             videoUrl = videoUrl,
             isLive = isLive,
-            localPath = localPath
+            localPath = localPath,
+            isFavorite = isFavorite
         )
     }
 
@@ -236,7 +310,8 @@ class MusicRepository(
             audioUrl = entity.audioUrl,
             videoUrl = entity.videoUrl,
             isLive = entity.isLive,
-            localPath = entity.localPath
+            localPath = entity.localPath,
+            isFavorite = entity.isFavorite
         )
     }
 

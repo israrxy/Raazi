@@ -11,9 +11,11 @@ import androidx.room.TypeConverters
         PlaylistTrackCrossRef::class,
         PlaybackHistoryEntity::class,
         RelatedSongEntity::class,
-        SearchHistoryEntity::class
+        SearchHistoryEntity::class,
+        DownloadEntity::class,
+        FormatEntity::class
     ],
-    version = 6,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -11,6 +11,11 @@ import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.audiofx.BassBoost
+import android.media.audiofx.Virtualizer
+import android.media.audiofx.PresetReverb
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.Visualizer
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -76,7 +81,11 @@ class MusicPlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         
-        createNotificationChannel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            createNotificationChannel()
+        } else {
+             createNotificationChannel()
+        }
         
         val dataSourceFactory = createDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
@@ -84,6 +93,58 @@ class MusicPlaybackService : Service() {
         exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
+            
+        // Initialize Advanced Audio Effects
+        try {
+            val audioSessionId = exoPlayer.audioSessionId
+            audioEqualizer = android.media.audiofx.Equalizer(0, audioSessionId)
+            audioEqualizer?.enabled = true
+
+            // Initialize Bass Boost
+            bassBoost = BassBoost(0, audioSessionId)
+            bassBoost?.enabled = true
+
+            // Initialize Virtualizer
+            virtualizer = Virtualizer(0, audioSessionId)
+            virtualizer?.enabled = true
+
+            // Initialize Preset Reverb
+            presetReverb = PresetReverb(0, audioSessionId)
+            presetReverb?.enabled = true
+
+            // Initialize Visualizer for spectrum analysis
+            try {
+                visualizer = Visualizer(audioSessionId)
+                visualizer?.enabled = false // Start disabled
+                visualizer?.captureSize = Visualizer.getCaptureSizeRange()[1] // Use max capture size
+                visualizer?.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                    override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
+                        // Not used for spectrum visualization
+                    }
+
+                    override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                        fft?.let { data ->
+                            visualizerData = data
+                            // Notify listeners of new data
+                            visualizerListeners.forEach { listener ->
+                                try {
+                                    listener(data)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MusicService", "Error notifying visualizer listener", e)
+                                }
+                            }
+                        }
+                    }
+                }, Visualizer.getMaxCaptureRate() / 2, false, true) // Only capture FFT data
+                android.util.Log.d("MusicService", "Visualizer initialized successfully")
+            } catch (e: Exception) {
+                android.util.Log.e("MusicService", "Error initializing visualizer", e)
+            }
+
+            android.util.Log.d("MusicService", "Advanced audio effects initialized successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("MusicService", "Error initializing audio effects", e)
+        }
         
         // Create legacy MediaSession for notification controls
         mediaSession = MediaSessionCompat(this, "RaaziMusicSession").apply {
@@ -165,10 +226,24 @@ class MusicPlaybackService : Service() {
                 }
             }
             
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                // Sync current index with ExoPlayer
+                if (mediaItem != null) {
+                    currentIndex = exoPlayer.currentMediaItemIndex
+                    val tag = mediaItem.localConfiguration?.tag
+                    if (tag is MusicItem) {
+                         // Load album art for notification
+                         loadAlbumArt(tag.thumbnailUrl)
+                    }
+                    notifyPlaybackState()
+                    updateNotification()
+                }
+            }
+            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    // Auto play next track
-                    next()
+                    // Playlist ended
+                    notifyPlaybackState()
                 }
                 updateMediaSessionState()
                 notifyPlaybackState()
@@ -184,13 +259,7 @@ class MusicPlaybackService : Service() {
         })
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceScope.cancel()
-        mediaSession.release()
-        exoPlayer.release()
-        abandonAudioFocus()
-    }
+
 
     fun toggleShuffle() {
         isShuffleEnabled = !isShuffleEnabled
@@ -325,6 +394,15 @@ class MusicPlaybackService : Service() {
             val notification = createNotification(state)
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(notificationId, notification)
+            
+            // Update home screen widget
+            com.israrxy.raazi.widget.NowPlayingWidget.updateWidget(
+                this,
+                state.currentTrack?.title,
+                state.currentTrack?.artist,
+                state.currentTrack?.thumbnailUrl,
+                state.isPlaying
+            )
         }
     }
     
@@ -406,69 +484,79 @@ class MusicPlaybackService : Service() {
             currentIndex = 0
         }
         
-        // Use local path if available (downloaded), otherwise use custom raazi URI for resolution
-        val audioSource = if (musicItem.localPath != null && java.io.File(musicItem.localPath).exists()) {
-             android.net.Uri.fromFile(java.io.File(musicItem.localPath)).toString()
-        } else {
-             "raazi://youtube/${musicItem.videoUrl}"
-        }
-        
-        playMediaItem(musicItem, audioSource)
+        playExoPlayerPlaylist(currentPlaylist, currentIndex)
     }
 
-    private fun playMediaItem(musicItem: MusicItem, source: String) {
+    private fun createMediaItem(musicItem: MusicItem): androidx.media3.common.MediaItem {
+        // Use local path if available (downloaded), otherwise use custom raazi URI or direct URL based on stream type
+        val sourceUri = if (musicItem.localPath != null && java.io.File(musicItem.localPath).exists()) {
+             android.net.Uri.fromFile(java.io.File(musicItem.localPath)).toString()
+        } else if (musicItem.videoUrl.contains("soundcloud.com") || musicItem.videoUrl.contains("bandcamp.com")) {
+             // For Soundcloud/Bandcamp, we still use raazi scheme to let resolver handle it, OR we could resolve directly here.
+             // Using resolver is safer as it handles extraction.
+             // Ensure we pass the full URL as the ID in the raazi scheme if needed, or just rely on the resolver's logic
+             "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}" 
+        } else if (musicItem.videoUrl.startsWith("http")) {
+              // Direct URL (already resolved or specific type), usually we just wrap it
+              // But for safety and consistency with our resolver architecture:
+              "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}"
+        } else {
+             "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}"
+        }
+
+        return androidx.media3.common.MediaItem.Builder()
+            .setUri(sourceUri)
+            .setMediaId(musicItem.videoUrl)
+            .setTag(musicItem) // Store the MusicItem in the tag for easy retrieval
+            .build()
+    }
+
+    private fun playExoPlayerPlaylist(playlist: List<MusicItem>, startIndex: Int) {
         try {
-            android.util.Log.d(TAG, "Playing: ${musicItem.title} from $source")
+            android.util.Log.d(TAG, "Setting playlist of ${playlist.size} items, starting at $startIndex")
             
-            // CRITICAL: Stop and clear previous media before playing new song
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             
-            val mediaItem = androidx.media3.common.MediaItem.Builder()
-                .setUri(source)
-                .setMediaId(musicItem.videoUrl)
-                .build()
-            exoPlayer.setMediaItem(mediaItem)
+            val mediaItems = playlist.map { createMediaItem(it) }
+            exoPlayer.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
+            
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
             requestAudioFocus()
             
-            // Clear loading state when playback starts
-            notifyPlaybackState(isLoading = false)
-            
-            // Load album art for notification
-            loadAlbumArt(musicItem.thumbnailUrl)
-            
-            // Notify state change immediately
-            notifyPlaybackState()
-            
+            // Notify state change
+            notifyPlaybackState(isLoading = true) 
             startForegroundService()
+            
+            // Note: onMediaItemTransition will handle updating the current track info once the player actually switches
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Error playing media item", e)
-            if (currentPlaylist.size > 1) {
-                 if (currentIndex < currentPlaylist.size - 1) {
-                     next()
-                 }
-            }
+            android.util.Log.e(TAG, "Error playing playlist", e)
         }
     }
 
     fun playPlaylist(playlist: List<MusicItem>, startIndex: Int = 0) {
         originalPlaylist = playlist
-        currentPlaylist = if (isShuffleEnabled) {
-            playlist.shuffled()
+        if (isShuffleEnabled) {
+             val targetTrack = playlist.getOrNull(startIndex)
+            if (targetTrack != null) {
+                val remaining = playlist.filter { it.id != targetTrack.id }.shuffled()
+                currentPlaylist = listOf(targetTrack) + remaining
+                currentIndex = 0
+            } else {
+                currentPlaylist = playlist.shuffled()
+                currentIndex = 0
+            }
         } else {
-            playlist
+            currentPlaylist = playlist
+            currentIndex = startIndex
         }
-        currentIndex = startIndex
-        if (currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-            playMusic(currentPlaylist[currentIndex], resetPlaylist = false)
-        }
+        
+        playExoPlayerPlaylist(currentPlaylist, currentIndex)
     }
 
     fun pause() {
         exoPlayer.pause()
-        updateNotification()
     }
 
     fun resume() {
@@ -619,6 +707,154 @@ class MusicPlaybackService : Service() {
 
 
     
+    // --- Advanced Audio Effects Support ---
+    private var audioEqualizer: android.media.audiofx.Equalizer? = null
+    private var bassBoost: BassBoost? = null
+    private var virtualizer: Virtualizer? = null
+    private var presetReverb: PresetReverb? = null
+    private var visualizer: Visualizer? = null
+    private var visualizerData: ByteArray? = null
+    private var visualizerListeners = mutableSetOf<(ByteArray) -> Unit>()
+
+    // Equalizer methods
+    fun getEqualizerBands(): Short {
+        return audioEqualizer?.numberOfBands ?: 0
+    }
+
+    fun getBandLevelRange(): ShortArray {
+        return audioEqualizer?.bandLevelRange ?: shortArrayOf(0, 0)
+    }
+
+    fun getBandLevel(band: Short): Short {
+        return audioEqualizer?.getBandLevel(band) ?: 0
+    }
+
+    fun setBandLevel(band: Short, level: Short) {
+        audioEqualizer?.setBandLevel(band, level)
+    }
+
+    fun getCenterFreq(band: Short): Int {
+        return audioEqualizer?.getCenterFreq(band) ?: 0
+    }
+
+    fun getPresetNames(): List<String> {
+        val count = audioEqualizer?.numberOfPresets ?: 0
+        val names = mutableListOf<String>()
+        for (i in 0 until count) {
+            names.add(audioEqualizer?.getPresetName(i.toShort()) ?: "Preset $i")
+        }
+        return names
+    }
+
+    fun usePreset(preset: Short) {
+        audioEqualizer?.usePreset(preset)
+    }
+
+    // Bass Boost methods
+    fun getBassBoostStrength(): Short {
+        return bassBoost?.roundedStrength ?: 0
+    }
+
+    fun setBassBoostStrength(strength: Short) {
+        bassBoost?.setStrength(strength)
+    }
+
+    fun isBassBoostSupported(): Boolean {
+        return bassBoost != null
+    }
+
+    // Virtualizer methods
+    fun getVirtualizerStrength(): Short {
+        return virtualizer?.roundedStrength ?: 0
+    }
+
+    fun setVirtualizerStrength(strength: Short) {
+        virtualizer?.setStrength(strength)
+    }
+
+    fun isVirtualizerSupported(): Boolean {
+        return virtualizer != null
+    }
+
+    // Preset Reverb methods
+    fun getReverbPresets(): List<String> {
+        return listOf(
+            "None", "Small Room", "Medium Room", "Large Room",
+            "Medium Hall", "Large Hall", "Plate"
+        )
+    }
+
+    fun setReverbPreset(preset: Int) {
+        presetReverb?.preset = preset.toShort()
+    }
+
+    fun getReverbPreset(): Int {
+        return presetReverb?.preset?.toInt() ?: 0
+    }
+
+    fun isReverbSupported(): Boolean {
+        return presetReverb != null
+    }
+
+    // Spectrum Analysis
+    fun getFrequencyData(): ByteArray? {
+        return visualizerData
+    }
+
+    // Visualizer Management
+    fun isVisualizerSupported(): Boolean {
+        return visualizer != null
+    }
+
+    fun enableVisualizer(enable: Boolean) {
+        try {
+            visualizer?.enabled = enable
+            android.util.Log.d("MusicService", "Visualizer enabled: $enable")
+        } catch (e: Exception) {
+            android.util.Log.e("MusicService", "Error enabling visualizer", e)
+        }
+    }
+
+    fun addVisualizerListener(listener: (ByteArray) -> Unit) {
+        visualizerListeners.add(listener)
+        // Enable visualizer if this is the first listener
+        if (visualizerListeners.size == 1) {
+            enableVisualizer(true)
+        }
+    }
+
+    fun removeVisualizerListener(listener: (ByteArray) -> Unit) {
+        visualizerListeners.remove(listener)
+        // Disable visualizer if no more listeners
+        if (visualizerListeners.isEmpty()) {
+            enableVisualizer(false)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
+        mediaSession.release()
+        exoPlayer.release()
+        abandonAudioFocus()
+        
+        // Cleanup visualizer
+        try {
+            visualizer?.release()
+        } catch (e: Exception) {
+            android.util.Log.e("MusicService", "Error releasing visualizer", e)
+        }
+        // Cleanup other audio effects
+        try {
+            audioEqualizer?.release()
+            bassBoost?.release()
+            virtualizer?.release()
+            presetReverb?.release()
+        } catch (e: Exception) {
+            android.util.Log.e("MusicService", "Error releasing audio effects", e)
+        }
+    }
+
     private fun createDataSourceFactory(): androidx.media3.datasource.DataSource.Factory {
         val okHttpClient = OkHttpClient.Builder().build()
         val okHttpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
@@ -628,25 +864,53 @@ class MusicPlaybackService : Service() {
         
         return ResolvingDataSource.Factory(upstreamFactory) { dataSpec ->
             val isRaaziScheme = dataSpec.uri.scheme == "raazi" && dataSpec.uri.host == "youtube"
-            // Use key if available, otherwise extract from URI for 'raazi://' scheme
-            var videoId = dataSpec.key ?: if (isRaaziScheme) dataSpec.uri.lastPathSegment else null
+            // Use key if available, otherwise extract full path from URI for 'raazi://' scheme
+            // IMPORTANT: Use full path, not lastPathSegment, to preserve SoundCloud URLs
+            var videoId = dataSpec.key ?: if (isRaaziScheme) {
+                // Remove leading "/" from path to get the actual URL/ID
+                val encodedId = dataSpec.uri.path?.removePrefix("/") ?: dataSpec.uri.lastPathSegment
+                if (encodedId != null) java.net.URLDecoder.decode(encodedId, "UTF-8") else null
+            } else null
             
-            // Fix: If videoId is a full URL, extract the actual ID
-            if (!videoId.isNullOrEmpty() && (videoId.contains("youtube.com") || videoId.contains("youtu.be"))) {
-                try {
-                    if (videoId.contains("v=")) {
-                         videoId = videoId.substringAfter("v=").substringBefore("&")
-                    } else if (videoId.contains("youtu.be/")) {
-                         videoId = videoId.substringAfter("youtu.be/").substringBefore("?")
+            android.util.Log.d(TAG, "Extracted videoId from dataSpec: $videoId")
+            
+            // Fix: If videoId is a full URL, extract the actual ID (but preserve SoundCloud/Bandcamp URLs)
+            if (!videoId.isNullOrEmpty()) {
+                // Preserve SoundCloud and Bandcamp URLs as-is
+                if (videoId.contains("soundcloud.com") || videoId.contains("bandcamp.com")) {
+                    android.util.Log.d(TAG, "Detected SoundCloud/Bandcamp URL, keeping full URL: $videoId")
+                } else if (!videoId.contains("youtube.com") && !videoId.contains("youtu.be")) {
+                    // Not a URL with youtube in it?
+                    // Maybe check if it's a URL at all for safety
+                    if (videoId.startsWith("http")) {
+                         // It's a non-youtube HTTP URL? Usually shouldn't happen for us unless it's direct.
+                         // Let it fall through to isResolvableUrl check
                     }
-                } catch (e: Exception) {
-                    android.util.Log.w(TAG, "Failed to extract ID from URL: $videoId")
                 }
+            } else if (videoId.isNullOrEmpty()) {
+                 // Fallback: Use the URI itself if key is missing
+                 val uriString = dataSpec.uri.toString()
+                 if (uriString.startsWith("http")) {
+                     videoId = uriString
+                     android.util.Log.d(TAG, "No key found, using URI as videoId: $videoId")
+                 }
             }
 
-            if (!videoId.isNullOrEmpty() && videoId != "watch" && (isRaaziScheme || !dataSpec.uri.toString().startsWith("http"))) {
+            // Determine if we should attempt to resolve this URI
+            val host = dataSpec.uri.host?.lowercase() ?: ""
+            // Simplified check: if it looks like something we support, try resolving it.
+            // StreamResolver now handles extraction, so we just pass the URL string.
+            val isResolvableUrl = videoId?.contains("youtube.com") == true || videoId?.contains("youtu.be") == true ||
+                                  host.contains("youtube.com") || host.contains("youtu.be") || 
+                                  host.contains("soundcloud.com") || host.contains("bandcamp.com")
+
+            if (!videoId.isNullOrEmpty() && videoId != "watch" && (isRaaziScheme || isResolvableUrl)) {
                 try {
-                    val result = StreamResolver.resolveStreamUrl(videoId)
+                    // Extract metadata for fallback
+                    val title = dataSpec.uri.getQueryParameter("title")
+                    val artist = dataSpec.uri.getQueryParameter("artist")
+                    
+                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist)
                     android.util.Log.d(TAG, "Resolved stream for $videoId: ${result.url}")
                     
                     val headers = mutableMapOf<String, String>()
@@ -658,8 +922,9 @@ class MusicPlaybackService : Service() {
                         .build()
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Failed to resolve stream for $videoId", e)
-                    // If resolution fails, we let it fall through or throw. 
-                    // Throwing here avoids passing a bad URI to OkHttp.
+                    // If it was a YouTube URL that failed, throw exception.
+                    // If it was just a random http url, maybe fall through?
+                    // Let's stick to throwing for network failures on supported streams to avoid bad state.
                     throw androidx.media3.common.PlaybackException(
                         "Failed to resolve stream for $videoId",
                         e,
@@ -668,14 +933,15 @@ class MusicPlaybackService : Service() {
                 }
             } else if (videoId == "watch") {
                  // Handle case where parsing failed or lastPathSegment was 'watch'
-                 // Try to find v parameter from the URI query itself if possible, though unlikely in this scheme structure
-                 // Fallback: Check if the original URI string contains v=
+                 // Try to find v parameter from the URI query itself if possible
                  val originalUri = dataSpec.uri.toString()
                  if (originalUri.contains("v=")) {
                      val extractedId = originalUri.substringAfter("v=").substringBefore("&")
                      if (extractedId.isNotEmpty()) {
                          try {
-                            val result = StreamResolver.resolveStreamUrl(extractedId)
+                            val title = dataSpec.uri.getQueryParameter("title")
+                            val artist = dataSpec.uri.getQueryParameter("artist")
+                            val result = StreamResolver.resolveStreamUrl(extractedId, title, artist)
                             val headers = mutableMapOf<String, String>()
                             headers["User-Agent"] = result.userAgent
                             
@@ -687,6 +953,14 @@ class MusicPlaybackService : Service() {
                              // Log and fall through
                          }
                      }
+                 } else {
+                     // NEW: If "watch" segment but NO v= param, this is invalid.
+                     android.util.Log.e(TAG, "Invalid 'watch' URL without ID: ${dataSpec.uri}")
+                     throw androidx.media3.common.PlaybackException(
+                        "Invalid watch URL: ${dataSpec.uri}",
+                        null,
+                        androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+                     )
                  }
             }
             return@Factory dataSpec

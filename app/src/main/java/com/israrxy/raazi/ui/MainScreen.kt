@@ -14,6 +14,8 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.israrxy.raazi.ui.home.HomeScreen
 import com.israrxy.raazi.ui.library.LibraryScreen
+import com.israrxy.raazi.ui.downloads.DownloadsScreen
 import com.israrxy.raazi.ui.player.MiniPlayer
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -72,8 +75,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val totalPeekHeight = miniPlayerHeight + bottomBarHeight + navBarHeight
 
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
+    Box(modifier = Modifier.fillMaxSize()) {
+        BottomSheetScaffold(
+            scaffoldState = scaffoldState,
         sheetContent = {
             if (playbackState.currentTrack != null) {
                 PlayerScreen(
@@ -140,6 +144,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateToPlayer = { scope.launch { sheetState.expand() } },
                             onNavigateToArtist = { artistId, artistName ->
                                  navController.navigate("artist/$artistId?name=${android.net.Uri.encode(artistName)}")
+                            },
+                            onNavigateToPlaylist = { id ->
+                                val cleanId = id.replace("https://www.youtube.com/playlist?list=", "")
+                                navController.navigate("playlist/$cleanId")
                             }
                         )
                     }
@@ -149,11 +157,17 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateToPlayer = { scope.launch { sheetState.expand() } },
                             onNavigateToPlaylist = { id ->
                                 navController.navigate("playlist/$id")
+                            },
+                            onNavigateToDownloads = {
+                                navController.navigate("downloads")
                             }
                         )
                     }
                     composable("settings") {
                         SettingsScreen()
+                    }
+                    composable("equalizer") {
+                        com.israrxy.raazi.ui.EnhancedEqualizerScreen(viewModel = viewModel)
                     }
                     composable("playlist/{playlistId}") { backStackEntry ->
                         val playlistId = backStackEntry.arguments?.getString("playlistId") ?: ""
@@ -174,25 +188,36 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
-                }
-                
-                // Floating Nav Bar Overlay
-                if (sheetState.currentValue != SheetValue.Expanded) {
-                    Box(modifier = Modifier.align(Alignment.BottomCenter)) {
-                         SimpleBottomNavBar(navController)
+                    composable("downloads") {
+                        DownloadsScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() },
+                            onNavigateToPlayer = { scope.launch { sheetState.expand() } }
+                        )
                     }
                 }
             }
         }
     }
+
+    // Floating Nav Bar Overlay - Moved OUTSIDE BottomSheetScaffold
+    if (sheetState.currentValue != SheetValue.Expanded) {
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+             SimpleBottomNavBar(navController)
+        }
+    }
+}
 }
 
 @Composable
 private fun SimpleBottomNavBar(navController: NavHostController) {
+
+
     val items = listOf(
         BottomNavItem("Home", Icons.Default.Home, Icons.Outlined.Home, "home"),
         BottomNavItem("Search", Icons.Default.Search, Icons.Outlined.Search, "search"),
         BottomNavItem("Library", Icons.Default.LibraryMusic, Icons.Outlined.LibraryMusic, "library"),
+        BottomNavItem("Audio", Icons.Default.GraphicEq, Icons.Outlined.GraphicEq, "equalizer"),
         BottomNavItem("Settings", Icons.Default.Settings, Icons.Outlined.Settings, "settings")
     )
 
@@ -214,7 +239,7 @@ private fun SimpleBottomNavBar(navController: NavHostController) {
                 //.navigationBarsPadding() // Removed internal padding to let it sit flush if needed, or handle externally
                 .windowInsetsPadding(WindowInsets.navigationBars) 
                 .height(86.dp)
-                .background(com.israrxy.raazi.ui.theme.Zinc900, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), // Solid background
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)), // Solid background
              shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
             // Remove transparency from GlassBox call but structure remains

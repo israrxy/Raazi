@@ -22,6 +22,7 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.israrxy.raazi.data.local.SettingsDataStore
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     
@@ -45,11 +46,39 @@ class MainActivity : ComponentActivity() {
             val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = false)
             val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
             
+            // Update Check Logic
+            val updateManager = remember { com.israrxy.raazi.data.UpdateManager() }
+            var updateConfig by remember { mutableStateOf<com.israrxy.raazi.model.UpdateConfig?>(null) }
+            var showUpdateDialog by remember { mutableStateOf(false) }
+
+            LaunchedEffect(Unit) {
+                val config = updateManager.checkUpdate()
+                if (config != null && config.latestVersionCode > BuildConfig.VERSION_CODE) {
+                    updateConfig = config
+                    showUpdateDialog = true
+                }
+            }
+            
             val darkTheme = when (themeMode) {
                 "Light" -> false
                 "Dark" -> true
                 else -> androidx.compose.foundation.isSystemInDarkTheme()
             }
+            
+            if (showUpdateDialog && updateConfig != null) {
+                com.israrxy.raazi.ui.components.UpdateDialog(
+                    config = updateConfig!!,
+                    onDismiss = { showUpdateDialog = false }
+                )
+            }
+
+            val isOnboardingCompleted by settingsDataStore.isOnboardingCompleted.collectAsState(initial = true) // Default to true to prevent flash, wait for real value? No, default false is better for new users.
+            // Actually, for existing users we might want to skip. But we can't distinguish "New Install" from "Update" easily without version tracking.
+            // Let's assume everyone sees it once.
+            
+            // To handle the "loading" state better:
+            val onboardingState = settingsDataStore.isOnboardingCompleted.collectAsState(initial = null)
+            val scope = rememberCoroutineScope()
 
             RaaziTheme(
                 darkTheme = darkTheme,
@@ -65,12 +94,20 @@ class MainActivity : ComponentActivity() {
                     
                     var showSplash by remember { mutableStateOf(true) }
 
-                    if (showSplash) {
+                    if (showSplash || onboardingState.value == null) {
                         com.israrxy.raazi.ui.SplashScreen {
                             showSplash = false
                         }
                     } else {
-                        MainScreen(viewModel = viewModel)
+                        if (onboardingState.value == false) {
+                            com.israrxy.raazi.ui.OnboardingScreen {
+                                scope.launch {
+                                    settingsDataStore.setOnboardingCompleted(true)
+                                }
+                            }
+                        } else {
+                            MainScreen(viewModel = viewModel)
+                        }
                     }
                 }
             }

@@ -51,8 +51,8 @@ fun MiniPlayer(
                     .fillMaxWidth()
                     .height(72.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Zinc900.copy(alpha = 0.9f)) // "Blurry glass" look (high opacity)
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer) // Use Theme color!
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
             ) {
                  // Content Row
                 Row(
@@ -63,10 +63,10 @@ fun MiniPlayer(
                 ) {
                     // Album Art with glow effect
                     Surface(
-                        modifier = Modifier.size(50.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color.Black,
-                        shadowElevation = 12.dp
+                         modifier = Modifier.size(50.dp),
+                         shape = RoundedCornerShape(10.dp),
+                         color = MaterialTheme.colorScheme.surfaceVariant, // Fallback color
+                         shadowElevation = 8.dp
                     ) {
                         AsyncImage(
                             model = track.thumbnailUrl?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
@@ -89,7 +89,7 @@ fun MiniPlayer(
                             text = track.title,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface, // Theme color
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -98,7 +98,7 @@ fun MiniPlayer(
                             Text(
                                 text = track.artist,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Zinc400,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, // Theme color
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -119,19 +119,14 @@ fun MiniPlayer(
                             modifier = Modifier
                                 .size(44.dp)
                                 .background(
-                                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.2f),
-                                            Color.White.copy(alpha = 0.05f)
-                                        )
-                                    ),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = androidx.compose.foundation.shape.CircleShape
                                 )
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(26.dp)
                             )
                         }
@@ -145,7 +140,7 @@ fun MiniPlayer(
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
                             .height(3.dp)
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
                     ) {
                         Box(
                             modifier = Modifier

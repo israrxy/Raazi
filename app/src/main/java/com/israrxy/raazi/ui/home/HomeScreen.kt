@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -51,11 +52,16 @@ fun HomeScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         if (isLoading && homePage == null && quickPicks.isEmpty()) {
-            Box(
+            // Modern shimmer loading state
+            androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
+                contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
+                items(4) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
+                item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
+                items(3) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
             }
         } else {
             LazyColumn(
@@ -81,11 +87,12 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(keepListening) { track ->
+                            itemsIndexed(keepListening) { index, track ->
                                 MusicCard(
                                     musicItem = track,
                                     viewModel = viewModel,
-                                    onNavigateToPlayer = onNavigateToPlayer
+                                    onNavigateToPlayer = onNavigateToPlayer,
+                                    onClick = { viewModel.playFromKeepListening(index) }
                                 )
                             }
                         }
@@ -191,7 +198,8 @@ fun HomeScreen(
                                             .width(160.dp)
                                             .height(160.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(Zinc800)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
                                             .clickable { onNavigateToPlaylist(mood.endpoint.browseId ?: "") },
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -413,7 +421,14 @@ fun QuickPickListItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
-                viewModel.playMusic(musicItem)
+                // Play as playlist starting from this index
+                // Since 'number' is 1-based index passed from caller (index + 1), we need original 0-based index.
+                // But wait, the caller passes 'index + 1' as number.
+                // We don't have the original index here easily unless we infer from number?
+                // Actually, let's just pass the index to this composable or subtract 1.
+                // The caller in HomeScreen is: items(quickPicks.take(10).size) { index -> ... number = index + 1 }
+                // So index = number - 1.
+                viewModel.playFromQuickPicks(number - 1)
                 onNavigateToPlayer()
             }
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -436,7 +451,8 @@ fun QuickPickListItem(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         
@@ -467,13 +483,18 @@ fun QuickPickListItem(
 fun MusicCard(
     musicItem: MusicItem,
     viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit
+    onNavigateToPlayer: () -> Unit,
+    onClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
             .width(160.dp)
             .clickable {
-                viewModel.playMusic(musicItem)
+                if (onClick != null) {
+                    onClick()
+                } else {
+                    viewModel.playMusic(musicItem)
+                }
                 onNavigateToPlayer()
             }
     ) {
@@ -483,7 +504,8 @@ fun MusicCard(
             modifier = Modifier
                 .size(160.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -535,7 +557,8 @@ fun YouTubeSongCard(
             modifier = Modifier
                 .size(160.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -575,7 +598,8 @@ fun YouTubeAlbumCard(
             modifier = Modifier
                 .size(160.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -615,7 +639,8 @@ fun YouTubeArtistCard(
             modifier = Modifier
                 .size(160.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -655,7 +680,8 @@ fun YouTubePlaylistCard(
             modifier = Modifier
                 .size(160.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(8.dp))

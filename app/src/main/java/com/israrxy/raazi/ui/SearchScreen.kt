@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -12,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,13 +34,14 @@ import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.viewmodel.SearchViewModel
 import com.israrxy.raazi.data.db.PlaylistEntity
-import com.zionhuang.innertube.models.*
+import com.israrxy.raazi.data.db.SearchHistoryEntity
 
 @Composable
 fun SearchScreen(
     playerViewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
-    onNavigateToArtist: (String, String) -> Unit
+    onNavigateToArtist: (String, String) -> Unit,
+    onNavigateToPlaylist: (String) -> Unit
 ) {
     val searchViewModel: SearchViewModel = viewModel()
     var searchQuery by remember { mutableStateOf("") }
@@ -56,8 +60,17 @@ fun SearchScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedTracks by remember { mutableStateOf(setOf<MusicItem>()) }
     
+    // Clear search on exit
+    DisposableEffect(Unit) {
+        onDispose {
+            searchViewModel.clearSearchResults()
+        }
+    }
+
     // Track if showing results
-    val showingResults = searchResults != null && searchResults!!.items.isNotEmpty()
+    val showingResults = searchResults != null && 
+                         searchResults!!.items.isNotEmpty() && 
+                         searchViewModel.submittedQuery == searchQuery
     
     // Update query for suggestions
     LaunchedEffect(searchQuery) {
@@ -111,8 +124,6 @@ fun SearchScreen(
                         Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                     IconButton(onClick = { 
-                        // For bulk add to playlist, we'd need a multi-selection dialog
-                        // For now just first one
                         if (selectedTracks.isNotEmpty()) {
                             showAddToPlaylistItem = selectedTracks.first()
                         }
@@ -166,59 +177,89 @@ fun SearchScreen(
             )
         )
         
+        // Service Toggle
+        val selectedService by searchViewModel.selectedService.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            com.israrxy.raazi.ui.components.SonicChip(
+                text = "YouTube",
+                isSelected = selectedService == 0,
+                onClick = { searchViewModel.selectService(0) }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            com.israrxy.raazi.ui.components.SonicChip(
+                text = "SoundCloud",
+                isSelected = selectedService == 1,
+                onClick = { searchViewModel.selectService(1) }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            com.israrxy.raazi.ui.components.SonicChip(
+                text = "Bandcamp",
+                isSelected = selectedService == 2,
+                onClick = { searchViewModel.selectService(2) }
+            )
+        }
+        
         // Content: Results OR Suggestions
         if (showingResults) {
             // ONLY SHOW RESULTS
+            val searchItems = remember(searchResults) {
+                searchResults?.items ?: emptyList()
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                items(searchResults!!.items) { item ->
-                    when (item) {
-                        is SongItem -> {
-                            val musicItem = MusicItem(
-                                id = item.id ?: return@items,
-                                title = item.title ?: "Unknown",
-                                artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown",
-                                duration = (item.duration?.toLong() ?: 0) * 1000,
-                                thumbnailUrl = item.thumbnail ?: "",
-                                audioUrl = "",
-                                videoUrl = item.id ?: "",
-                                artistId = item.artists?.firstOrNull()?.id
-                            )
-                            
-                            com.israrxy.raazi.ui.components.SongListItem(
-                                song = musicItem,
-                                isSelected = selectedTracks.contains(musicItem),
-                                isSelectionMode = isSelectionMode,
-                                onSelectionChange = { selected ->
-                                    if (selected) {
-                                        selectedTracks = selectedTracks + musicItem
-                                    } else {
-                                        selectedTracks = selectedTracks - musicItem
-                                    }
-                                },
-                                onLongClick = {
-                                    isSelectionMode = true
-                                    selectedTracks = selectedTracks + musicItem
-                                },
-                                onClick = {
-                                    playerViewModel.playMusic(musicItem)
-                                    onNavigateToPlayer()
-                                },
-                                onAddToPlaylist = { showAddToPlaylistItem = musicItem },
-                                onGoToArtist = {
-                                    val artist = item.artists?.firstOrNull()
-                                    if (artist?.id != null) {
-                                        onNavigateToArtist(artist.id!!, artist.name ?: "Unknown")
-                                    }
-                                },
-                                onDownload = { playerViewModel.downloadTrack(musicItem) },
-                                onLike = { playerViewModel.toggleFavorite(musicItem) }
-                            )
-                        }
-                        else -> {} // Ignore other types for now
-                    }
+                itemsIndexed(searchItems) { index, musicItem ->
+                    val isArtist = musicItem.artist == "Artist"
+                    
+                    com.israrxy.raazi.ui.components.SongListItem(
+                        song = musicItem,
+                        isSelected = selectedTracks.contains(musicItem),
+                        isSelectionMode = isSelectionMode,
+                        onSelectionChange = { selected ->
+                            if (selected) {
+                                selectedTracks = selectedTracks + musicItem
+                            } else {
+                                selectedTracks = selectedTracks - musicItem
+                            }
+                        },
+                        onLongClick = {
+                            isSelectionMode = true
+                            selectedTracks = selectedTracks + musicItem
+                        },
+                        onClick = {
+                            if (musicItem.isPlaylist) {
+                                onNavigateToPlaylist(musicItem.id)
+                            } else if (isArtist && musicItem.artistId != null) {
+                                onNavigateToArtist(musicItem.artistId!!, musicItem.title)
+                            } else {
+                                val playableItems = searchItems.filter { !it.isPlaylist && it.artist != "Artist" }
+                                val playableIndex = playableItems.indexOf(musicItem)
+                                if (playableIndex != -1) {
+                                     playerViewModel.playPlaylist(playableItems, playableIndex)
+                                     onNavigateToPlayer()
+                                }
+                            }
+                        },
+                        onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                        onGoToArtist = {
+                            if (musicItem.artistId != null) {
+                                onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
+                            }
+                        },
+                        onDownload = { 
+                            if (!musicItem.isPlaylist && !isArtist) {
+                                playerViewModel.downloadTrack(musicItem) 
+                            }
+                        },
+                        onLike = { playerViewModel.toggleFavorite(musicItem) }
+                    )
                 }
             }
         } else {
@@ -250,6 +291,8 @@ fun SearchScreen(
                             onClick = {
                                 searchQuery = history.query
                                 searchViewModel.performSearch(history.query)
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
                             },
                             onDelete = { searchViewModel.deleteSearchHistory(history) }
                         )
@@ -264,79 +307,59 @@ fun SearchScreen(
                             onClick = {
                                 searchQuery = suggestion
                                 searchViewModel.performSearch(suggestion)
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
                             }
                         )
-                    }
-                }
-                
-                // Empty state
-                if (searchQuery.isEmpty() && searchHistory.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillParentMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Search,
-                                    null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                Text("Search for music", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
                     }
                 }
             }
         }
     }
-
-    // Add To Playlist Dialog
+    
+    // Add Playlist Dialog
     if (showAddToPlaylistItem != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = playerViewModel,
             onDismiss = { showAddToPlaylistItem = null },
             onPlaylistSelected = { playlist ->
-                playerViewModel.addToPlaylist(playlist.id, showAddToPlaylistItem!!)
-                showAddToPlaylistItem = null
+                // Assuming addToPlaylist exists in viewModel and takes MusicItem, PlaylistEntity
+                playerViewModel.addToPlaylist(showAddToPlaylistItem!!, playlist)
             }
         )
     }
 }
 
 @Composable
-private fun HistoryItem(query: String, onClick: () -> Unit, onDelete: () -> Unit) {
+fun HistoryItem(query: String, onClick: () -> Unit, onDelete: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(query, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Text(query, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun SuggestionItem(text: String, onClick: () -> Unit) {
+fun SuggestionItem(text: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurface)
+        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Text(text, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+        Icon(Icons.Default.NorthWest, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

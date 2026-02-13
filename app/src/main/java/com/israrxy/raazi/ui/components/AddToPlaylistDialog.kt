@@ -41,7 +41,7 @@ fun AddToPlaylistDialog(
                 .fillMaxWidth()
                 .heightIn(max = 500.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Zinc900)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp)
@@ -56,10 +56,10 @@ fun AddToPlaylistDialog(
                         text = "Add to Playlist",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = Zinc500)
+                        Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 
@@ -78,8 +78,10 @@ fun AddToPlaylistDialog(
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                             colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Zinc800,
-                                unfocusedContainerColor = Zinc800,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent
                             ),
@@ -112,7 +114,7 @@ fun AddToPlaylistDialog(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Zinc800),
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.Add, null, tint = Color.White)
@@ -122,7 +124,7 @@ fun AddToPlaylistDialog(
                             text = "New Playlist",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -141,7 +143,7 @@ fun AddToPlaylistDialog(
                 
                 if (playlists.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("No playlists yet", color = Zinc500)
+                        Text("No playlists yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -167,7 +169,7 @@ fun PlaylistOptionItem(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Zinc800),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -176,12 +178,12 @@ fun PlaylistOptionItem(
                 text = playlist.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = "${0} songs", // Placeholder count, need relations to get real count easily or update Entity
                 style = MaterialTheme.typography.bodySmall,
-                color = Zinc500
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

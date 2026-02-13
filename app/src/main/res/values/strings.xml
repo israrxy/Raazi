@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Raazi Music Player</string>
+    <string name="widget_description">Shows now playing track with controls</string>
 </resources>

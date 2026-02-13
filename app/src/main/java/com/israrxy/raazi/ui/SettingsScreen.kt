@@ -44,6 +44,9 @@ fun SettingsScreen() {
     val crossfadeDuration by settingsDataStore.crossfadeDuration.collectAsState(initial = "Off")
     val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = false)
     val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
+    val downloadWifiOnly by settingsDataStore.downloadWifiOnly.collectAsState(initial = false)
+    val downloadQuality by settingsDataStore.downloadQuality.collectAsState(initial = "Very High")
+    val maxConcurrentDownloads by settingsDataStore.maxConcurrentDownloads.collectAsState(initial = "2")
     
     // Calculate actual cache size
     val cacheSize = remember {
@@ -149,6 +152,49 @@ fun SettingsScreen() {
                 }
             )
         }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // DOWNLOADS SECTION
+        SettingsSection(title = "DOWNLOADS") {
+            SettingsToggle(
+                title = "WiFi Only",
+                checked = downloadWifiOnly,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setDownloadWifiOnly(enabled)
+                    }
+                }
+            )
+
+            SettingsItem(
+                title = "Download Quality",
+                value = downloadQuality,
+                valueColor = Emerald500,
+                onClick = {
+                    val qualities = listOf("Normal", "High", "Very High", "Best")
+                    val currentIndex = qualities.indexOf(downloadQuality)
+                    val nextQuality = qualities[(currentIndex + 1) % qualities.size]
+                    scope.launch {
+                        settingsDataStore.setDownloadQuality(nextQuality)
+                    }
+                    Toast.makeText(context, "Download quality: $nextQuality", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            SettingsItem(
+                title = "Max Concurrent Downloads",
+                value = maxConcurrentDownloads,
+                onClick = {
+                    val options = listOf("1", "2", "3", "4")
+                    val currentIndex = options.indexOf(maxConcurrentDownloads)
+                    val nextOption = options[(currentIndex + 1) % options.size]
+                    scope.launch {
+                        settingsDataStore.setMaxConcurrentDownloads(nextOption)
+                    }
+                }
+            )
+        }
         
         // APP SECTION
         SettingsSection(title = "APP") {
@@ -180,7 +226,7 @@ fun SettingsScreen() {
         Spacer(modifier = Modifier.height(32.dp))
         
         Text(
-            text = "Raazi v1.0.0",
+            text = "Raazi v3.0.0",
             style = MaterialTheme.typography.labelSmall,
             color = Zinc700,
             modifier = Modifier.fillMaxWidth(),

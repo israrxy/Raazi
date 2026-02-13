@@ -118,7 +118,19 @@ fun PlaylistDetailScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    )
+                    ),
+                    actions = {
+                        IconButton(onClick = {
+                            currentPlaylist?.items?.let { items ->
+                                if (items.isNotEmpty()) {
+                                    viewModel.playPlaylist(items)
+                                    onNavigateToPlayer()
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Play Playlist", tint = MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
                 )
             }
         },
@@ -397,8 +409,9 @@ fun PremiumPlaylistItemCard(
         
         // Duration
         if (item.duration > 0) {
-            val minutes = item.duration / 60
-            val seconds = item.duration % 60
+            val totalSeconds = item.duration / 1000
+            val minutes = totalSeconds / 60
+            val seconds = totalSeconds % 60
             Text(
                 text = String.format("%d:%02d", minutes, seconds),
                 style = MaterialTheme.typography.bodySmall,

@@ -5,10 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,8 +94,18 @@ fun ArtistScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(start = 8.dp)
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f)
             )
+            // Play Button
+            IconButton(onClick = {
+                if (songs.isNotEmpty()) {
+                    viewModel.playPlaylist(songs)
+                }
+            }) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = "Play Artist", tint = MaterialTheme.colorScheme.onBackground)
+            }
         }
         
         LazyColumn(
@@ -139,7 +151,7 @@ fun ArtistScreen(
                     }
                 }
             } else {
-                items(songs) { song ->
+                itemsIndexed(songs) { index, song ->
                     val musicItem = MusicItem(
                         id = song.id,
                         title = song.title,
@@ -154,12 +166,12 @@ fun ArtistScreen(
                     com.israrxy.raazi.ui.components.SongListItem(
                         song = musicItem,
                         onClick = {
-                            viewModel.playMusic(musicItem)
+                            viewModel.playPlaylist(songs, index)
                         },
                         onAddToPlaylist = { showAddToPlaylistItem = musicItem },
                         onGoToArtist = { /* Already on artist screen, maybe do nothing or navigate */ },
-                        onDownload = { /* TODO */ },
-                        onLike = { /* TODO */ }
+                        onDownload = { viewModel.downloadTrack(musicItem) },
+                        onLike = { viewModel.toggleFavorite(musicItem) }
                     )
                 }
             }

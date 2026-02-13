@@ -236,8 +236,9 @@ class YouTubeChartsExtractor {
                        val hasBrowseEndpoint = navEndpoint?.getAsJsonObject("browseEndpoint") != null
                        val isPlaylist = navEndpoint?.getAsJsonObject("watchEndpoint")?.get("videoId")?.asString.isNullOrEmpty() || hasPlaylistEndpoint || hasBrowseEndpoint
                        
-                       // Construct full URL as Raazi seems to use it for extraction
-                       val fullUrl = if (isPlaylist) "https://www.youtube.com/playlist?list=$videoId" else "https://www.youtube.com/watch?v=$videoId"
+                       // Use ID directly for videoUrl if it's a track, or construct playlist URL if playlist
+                       // (MusicPlaybackService handles IDs safely, preventing malformed URLs)
+                       val videoUrl = if (isPlaylist) "https://www.youtube.com/playlist?list=$videoId" else videoId
                        
                        musicItems.add(MusicItem(
                            id = videoId,
@@ -246,11 +247,14 @@ class YouTubeChartsExtractor {
                            duration = 0L,
                            thumbnailUrl = thumbUrl,
                            audioUrl = "", // Empty initially
-                           videoUrl = fullUrl,
+                           videoUrl = videoUrl,
                            isLive = false,
                            isPlaylist = isPlaylist,
                            artistId = artistId
                        ))
+                   } else {
+                       // Log warning for skipped item
+                       Log.w("ChartsExtractor", "Skipping item with missing videoId: $title")
                    }
                 }
             } catch (e: Exception) {

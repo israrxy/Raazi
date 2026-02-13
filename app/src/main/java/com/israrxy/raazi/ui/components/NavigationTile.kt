@@ -29,7 +29,7 @@ fun NavigationTile(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Zinc900.copy(alpha = 0.5f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -38,14 +38,14 @@ fun NavigationTile(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color.White, // Zinc50
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, 
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = Color.LightGray, // Zinc400
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             fontWeight = FontWeight.Medium,
             maxLines = 1
         )

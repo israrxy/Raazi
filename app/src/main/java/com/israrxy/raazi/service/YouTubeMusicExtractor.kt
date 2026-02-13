@@ -119,10 +119,16 @@ class YouTubeMusicExtractor {
         }
     }
 
-    suspend fun searchMusic(query: String): SearchResult = withContext(Dispatchers.IO) {
+    suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
-            val service = ServiceList.YouTube
-            Log.d(TAG, "Searching for: $query")
+            // 0 = YouTube, 1 = SoundCloud, 2 = Bandcamp
+            val service = when (serviceId) {
+                1 -> ServiceList.SoundCloud
+                2 -> ServiceList.Bandcamp
+                else -> ServiceList.YouTube
+            }
+            
+            Log.d(TAG, "Searching for: $query on ${service.serviceInfo.name}")
             val searchResult = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query))
             Log.d(TAG, "Search finished, processing results")
             
@@ -130,16 +136,57 @@ class YouTubeMusicExtractor {
                 .mapNotNull { item ->
                     when (item) {
                         is StreamInfoItem -> {
+                            // SoundCloud also returns StreamInfoItems
                             if (item.streamType == org.schabi.newpipe.extractor.stream.StreamType.AUDIO_STREAM || 
-                                item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM) {
+                                item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM ||
+                                serviceId == 1 || serviceId == 2 // SoundCloud and Bandcamp items act similarly
+                            ) {
+                                val url = item.getUrl()
+                                Log.d(TAG, "Processing search item: ${item.name}, URL: $url")
+                                
+                                if (url.isNullOrEmpty()) {
+                                    Log.w(TAG, "Skipping empty URL item: ${item.name}")
+                                    return@mapNotNull null
+                                }
+                                
+                                // For YouTube, extract the video ID and use it directly (like home screen does)
+                                // For SoundCloud/Bandcamp, keep the full URL
+                                val (itemId, videoUrl) = when {
+                                    serviceId == 1 || serviceId == 2 -> {
+                                        // SoundCloud or Bandcamp - use full URL
+                                        Pair(url, url)
+                                    }
+                                    url.contains("youtube.com") || url.contains("youtu.be") -> {
+                                        // YouTube - extract video ID
+                                        val extractedId = when {
+                                            url.contains("v=") -> url.substringAfter("v=").substringBefore("&")
+                                            url.contains("youtu.be/") -> url.substringAfter("youtu.be/").substringBefore("?")
+                                            else -> null
+                                        }
+                                        
+                                        if (extractedId.isNullOrEmpty()) {
+                                            Log.w(TAG, "Skipping YouTube item with no extractable ID: $url")
+                                            return@mapNotNull null
+                                        }
+                                        
+                                        Log.d(TAG, "Extracted YouTube ID: $extractedId from $url")
+                                        // Use just the ID - StreamResolver and MusicPlaybackService handle this correctly
+                                        Pair(extractedId, extractedId)
+                                    }
+                                    else -> {
+                                        // Unknown service, use URL as-is
+                                        Pair(url, url)
+                                    }
+                                }
+
                                 MusicItem(
-                                    id = item.getUrl(),
+                                    id = itemId,
                                     title = item.name,
                                     artist = item.uploaderName ?: "Unknown Artist",
                                     duration = item.duration * 1000,
                                     thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
                                     audioUrl = "",
-                                    videoUrl = item.getUrl(),
+                                    videoUrl = videoUrl,
                                     isLive = false,
                                     isPlaylist = false
                                 )
@@ -159,13 +206,17 @@ class YouTubeMusicExtractor {
                             )
                         }
                         is org.schabi.newpipe.extractor.channel.ChannelInfoItem -> {
-                            // Treat Artist/Channel as a special item, or just link to their "Uploads" playlist if possible?
-                            // For simplicity, we can treat it as a container or just ignore for now if UI doesn't support it strictly.
-                            // But user asked for Artist search.
-                            // Let's mark it as a playlist-like item or special type if we had one.
-                            // For now, mapping as playlist (container) is safest without changing data model too much.
+                            // Extract ID from URL
+                            val url = item.url
+                            val id = when {
+                                url.contains("/channel/") -> url.substringAfter("/channel/")
+                                url.contains("/user/") -> url.substringAfter("/user/")
+                                url.contains("/c/") -> url.substringAfter("/c/")
+                                else -> url
+                            }
+                            
                             MusicItem(
-                                id = item.url,
+                                id = id,
                                 title = item.name,
                                 artist = "Artist",
                                 duration = 0,
@@ -173,7 +224,8 @@ class YouTubeMusicExtractor {
                                 audioUrl = "",
                                 videoUrl = item.url,
                                 isLive = false,
-                                isPlaylist = true // Opening channel usually lists videos, treat as playlist
+                                isPlaylist = false,
+                                artistId = id
                             )
                         }
                         else -> null
@@ -189,6 +241,50 @@ class YouTubeMusicExtractor {
     }
 
     suspend fun getPlaylist(playlistId: String): Playlist = withContext(Dispatchers.IO) {
+        // Try InnerTube first
+        try {
+            if (playlistId.startsWith("MPREb")) {
+                // It's an Album
+                val album = com.zionhuang.innertube.YouTube.album(playlistId).getOrThrow()
+                val items = album.songs.mapNotNull { song ->
+                    MusicItem(
+                        id = song.id ?: return@mapNotNull null,
+                        title = song.title ?: "Unknown",
+                        artist = song.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown",
+                        duration = (song.duration?.toLong() ?: 0) * 1000L,
+                        thumbnailUrl = song.thumbnail ?: "",
+                        audioUrl = "",
+                        videoUrl = song.id ?: return@mapNotNull null,
+                        isLive = false
+                    )
+                }
+                return@withContext Playlist(
+                    id = playlistId,
+                    title = items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album", // Fallback to artist name or generic
+                    description = "", // Description unavailable in this version of model
+                    thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
+                    items = items
+                )
+            } else if (playlistId.startsWith("PL") || playlistId.startsWith("OLAK") || playlistId.startsWith("UU") || playlistId.startsWith("FL") || playlistId.startsWith("RD")) {
+                 // It's a Playlist
+                 val playlist = com.zionhuang.innertube.YouTube.playlist(playlistId).getOrThrow()
+                 // Try 'songs' instead of 'items'
+                 val items = playlist.songs.mapNotNull { item ->
+                    mapYTItemToMusicItem(item)
+                 }
+                 return@withContext Playlist(
+                    id = playlistId,
+                    title = "Playlist", // innerTube playlist model missing title/name property in this version
+                    description = "", // Author unavailable
+                    thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
+                    items = items
+                 )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "InnerTube failed for $playlistId", e)
+        }
+
+        // Fallback to NewPipe
         try {
             val service = ServiceList.YouTube
             val playlistUrl = "https://www.youtube.com/playlist?list=$playlistId"
@@ -196,6 +292,13 @@ class YouTubeMusicExtractor {
             
             val items = playlistInfo.relatedItems
                 .filterIsInstance<StreamInfoItem>()
+                .filter { item ->
+                    val url = item.getUrl()
+                    // Filter out invalid URLs that caused crashes
+                    !url.equals("https://www.youtube.com/watch", ignoreCase = true) &&
+                    !url.equals("https://m.youtube.com/watch", ignoreCase = true) &&
+                    url.length > 25 // Basic length check for a valid watch URL
+                }
                 .map { streamItem ->
                     MusicItem(
                         id = streamItem.getUrl(),
@@ -443,16 +546,43 @@ class YouTubeMusicExtractor {
     private fun mapYTItemToMusicItem(item: com.zionhuang.innertube.models.YTItem): MusicItem? {
         // Import models locally or use fully qualified names if conflicts exist
         return when (item) {
-            is com.zionhuang.innertube.models.SongItem -> MusicItem(
-                id = item.id ?: return null,
-                title = item.title ?: "Unknown",
-                artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
-                duration = (item.duration?.toLong() ?: 0) * 1000L,
-                thumbnailUrl = item.thumbnail ?: "",
-                audioUrl = "",
-                videoUrl = item.id ?: return null,
-                isLive = false
-            )
+            is com.zionhuang.innertube.models.SongItem -> {
+                var id = item.id ?: return null
+                // Strict validation for IDs
+                if (id.startsWith("http") || 
+                    id.contains("youtube.com") || 
+                    id.contains("/watch") || 
+                    item.title.equals("Start Radio", ignoreCase = true)
+                ) {
+                    // Attempt to rescue ID from thumbnail
+                    val thumbnail = item.thumbnail
+                    var rescuedId: String? = null
+                    if (thumbnail != null && thumbnail.contains("/vi/")) {
+                        val pattern = "vi/([a-zA-Z0-9_-]{11})".toRegex()
+                        val match = pattern.find(thumbnail)
+                        if (match != null) {
+                            rescuedId = match.groupValues[1]
+                            Log.i(TAG, "Rescued invalid ID '$id' using thumbnail: $rescuedId")
+                            id = rescuedId
+                        }
+                    }
+
+                    if (rescuedId == null) {
+                        Log.w(TAG, "Filtered out invalid SongItem: id=$id, title=${item.title}")
+                        return null
+                    }
+                }
+                MusicItem(
+                    id = id,
+                    title = item.title ?: "Unknown",
+                    artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                    duration = (item.duration?.toLong() ?: 0) * 1000L,
+                    thumbnailUrl = item.thumbnail ?: "",
+                    audioUrl = "",
+                    videoUrl = id,
+                    isLive = false
+                )
+            }
             is com.zionhuang.innertube.models.AlbumItem -> MusicItem(
                 id = item.browseId ?: return null,
                 title = item.title ?: "Unknown",

@@ -51,8 +51,8 @@ private val SonicLightColorScheme = androidx.compose.material3.lightColorScheme(
 @Composable
 fun RaaziTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+, but we want to enforce our look
-    dynamicColor: Boolean = false,
+    // Dynamic color is available on Android 12+ - enabled by default for Material You
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

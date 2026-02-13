@@ -28,3 +28,9 @@ Thumbs.db
 .externalNativeBuild
 .cxx
 local.properties
+
+**/build/
+*.hprof
+*.jks
+*.keystore
+

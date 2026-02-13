@@ -1,9 +1,13 @@
 package com.israrxy.raazi.data.db
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "playback_history")
+@Entity(
+    tableName = "playback_history",
+    indices = [Index(value = ["timestamp"])]
+)
 data class PlaybackHistoryEntity(
     @PrimaryKey val id: String, // Track ID
     val title: String,
