@@ -27,6 +27,17 @@ data class PlaylistEntity(
     val thumbnailUrl: String
 )
 
+@Entity(tableName = "saved_collections")
+data class SavedCollectionEntity(
+    @PrimaryKey val id: String,
+    val sourceId: String,
+    val title: String,
+    val subtitle: String,
+    val thumbnailUrl: String,
+    val contentType: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 @Entity(
     tableName = "playlist_tracks",
     primaryKeys = ["playlistId", "trackId"],

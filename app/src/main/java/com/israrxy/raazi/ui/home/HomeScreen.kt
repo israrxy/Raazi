@@ -127,31 +127,43 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(recommendation.items) { ytItem ->
-                                when (ytItem) {
-                                    is com.zionhuang.innertube.models.SongItem -> {
-                                        YouTubeSongCard(
-                                            songItem = ytItem,
+                            items(recommendation.items) { recItem ->
+                                when (recItem) {
+                                    is MusicPlayerViewModel.RecommendationItem.FromYTItem -> {
+                                        when (val ytItem = recItem.ytItem) {
+                                            is com.zionhuang.innertube.models.SongItem -> {
+                                                YouTubeSongCard(
+                                                    songItem = ytItem,
+                                                    viewModel = viewModel,
+                                                    onNavigateToPlayer = onNavigateToPlayer
+                                                )
+                                            }
+                                            is com.zionhuang.innertube.models.AlbumItem -> {
+                                                YouTubeAlbumCard(
+                                                    albumItem = ytItem,
+                                                    onNavigateToPlaylist = onNavigateToPlaylist
+                                                )
+                                            }
+                                            is com.zionhuang.innertube.models.ArtistItem -> {
+                                                YouTubeArtistCard(
+                                                    artistItem = ytItem,
+                                                    onNavigateToArtist = onNavigateToArtist
+                                                )
+                                            }
+                                            is com.zionhuang.innertube.models.PlaylistItem -> {
+                                                YouTubePlaylistCard(
+                                                    playlistItem = ytItem,
+                                                    onNavigateToPlaylist = onNavigateToPlaylist
+                                                )
+                                            }
+                                            else -> { /* Unsupported YTItem type */ }
+                                        }
+                                    }
+                                    is MusicPlayerViewModel.RecommendationItem.FromMusicItem -> {
+                                        MusicCard(
+                                            musicItem = recItem.musicItem,
                                             viewModel = viewModel,
                                             onNavigateToPlayer = onNavigateToPlayer
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.AlbumItem -> {
-                                        YouTubeAlbumCard(
-                                            albumItem = ytItem,
-                                            onNavigateToPlaylist = onNavigateToPlaylist
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.ArtistItem -> {
-                                        YouTubeArtistCard(
-                                            artistItem = ytItem,
-                                            onNavigateToArtist = onNavigateToArtist
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.PlaylistItem -> {
-                                        YouTubePlaylistCard(
-                                            playlistItem = ytItem,
-                                            onNavigateToPlaylist = onNavigateToPlaylist
                                         )
                                     }
                                 }

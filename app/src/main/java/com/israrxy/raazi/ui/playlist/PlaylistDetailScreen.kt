@@ -10,10 +10,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,8 +28,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.toSavedCollectionItem
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
@@ -42,6 +46,7 @@ fun PlaylistDetailScreen(
     val currentPlaylist by viewModel.currentPlaylist.collectAsState(initial = null)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val error by viewModel.error.collectAsState(initial = null)
+    val savedCollectionIds by viewModel.savedCollectionIds.collectAsStateWithLifecycle()
     
     // Selection state
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -106,7 +111,7 @@ fun PlaylistDetailScreen(
                 TopAppBar(
                     title = { 
                         Text(
-                            text = "Playlist",
+                            text = currentPlaylist?.title ?: "Playlist",
                             color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Bold
                         ) 
@@ -120,6 +125,16 @@ fun PlaylistDetailScreen(
                         containerColor = MaterialTheme.colorScheme.background
                     ),
                     actions = {
+                        currentPlaylist?.let { playlist ->
+                            val isSavedPlaylist = playlist.toSavedCollectionItem().id in savedCollectionIds
+                            IconButton(onClick = { viewModel.toggleSavedPlaylist(playlist) }) {
+                                Icon(
+                                    if (isSavedPlaylist) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                    contentDescription = if (isSavedPlaylist) "Remove from library" else "Save to library",
+                                    tint = if (isSavedPlaylist) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
                         IconButton(onClick = {
                             currentPlaylist?.items?.let { items ->
                                 if (items.isNotEmpty()) {

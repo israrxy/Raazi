@@ -32,8 +32,20 @@ interface MusicDao {
     @Query("SELECT * FROM playlists")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM saved_collections ORDER BY timestamp DESC")
+    fun getSavedCollections(): Flow<List<SavedCollectionEntity>>
+
+    @Query("SELECT * FROM saved_collections WHERE id = :savedCollectionId LIMIT 1")
+    fun getSavedCollectionById(savedCollectionId: String): SavedCollectionEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaylist(playlist: PlaylistEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertSavedCollection(savedCollection: SavedCollectionEntity): Long
+
+    @Query("SELECT * FROM playlists WHERE id = :playlistId LIMIT 1")
+    fun getPlaylistById(playlistId: String): PlaylistEntity?
 
     @Transaction
     @Query("SELECT * FROM playlists WHERE id = :playlistId")
@@ -46,6 +58,18 @@ interface MusicDao {
     // Remove track from playlist
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND trackId = :trackId")
     fun removeTrackFromPlaylist(playlistId: String, trackId: String): Int
+
+    @Query("DELETE FROM playlists WHERE id = :playlistId")
+    fun deletePlaylistById(playlistId: String): Int
+
+    @Query("DELETE FROM saved_collections WHERE id = :savedCollectionId")
+    fun deleteSavedCollectionById(savedCollectionId: String): Int
+
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
+    fun deletePlaylistTracksByPlaylistId(playlistId: String): Int
+
+    @Query("SELECT MAX(position) FROM playlist_tracks WHERE playlistId = :playlistId")
+    fun getMaxPlaylistPosition(playlistId: String): Int?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaybackHistory(history: PlaybackHistoryEntity): Long
@@ -70,14 +94,14 @@ interface MusicDao {
     """)
     fun getSmartRecommendations(): Flow<List<TrackEntity>>
     
-    // Playback History
-    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 20")
+    // Playback History - increased limit for better recommendations
+    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 100")
     fun getPlaybackHistory(): Flow<List<PlaybackHistoryEntity>>
 
-    @Query("SELECT * FROM playback_history WHERE timestamp < :cutoff ORDER BY playCount DESC LIMIT 20")
+    @Query("SELECT * FROM playback_history WHERE timestamp < :cutoff ORDER BY playCount DESC, timestamp DESC LIMIT 50")
     fun getForgottenFavorites(cutoff: Long): Flow<List<PlaybackHistoryEntity>>
 
-    @Query("SELECT * FROM playback_history WHERE timestamp > :cutoff ORDER BY playCount DESC LIMIT 20")
+    @Query("SELECT * FROM playback_history WHERE timestamp > :cutoff ORDER BY playCount DESC, timestamp DESC LIMIT 50")
     fun getMostPlayed(cutoff: Long): Flow<List<PlaybackHistoryEntity>>
 
     @Query("""

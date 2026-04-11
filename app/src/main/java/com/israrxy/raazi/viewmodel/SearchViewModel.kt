@@ -7,13 +7,14 @@ import com.israrxy.raazi.RaaziApplication
 import com.israrxy.raazi.data.db.SearchHistoryEntity
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.YTItem
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class SearchViewModel(app: Application) : AndroidViewModel(app) {
     private val database = (app as RaaziApplication).database
     private val musicDao = database.musicDao()
@@ -42,6 +43,8 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     // Changed to use generic SearchResult from repository which supports mixed types via NewPipe/InnerTube wrapper
     private val _searchResults = MutableStateFlow<com.israrxy.raazi.model.SearchResult?>(null)
     val searchResults = _searchResults.asStateFlow()
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching = _isSearching.asStateFlow()
 
     // Track the query that generated the current results
     var submittedQuery by androidx.compose.runtime.mutableStateOf("")
@@ -98,6 +101,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     fun performSearch(query: String) {
         if (query.isBlank()) return
         submittedQuery = query
+        _isSearching.value = true
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -107,7 +111,9 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 saveSearchHistory(query)
             } catch (e: Exception) {
                 android.util.Log.e("SearchViewModel", "Search error", e)
-                _searchResults.value = null
+                _searchResults.value = com.israrxy.raazi.model.SearchResult(query, emptyList())
+            } finally {
+                _isSearching.value = false
             }
         }
     }
@@ -132,6 +138,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     
     fun clearSearchResults() {
         _searchResults.value = null
+        _isSearching.value = false
         submittedQuery = ""
         query.value = "" // Also clear query to reset UI state
     }

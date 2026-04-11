@@ -16,6 +16,7 @@ import android.media.audiofx.Virtualizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.Visualizer
+import android.os.Bundle
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -33,6 +34,7 @@ import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.model.RepeatMode
 import kotlinx.coroutines.*
 import java.net.URL
+import java.util.concurrent.CopyOnWriteArraySet
 import coil.imageLoader
 import coil.request.ImageRequest
 import androidx.media3.datasource.ResolvingDataSource
@@ -51,7 +53,7 @@ class MusicPlaybackService : Service() {
     private val serviceBinder = MusicBinder()
     
     // Coroutine scope for background tasks
-    private val extractor = YouTubeMusicExtractor()
+    private val extractor = YouTubeMusicExtractor.getInstance()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     private val notificationChannelId = "raazi_music_channel"
@@ -61,8 +63,12 @@ class MusicPlaybackService : Service() {
     private var currentPlaylist: List<MusicItem> = emptyList()
     private var originalPlaylist: List<MusicItem> = emptyList() // For shuffle
     private var currentIndex = -1
-    private var playbackStateListeners = mutableSetOf<(PlaybackState) -> Unit>()
+    private val playbackStateListeners = CopyOnWriteArraySet<(PlaybackState) -> Unit>()
+    private val trackChangedListeners = CopyOnWriteArraySet<(MusicItem) -> Unit>()
     private var currentAlbumArt: Bitmap? = null
+    private var pendingNotificationTrackId: String? = null
+    @Volatile private var isDestroyed = false
+    private var audioEffectsInitRetryCount = 0
     
     // Playback modes
     private var isShuffleEnabled = false
@@ -94,57 +100,8 @@ class MusicPlaybackService : Service() {
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             
-        // Initialize Advanced Audio Effects
-        try {
-            val audioSessionId = exoPlayer.audioSessionId
-            audioEqualizer = android.media.audiofx.Equalizer(0, audioSessionId)
-            audioEqualizer?.enabled = true
-
-            // Initialize Bass Boost
-            bassBoost = BassBoost(0, audioSessionId)
-            bassBoost?.enabled = true
-
-            // Initialize Virtualizer
-            virtualizer = Virtualizer(0, audioSessionId)
-            virtualizer?.enabled = true
-
-            // Initialize Preset Reverb
-            presetReverb = PresetReverb(0, audioSessionId)
-            presetReverb?.enabled = true
-
-            // Initialize Visualizer for spectrum analysis
-            try {
-                visualizer = Visualizer(audioSessionId)
-                visualizer?.enabled = false // Start disabled
-                visualizer?.captureSize = Visualizer.getCaptureSizeRange()[1] // Use max capture size
-                visualizer?.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-                        // Not used for spectrum visualization
-                    }
-
-                    override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-                        fft?.let { data ->
-                            visualizerData = data
-                            // Notify listeners of new data
-                            visualizerListeners.forEach { listener ->
-                                try {
-                                    listener(data)
-                                } catch (e: Exception) {
-                                    android.util.Log.e("MusicService", "Error notifying visualizer listener", e)
-                                }
-                            }
-                        }
-                    }
-                }, Visualizer.getMaxCaptureRate() / 2, false, true) // Only capture FFT data
-                android.util.Log.d("MusicService", "Visualizer initialized successfully")
-            } catch (e: Exception) {
-                android.util.Log.e("MusicService", "Error initializing visualizer", e)
-            }
-
-            android.util.Log.d("MusicService", "Advanced audio effects initialized successfully")
-        } catch (e: Exception) {
-            android.util.Log.e("MusicService", "Error initializing audio effects", e)
-        }
+        // Initialize audio effects after player is built
+        initializeAudioEffects()
         
         // Create legacy MediaSession for notification controls
         mediaSession = MediaSessionCompat(this, "RaaziMusicSession").apply {
@@ -172,7 +129,19 @@ class MusicPlaybackService : Service() {
                 override fun onSeekTo(pos: Long) {
                     seekTo(pos)
                 }
+
+                override fun onCustomAction(action: String?, extras: Bundle?) {
+                    when (action) {
+                        ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
+                        ACTION_TOGGLE_REPEAT -> toggleRepeat()
+                    }
+                }
             })
+            setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+            )
+            setSessionActivity(createContentPendingIntent())
             isActive = true
         }
         
@@ -216,7 +185,7 @@ class MusicPlaybackService : Service() {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateMediaSessionState()
-                notifyPlaybackState()
+                notifyPlaybackState(refreshNotification = true)
                 
                 // Start or stop position updates based on playing state
                 if (isPlaying) {
@@ -232,11 +201,16 @@ class MusicPlaybackService : Service() {
                     currentIndex = exoPlayer.currentMediaItemIndex
                     val tag = mediaItem.localConfiguration?.tag
                     if (tag is MusicItem) {
+                         currentAlbumArt = null
+                         pendingNotificationTrackId = tag.id
                          // Load album art for notification
                          loadAlbumArt(tag.thumbnailUrl)
+                         // Notify track changed
+                         notifyTrackChanged(tag)
+                         preloadAdjacentTracks(currentIndex)
                     }
-                    notifyPlaybackState()
-                    updateNotification()
+                    updateMediaSessionState()
+                    notifyPlaybackState(refreshNotification = true)
                 }
             }
             
@@ -254,7 +228,22 @@ class MusicPlaybackService : Service() {
                 newPosition: Player.PositionInfo,
                 reason: Int
             ) {
+                updateMediaSessionState()
                 notifyPlaybackState()
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e(TAG, "ExoPlayer error: ${error.errorCodeName}", error)
+                // Auto-skip to next on playback errors instead of crashing
+                serviceScope.launch {
+                    delay(500L) // Brief delay before auto-skip
+                    if (currentPlaylist.size > 1 && currentIndex < currentPlaylist.lastIndex) {
+                        android.util.Log.w(TAG, "Auto-skipping to next track after error")
+                        next()
+                    } else {
+                        notifyPlaybackState() // Notify UI of the error state
+                    }
+                }
             }
         })
     }
@@ -262,22 +251,31 @@ class MusicPlaybackService : Service() {
 
 
     fun toggleShuffle() {
-        isShuffleEnabled = !isShuffleEnabled
-        if (currentPlaylist.isNotEmpty()) {
-            val currentTrack = currentPlaylist.getOrNull(currentIndex)
-            if (isShuffleEnabled) {
-                // Shuffle but keep current track first or find it
-                val remaining = originalPlaylist.filter { it.id != currentTrack?.id }.shuffled()
-                currentPlaylist = if (currentTrack != null) listOf(currentTrack) + remaining else remaining
-                currentIndex = 0
-            } else {
-                // Restore original order
-                currentPlaylist = originalPlaylist
-                // Find current track index in original
-                currentIndex = currentPlaylist.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
+        if (isDestroyed) return
+        try {
+            val currentTrack = currentPlaylist.getOrNull(currentIndex) ?: getCurrentTrack()
+            val currentPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val shouldKeepPlaying = exoPlayer.playWhenReady
+            isShuffleEnabled = !isShuffleEnabled
+            if (currentPlaylist.isNotEmpty()) {
+                if (isShuffleEnabled) {
+                    val remaining = originalPlaylist.filter { it.id != currentTrack?.id }.shuffled()
+                    currentPlaylist = if (currentTrack != null) listOf(currentTrack) + remaining else remaining
+                    currentIndex = 0
+                } else {
+                    currentPlaylist = originalPlaylist
+                    currentIndex = currentPlaylist.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
+                }
+                syncPlaylistQueue(
+                    targetIndex = currentIndex,
+                    targetPositionMs = currentPosition,
+                    shouldPlay = shouldKeepPlaying
+                )
             }
+            notifyPlaybackState(refreshNotification = true)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error toggling shuffle", e)
         }
-        notifyPlaybackState()
     }
 
     fun toggleRepeat() {
@@ -286,7 +284,7 @@ class MusicPlaybackService : Service() {
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        notifyPlaybackState()
+        notifyPlaybackState(refreshNotification = true)
     }
 
     private fun createNotificationChannel() {
@@ -309,23 +307,33 @@ class MusicPlaybackService : Service() {
         startForeground(notificationId, notification)
     }
 
-    private fun createNotification(playbackState: PlaybackState): Notification {
+    private fun createContentPendingIntent(): PendingIntent {
         val contentIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val contentPendingIntent = PendingIntent.getActivity(
-            this, 0, contentIntent,
+        return PendingIntent.getActivity(
+            this,
+            0,
+            contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    private fun createNotification(playbackState: PlaybackState): Notification {
+        val contentPendingIntent = createContentPendingIntent()
 
         val currentTrack = playbackState.currentTrack
         val title = currentTrack?.title ?: "No Track"
         val artist = currentTrack?.artist ?: "Unknown Artist"
         val isPlaying = playbackState.isPlaying
+        val largeIcon = currentAlbumArt ?: BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
 
         // Action intents
         val prevIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_PREV }
         val prevPending = PendingIntent.getService(this, 1, prevIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val shuffleIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_TOGGLE_SHUFFLE }
+        val shufflePending = PendingIntent.getService(this, 5, shuffleIntent, PendingIntent.FLAG_IMMUTABLE)
 
         val playPauseIntent = Intent(this, MusicPlaybackService::class.java).apply { 
             action = if (isPlaying) ACTION_PAUSE else ACTION_PLAY 
@@ -334,24 +342,49 @@ class MusicPlaybackService : Service() {
 
         val nextIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_NEXT }
         val nextPending = PendingIntent.getService(this, 3, nextIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val repeatIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_TOGGLE_REPEAT }
+        val repeatPending = PendingIntent.getService(this, 6, repeatIntent, PendingIntent.FLAG_IMMUTABLE)
         
         val stopIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_STOP }
         val stopPending = PendingIntent.getService(this, 4, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
+        val shuffleLabel = if (playbackState.isShuffleEnabled) "Shuffle On" else "Shuffle Off"
+        val repeatLabel = when (playbackState.repeatMode) {
+            RepeatMode.OFF -> "Repeat Off"
+            RepeatMode.ALL -> "Repeat All"
+            RepeatMode.ONE -> "Repeat One"
+        }
+        val repeatIcon = when (playbackState.repeatMode) {
+            RepeatMode.ONE -> android.R.drawable.ic_menu_revert
+            RepeatMode.ALL -> android.R.drawable.ic_menu_rotate
+            RepeatMode.OFF -> android.R.drawable.ic_menu_rotate
+        }
+        val modeSummary = buildPlaybackModeSummary(playbackState)
+
         val builder = NotificationCompat.Builder(this, notificationChannelId)
             .setContentTitle(title)
             .setContentText(artist)
-            .setSubText("Raazi Music")
+            .setSubText(modeSummary)
             .setSmallIcon(R.drawable.ic_music_note)
-            .setLargeIcon(currentAlbumArt)
+            .setLargeIcon(largeIcon)
             .setContentIntent(contentPendingIntent)
             .setDeleteIntent(stopPending)
             .setOngoing(isPlaying)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setColor(android.graphics.Color.parseColor("#10B981"))
+            .setColorized(currentAlbumArt != null)
+            .setTicker("$title - $artist")
             
             // Actions
+            .addAction(NotificationCompat.Action(
+                android.R.drawable.ic_menu_sort_by_size, shuffleLabel, shufflePending
+            ))
             .addAction(NotificationCompat.Action(
                 R.drawable.ic_skip_previous, "Previous", prevPending
             ))
@@ -363,14 +396,27 @@ class MusicPlaybackService : Service() {
             .addAction(NotificationCompat.Action(
                 R.drawable.ic_skip_next, "Next", nextPending
             ))
+            .addAction(NotificationCompat.Action(
+                repeatIcon, repeatLabel, repeatPending
+            ))
             
             // Media style with session token
             .setStyle(MediaStyle()
-                .setShowActionsInCompactView(0, 1, 2)
+                .setShowActionsInCompactView(0, 2, 4)
                 .setMediaSession(mediaSession.sessionToken)
             )
             
         return builder.build()
+    }
+
+    private fun buildPlaybackModeSummary(playbackState: PlaybackState): String {
+        val shuffleState = if (playbackState.isShuffleEnabled) "Shuffle on" else "Shuffle off"
+        val repeatState = when (playbackState.repeatMode) {
+            RepeatMode.OFF -> "Repeat off"
+            RepeatMode.ALL -> "Repeat all"
+            RepeatMode.ONE -> "Repeat one"
+        }
+        return "$shuffleState / $repeatState"
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -379,6 +425,8 @@ class MusicPlaybackService : Service() {
             ACTION_PAUSE -> pause()
             ACTION_PREV -> previous()
             ACTION_NEXT -> next()
+            ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
+            ACTION_TOGGLE_REPEAT -> toggleRepeat()
             ACTION_STOP -> {
                 stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -423,6 +471,28 @@ class MusicPlaybackService : Service() {
                 PlaybackStateCompat.ACTION_STOP
             )
             .setState(state, exoPlayer.currentPosition, 1f)
+            .addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    ACTION_TOGGLE_SHUFFLE,
+                    if (isShuffleEnabled) "Shuffle On" else "Shuffle Off",
+                    android.R.drawable.ic_menu_sort_by_size
+                ).build()
+            )
+            .addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    ACTION_TOGGLE_REPEAT,
+                    when (repeatMode) {
+                        RepeatMode.OFF -> "Repeat Off"
+                        RepeatMode.ALL -> "Repeat All"
+                        RepeatMode.ONE -> "Repeat One"
+                    },
+                    when (repeatMode) {
+                        RepeatMode.ONE -> android.R.drawable.ic_menu_revert
+                        RepeatMode.ALL -> android.R.drawable.ic_menu_rotate
+                        RepeatMode.OFF -> android.R.drawable.ic_menu_rotate
+                    }
+                ).build()
+            )
             
         mediaSession.setPlaybackState(playbackStateBuilder.build())
         
@@ -432,10 +502,21 @@ class MusicPlaybackService : Service() {
             val metadataBuilder = android.support.v4.media.MediaMetadataCompat.Builder()
                 .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, currentTrack.title)
                 .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, currentTrack.artist)
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, currentTrack.title)
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, currentTrack.artist)
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, "Playing in Raazi")
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM, "Raazi")
                 .putLong(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION, getDuration())
-            
+                .putString(
+                    android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI,
+                    currentTrack.thumbnailUrl
+                )
+
             if (currentAlbumArt != null) {
-                metadataBuilder.putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM_ART, currentAlbumArt)
+                metadataBuilder
+                    .putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM_ART, currentAlbumArt)
+                    .putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ART, currentAlbumArt)
+                    .putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, currentAlbumArt)
             }
             
             mediaSession.setMetadata(metadataBuilder.build())
@@ -448,6 +529,8 @@ class MusicPlaybackService : Service() {
             updateNotification()
             return
         }
+
+        val expectedTrackId = pendingNotificationTrackId
         
         serviceScope.launch(Dispatchers.IO) {
             try {
@@ -458,15 +541,22 @@ class MusicPlaybackService : Service() {
                     .build()
                 
                 val result = loader.execute(request).drawable
-                currentAlbumArt = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                val bitmap = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
                 
                 // Update notification with new art
                 withContext(Dispatchers.Main) {
+                    if (expectedTrackId != null && getCurrentTrack()?.id != expectedTrackId) {
+                        return@withContext
+                    }
+                    currentAlbumArt = bitmap
                     updateNotification()
                 }
             } catch (e: Exception) {
-                currentAlbumArt = null
                 withContext(Dispatchers.Main) {
+                    if (expectedTrackId != null && getCurrentTrack()?.id != expectedTrackId) {
+                        return@withContext
+                    }
+                    currentAlbumArt = null
                     updateNotification()
                 }
             }
@@ -475,7 +565,7 @@ class MusicPlaybackService : Service() {
 
     fun playMusic(musicItem: MusicItem, resetPlaylist: Boolean = true) {
         // Set loading state
-        notifyPlaybackState(isLoading = true)
+        notifyPlaybackState(isLoading = true, refreshNotification = true)
         
         // Add to playlist if not already playing from one or if reset requested
         if (resetPlaylist || currentPlaylist.isEmpty()) {
@@ -524,9 +614,10 @@ class MusicPlaybackService : Service() {
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
             requestAudioFocus()
+            preloadAdjacentTracks(startIndex)
             
             // Notify state change
-            notifyPlaybackState(isLoading = true) 
+            notifyPlaybackState(isLoading = true, refreshNotification = true)
             startForegroundService()
             
             // Note: onMediaItemTransition will handle updating the current track info once the player actually switches
@@ -556,71 +647,73 @@ class MusicPlaybackService : Service() {
     }
 
     fun pause() {
-        exoPlayer.pause()
+        if (isDestroyed) return
+        try { exoPlayer.pause() } catch (e: Exception) { android.util.Log.e(TAG, "Error pausing", e) }
     }
 
     fun resume() {
-        exoPlayer.play()
-        requestAudioFocus()
-        updateNotification()
+        if (isDestroyed) return
+        try {
+            exoPlayer.play()
+            requestAudioFocus()
+        } catch (e: Exception) { android.util.Log.e(TAG, "Error resuming", e) }
     }
 
     fun stop() {
-        exoPlayer.stop()
-        abandonAudioFocus()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (isDestroyed) return
+        try {
+            exoPlayer.stop()
+            abandonAudioFocus()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) { android.util.Log.e(TAG, "Error stopping", e) }
     }
 
     fun next() {
         if (currentPlaylist.isEmpty()) return
-        
-        when (repeatMode) {
-            RepeatMode.ONE -> {
-                // Restart current track
-                exoPlayer.seekTo(0)
-                exoPlayer.play()
-            }
-            RepeatMode.ALL -> {
-                currentIndex = (currentIndex + 1) % currentPlaylist.size
-                playMusic(currentPlaylist[currentIndex], resetPlaylist = false)
-            }
-            RepeatMode.OFF -> {
-                if (currentIndex < currentPlaylist.size - 1) {
-                    currentIndex++
-                    playMusic(currentPlaylist[currentIndex], resetPlaylist = false)
-                }
-            }
-        }
+
+        val targetIndex = when {
+            currentIndex < currentPlaylist.lastIndex -> currentIndex + 1
+            repeatMode == RepeatMode.ALL && currentPlaylist.isNotEmpty() -> 0
+            else -> null
+        } ?: return
+
+        skipToPlaylistIndex(targetIndex)
     }
 
     fun previous() {
         // If more than 3 seconds in, restart current track
         if (exoPlayer.currentPosition > 3000) {
             exoPlayer.seekTo(0)
+            notifyPlaybackState()
             return
         }
-        
-        if (currentPlaylist.isNotEmpty() && currentIndex > 0) {
-            currentIndex--
-            playMusic(currentPlaylist[currentIndex], resetPlaylist = false)
-        }
+
+        val targetIndex = when {
+            currentPlaylist.isEmpty() -> null
+            currentIndex > 0 -> currentIndex - 1
+            repeatMode == RepeatMode.ALL && currentPlaylist.isNotEmpty() -> currentPlaylist.lastIndex
+            else -> null
+        } ?: return
+
+        skipToPlaylistIndex(targetIndex)
     }
 
     fun seekTo(position: Long) {
-        exoPlayer.seekTo(position)
+        if (isDestroyed) return
+        try { exoPlayer.seekTo(position) } catch (e: Exception) { android.util.Log.e(TAG, "Error seeking", e) }
     }
 
-    fun getCurrentPosition(): Long = exoPlayer.currentPosition
+    fun getCurrentPosition(): Long = try { exoPlayer.currentPosition } catch (_: Exception) { 0L }
 
-    fun getDuration(): Long = exoPlayer.duration
+    fun getDuration(): Long = try { exoPlayer.duration } catch (_: Exception) { 0L }
 
-    fun isPlaying(): Boolean = exoPlayer.isPlaying
+    fun isPlaying(): Boolean = try { exoPlayer.isPlaying } catch (_: Exception) { false }
 
     fun getCurrentTrack(): MusicItem? {
         return if (currentPlaylist.isNotEmpty() && currentIndex >= 0) {
             currentPlaylist.getOrNull(currentIndex)
         } else {
-            null
+            exoPlayer.currentMediaItem?.localConfiguration?.tag as? MusicItem
         }
     }
 
@@ -651,14 +744,27 @@ class MusicPlaybackService : Service() {
         playbackStateListeners.remove(listener)
     }
     
-    private fun notifyPlaybackState(isLoading: Boolean = false) {
+    fun addTrackChangedListener(listener: (MusicItem) -> Unit) {
+        trackChangedListeners.add(listener)
+    }
+    
+    fun removeTrackChangedListener(listener: (MusicItem) -> Unit) {
+        trackChangedListeners.remove(listener)
+    }
+    
+    private fun notifyTrackChanged(track: MusicItem) {
+        trackChangedListeners.forEach { it(track) }
+    }
+    
+    private fun notifyPlaybackState(
+        isLoading: Boolean = false,
+        refreshNotification: Boolean = false
+    ) {
         val state = getPlaybackState().copy(isLoading = isLoading)
         playbackStateListeners.forEach { it(state) }
-        
-        // Update notification only if it's already showing
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (state.currentTrack != null) {
-             updateNotification()
+
+        if (refreshNotification && state.currentTrack != null) {
+            updateNotification()
         }
     }
     
@@ -676,6 +782,59 @@ class MusicPlaybackService : Service() {
     private fun stopPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = null
+    }
+
+    private fun syncPlaylistQueue(
+        targetIndex: Int,
+        targetPositionMs: Long = 0L,
+        shouldPlay: Boolean = exoPlayer.playWhenReady
+    ) {
+        if (targetIndex !in currentPlaylist.indices) return
+
+        val mediaItems = currentPlaylist.map { createMediaItem(it) }
+        exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = shouldPlay
+        if (shouldPlay) {
+            requestAudioFocus()
+        }
+        preloadAdjacentTracks(targetIndex)
+    }
+
+    private fun skipToPlaylistIndex(targetIndex: Int) {
+        if (targetIndex !in currentPlaylist.indices) return
+
+        if (exoPlayer.mediaItemCount != currentPlaylist.size) {
+            currentIndex = targetIndex
+            playExoPlayerPlaylist(currentPlaylist, targetIndex)
+            return
+        }
+
+        currentIndex = targetIndex
+        currentAlbumArt = null
+        pendingNotificationTrackId = currentPlaylist[targetIndex].id
+        updateMediaSessionState()
+        notifyPlaybackState(isLoading = true, refreshNotification = true)
+        exoPlayer.seekToDefaultPosition(targetIndex)
+        exoPlayer.playWhenReady = true
+        requestAudioFocus()
+        preloadAdjacentTracks(targetIndex)
+    }
+
+    private fun preloadAdjacentTracks(centerIndex: Int) {
+        if (currentPlaylist.isEmpty()) return
+
+        listOf(centerIndex - 1, centerIndex + 1, centerIndex + 2)
+            .distinct()
+            .forEach { index ->
+                val track = currentPlaylist.getOrNull(index) ?: return@forEach
+                if (track.localPath != null && java.io.File(track.localPath).exists()) return@forEach
+                StreamResolver.preloadStream(
+                    videoIdInput = track.videoUrl,
+                    title = track.title,
+                    artist = track.artist
+                )
+            }
     }
 
     private fun requestAudioFocus() {
@@ -714,7 +873,67 @@ class MusicPlaybackService : Service() {
     private var presetReverb: PresetReverb? = null
     private var visualizer: Visualizer? = null
     private var visualizerData: ByteArray? = null
-    private var visualizerListeners = mutableSetOf<(ByteArray) -> Unit>()
+    private var visualizerListeners = CopyOnWriteArraySet<(ByteArray) -> Unit>()
+
+    private fun initializeAudioEffects() {
+        if (isDestroyed || audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
+            if (audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
+                android.util.Log.w("MusicService", "Max audio effects init retries reached")
+            }
+            return
+        }
+        try {
+            val audioSessionId = exoPlayer.audioSessionId
+            if (audioSessionId == 0) {
+                audioEffectsInitRetryCount++
+                android.util.Log.w("MusicService", "Audio session not ready, retry $audioEffectsInitRetryCount/$MAX_AUDIO_EFFECTS_RETRIES")
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (!isDestroyed) initializeAudioEffects()
+                }, 1000)
+                return
+            }
+
+            audioEqualizer = android.media.audiofx.Equalizer(0, audioSessionId)
+            audioEqualizer?.enabled = true
+
+            bassBoost = BassBoost(0, audioSessionId)
+            bassBoost?.enabled = true
+
+            virtualizer = Virtualizer(0, audioSessionId)
+            virtualizer?.enabled = true
+
+            presetReverb = PresetReverb(0, audioSessionId)
+            presetReverb?.enabled = true
+
+            try {
+                visualizer = Visualizer(audioSessionId)
+                visualizer?.enabled = false
+                visualizer?.captureSize = Visualizer.getCaptureSizeRange()[1]
+                visualizer?.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                    override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
+                    override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                        fft?.let { data ->
+                            visualizerData = data
+                            visualizerListeners.forEach { listener ->
+                                try {
+                                    listener(data)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MusicService", "Error notifying visualizer listener", e)
+                                }
+                            }
+                        }
+                    }
+                }, Visualizer.getMaxCaptureRate() / 2, false, true)
+                android.util.Log.d("MusicService", "Visualizer initialized successfully")
+            } catch (e: Exception) {
+                android.util.Log.e("MusicService", "Error initializing visualizer", e)
+            }
+
+            android.util.Log.d("MusicService", "Advanced audio effects initialized successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("MusicService", "Error initializing audio effects", e)
+        }
+    }
 
     // Equalizer methods
     fun getEqualizerBands(): Short {
@@ -832,11 +1051,12 @@ class MusicPlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        isDestroyed = true
         super.onDestroy()
-        serviceScope.cancel()
-        mediaSession.release()
-        exoPlayer.release()
-        abandonAudioFocus()
+        try { serviceScope.cancel() } catch (_: Exception) {}
+        try { mediaSession.release() } catch (_: Exception) {}
+        try { exoPlayer.release() } catch (_: Exception) {}
+        try { abandonAudioFocus() } catch (_: Exception) {}
         
         // Cleanup visualizer
         try {
@@ -853,6 +1073,10 @@ class MusicPlaybackService : Service() {
         } catch (e: Exception) {
             android.util.Log.e("MusicService", "Error releasing audio effects", e)
         }
+        // Clear listener references
+        playbackStateListeners.clear()
+        trackChangedListeners.clear()
+        visualizerListeners.clear()
     }
 
     private fun createDataSourceFactory(): androidx.media3.datasource.DataSource.Factory {
@@ -969,10 +1193,13 @@ class MusicPlaybackService : Service() {
 
     companion object {
         private const val TAG = "MusicPlaybackService"
+        private const val MAX_AUDIO_EFFECTS_RETRIES = 3
         const val ACTION_PLAY = "com.israrxy.raazi.ACTION_PLAY"
         const val ACTION_PAUSE = "com.israrxy.raazi.ACTION_PAUSE"
         const val ACTION_NEXT = "com.israrxy.raazi.ACTION_NEXT"
         const val ACTION_PREV = "com.israrxy.raazi.ACTION_PREV"
+        const val ACTION_TOGGLE_SHUFFLE = "com.israrxy.raazi.ACTION_TOGGLE_SHUFFLE"
+        const val ACTION_TOGGLE_REPEAT = "com.israrxy.raazi.ACTION_TOGGLE_REPEAT"
         const val ACTION_STOP = "com.israrxy.raazi.ACTION_STOP"
     }
 }

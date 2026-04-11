@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 3,
-    "latestVersionName": "3.1.0",
+    "latestVersionCode": 4,
+    "latestVersionName": "3.1.1",
     "downloadUrl": "https://raazi.pages.dev",
     "forceUpdate": true,
-    "releaseNotes": "A new version of Raazi is available with critical bug fixes and improvements. Please update to continue."
+    "releaseNotes": "v3.1.1 — Stability & Hardening Update:\n• Fixed stream resolution timeouts causing ANRs\n• Added lifecycle guards to prevent background crashes\n• Improved download manager with robust file handling\n• Thread-safe singleton for YouTube music extraction\n• Crash-safe database initialization\n• Type-safe recommendation rendering\n• Overall architecture and performance improvements"
 }

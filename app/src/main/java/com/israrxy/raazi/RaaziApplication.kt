@@ -2,7 +2,9 @@ package com.israrxy.raazi
 
 import android.app.Application
 import androidx.room.Room
+import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.AppDatabase
+import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.repository.MusicRepository
 
 import kotlinx.coroutines.launch
@@ -16,28 +18,32 @@ class RaaziApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        database = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "raazi-db"
-        )
-        .fallbackToDestructiveMigration()
-        .build()
+        database = try {
+            Room.databaseBuilder(
+                applicationContext,
+                AppDatabase::class.java,
+                "raazi-db"
+            )
+            .addMigrations(AppDatabase.MIGRATION_10_11)
+            .fallbackToDestructiveMigration()
+            .build()
+        } catch (e: Exception) {
+            android.util.Log.e("RaaziApp", "Database creation failed, using destructive fallback", e)
+            Room.databaseBuilder(
+                applicationContext,
+                AppDatabase::class.java,
+                "raazi-db"
+            )
+            .fallbackToDestructiveMigration()
+            .build()
+        }
         container = AppContainer(database, applicationContext)
 
-        // Initialize YouTube Visitor Data for PoToken
         MainScope().launch(Dispatchers.IO) {
             try {
-                android.util.Log.d("RaaziApplication", "Initializing YouTube visitor data...")
-                val visitorData = com.zionhuang.innertube.YouTube.visitorData().getOrNull()
-                if (visitorData != null) {
-                    com.zionhuang.innertube.YouTube.visitorData = visitorData
-                    android.util.Log.d("RaaziApplication", "YouTube visitor data initialized: $visitorData")
-                } else {
-                    android.util.Log.w("RaaziApplication", "Failed to fetch YouTube visitor data")
-                }
+                YouTubeAccountSession.bootstrap(SettingsDataStore(applicationContext))
             } catch (e: Exception) {
-                android.util.Log.e("RaaziApplication", "Error initializing YouTube visitor data", e)
+                android.util.Log.e("RaaziApp", "YouTube account bootstrap failed", e)
             }
         }
     }

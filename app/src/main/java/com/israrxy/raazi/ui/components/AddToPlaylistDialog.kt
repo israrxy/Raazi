@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.israrxy.raazi.data.db.PlaylistEntity
+import com.israrxy.raazi.data.playlist.isYouTubeEditablePlaylist
+import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import androidx.compose.runtime.collectAsState
@@ -32,8 +34,10 @@ fun AddToPlaylistDialog(
     onPlaylistSelected: (PlaylistEntity) -> Unit
 ) {
     val playlists: List<PlaylistEntity> by viewModel.userPlaylists.collectAsState()
+    val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsState()
     var showCreateInput by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var createSyncedPlaylist by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -91,15 +95,48 @@ fun AddToPlaylistDialog(
                         Button(
                             onClick = {
                                 if (newPlaylistName.isNotBlank()) {
-                                    viewModel.createPlaylist(newPlaylistName)
+                                    viewModel.createPlaylist(
+                                        newPlaylistName,
+                                        syncedToYouTube = createSyncedPlaylist
+                                    )
                                     showCreateInput = false
                                     newPlaylistName = ""
+                                    createSyncedPlaylist = false
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Create") // Small button
+                        }
+                    }
+
+                    if (isYouTubeLoggedIn) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Create In YouTube Music",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "You can add songs to it from Raazi and YouTube Music.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Switch(
+                                checked = createSyncedPlaylist,
+                                onCheckedChange = { createSyncedPlaylist = it }
+                            )
                         }
                     }
                 } else {
@@ -134,10 +171,15 @@ fun AddToPlaylistDialog(
                 // Playlist List
                 LazyColumn {
                     items(playlists) { playlist ->
-                        PlaylistOptionItem(playlist = playlist) {
-                            onPlaylistSelected(playlist)
-                            onDismiss()
-                        }
+                        val isEditable = !playlist.isYouTubeSyncedPlaylist() || playlist.isYouTubeEditablePlaylist()
+                        PlaylistOptionItem(
+                            playlist = playlist,
+                            enabled = isEditable,
+                            onClick = {
+                                onPlaylistSelected(playlist)
+                                onDismiss()
+                            }
+                        )
                     }
                 }
                 
@@ -154,12 +196,13 @@ fun AddToPlaylistDialog(
 @Composable
 fun PlaylistOptionItem(
     playlist: PlaylistEntity,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -178,10 +221,18 @@ fun PlaylistOptionItem(
                 text = playlist.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
             Text(
-                text = "${0} songs", // Placeholder count, need relations to get real count easily or update Entity
+                text = when {
+                    playlist.isYouTubeSyncedPlaylist() && playlist.isYouTubeEditablePlaylist() -> "Synced playlist"
+                    playlist.isYouTubeSyncedPlaylist() -> "Saved from YouTube Music"
+                    else -> "Local playlist"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

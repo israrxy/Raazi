@@ -1,5 +1,6 @@
 package com.israrxy.raazi.service
 
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.model.SearchResult
@@ -17,9 +18,19 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val TAG = "YouTubeMusicExtractor"
 
-
-class YouTubeMusicExtractor {
+class YouTubeMusicExtractor private constructor() {
     private val client: okhttp3.OkHttpClient
+
+    companion object {
+        @Volatile
+        private var INSTANCE: YouTubeMusicExtractor? = null
+
+        fun getInstance(): YouTubeMusicExtractor {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: YouTubeMusicExtractor().also { INSTANCE = it }
+            }
+        }
+    }
 
     init {
         client = okhttp3.OkHttpClient.Builder().build()
@@ -29,52 +40,51 @@ class YouTubeMusicExtractor {
         val localization = org.schabi.newpipe.extractor.localization.Localization(country, language)
         val contentCountry = org.schabi.newpipe.extractor.localization.ContentCountry(country)
 
-        NewPipe.init(
-            object : org.schabi.newpipe.extractor.downloader.Downloader() {
-                override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response {
-                    val httpMethod = request.httpMethod()
-                    val url = request.url()
-                    val headers = request.headers()
-                    val dataToSend = request.dataToSend()
-                    
-                    val requestBuilder = okhttp3.Request.Builder()
-                        .url(url)
-                        .method(httpMethod, dataToSend?.toRequestBody(null))
+        try {
+            NewPipe.init(
+                object : org.schabi.newpipe.extractor.downloader.Downloader() {
+                    override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response {
+                        val httpMethod = request.httpMethod()
+                        val url = request.url()
+                        val headers = request.headers()
+                        val dataToSend = request.dataToSend()
+                        
+                        val requestBuilder = okhttp3.Request.Builder()
+                            .url(url)
+                            .method(httpMethod, dataToSend?.toRequestBody(null))
 
-                    headers.forEach { (key, values) ->
-                        values.forEach { value ->
-                            requestBuilder.addHeader(key, value)
+                        headers.forEach { (key, values) ->
+                            values.forEach { value ->
+                                requestBuilder.addHeader(key, value)
+                            }
                         }
-                    }
-                    
-                    // Add default headers if not present
-                    if (headers["User-Agent"].isNullOrEmpty()) {
-                        requestBuilder.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                    }
+                        
+                        if (headers["User-Agent"].isNullOrEmpty()) {
+                            requestBuilder.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        }
 
-                    Log.d(TAG, "Executing request: ${requestBuilder.build().url}")
-                    val response = client.newCall(requestBuilder.build()).execute()
-                    val responseBody = response.body?.string() ?: ""
-                    val responseHeaders = response.headers.toMultimap()
-                    val responseCode = response.code
-                    val responseMessage = response.message
-                    val latestUrl = response.request.url.toString()
-
-                    Log.d(TAG, "Response code: $responseCode, Body length: ${responseBody.length}")
-                    
-                    return org.schabi.newpipe.extractor.downloader.Response(
-                        responseCode,
-                        responseMessage,
-                        responseHeaders,
-                        responseBody,
-                        latestUrl
-                    )
-                }
-            },
-            localization,
-            contentCountry
-        )
-        Log.d(TAG, "Localization set to: $country / $language")
+                        val response = client.newCall(requestBuilder.build()).execute()
+                        val responseBody = response.body?.string() ?: ""
+                        val responseHeaders = response.headers.toMultimap()
+                        val responseCode = response.code
+                        val responseMessage = response.message
+                        val latestUrl = response.request.url.toString()
+                        
+                        return org.schabi.newpipe.extractor.downloader.Response(
+                            responseCode,
+                            responseMessage,
+                            responseHeaders,
+                            responseBody,
+                            latestUrl
+                        )
+                    }
+                },
+                localization,
+                contentCountry
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "NewPipe may already be initialized", e)
+        }
         
         // Set InnerTube Locale for Home Feed
         com.zionhuang.innertube.YouTube.locale = com.zionhuang.innertube.models.YouTubeLocale(
@@ -96,14 +106,11 @@ class YouTubeMusicExtractor {
             val body = response.body?.string()
 
             if (response.isSuccessful && !body.isNullOrEmpty()) {
-                // Response format: ["query", ["suggestion1", "suggestion2", ...], ...]
-                // We need to parse this somewhat manually or use regex since it might be loose JSON
                 val start = body.indexOf("[", body.indexOf("[") + 1)
                 val end = body.lastIndexOf("]")
                 
                 if (start != -1 && end != -1) {
-                    val arrayString = body.substring(start, end + 1) // Should be ["s1", "s2"]
-                    // Simple cleaning for list of strings
+                    val arrayString = body.substring(start, end + 1)
                     return@withContext arrayString
                         .replace("[", "")
                         .replace("]", "")
@@ -121,6 +128,63 @@ class YouTubeMusicExtractor {
 
     suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
+            if (serviceId == 0) {
+                val songResults = async {
+                    com.zionhuang.innertube.YouTube.search(
+                        query,
+                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
+                    ).getOrNull()?.items.orEmpty()
+                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG) }
+                }
+                val videoResults = async {
+                    com.zionhuang.innertube.YouTube.search(
+                        query,
+                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_VIDEO
+                    ).getOrNull()?.items.orEmpty()
+                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.VIDEO) }
+                }
+                val artistResults = async {
+                    com.zionhuang.innertube.YouTube.search(
+                        query,
+                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ARTIST
+                    ).getOrNull()?.items.orEmpty()
+                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.ARTIST) }
+                }
+                val albumResults = async {
+                    com.zionhuang.innertube.YouTube.search(
+                        query,
+                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ALBUM
+                    ).getOrNull()?.items.orEmpty()
+                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.ALBUM) }
+                }
+                val playlistResults = async {
+                    (
+                        com.zionhuang.innertube.YouTube.search(
+                            query,
+                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST
+                        ).getOrNull()?.items.orEmpty() +
+                            com.zionhuang.innertube.YouTube.search(
+                                query,
+                                filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
+                            ).getOrNull()?.items.orEmpty()
+                        )
+                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.PLAYLIST) }
+                        .distinctBy { it.id }
+                }
+
+                val results = (
+                    songResults.await() +
+                        videoResults.await() +
+                        artistResults.await() +
+                        albumResults.await() +
+                        playlistResults.await()
+                    )
+                    .distinctBy { "${it.contentType}:${it.id}" }
+
+                Log.d(TAG, "InnerTube typed search returned ${results.size} results")
+                return@withContext SearchResult(query, results)
+            }
+
             // 0 = YouTube, 1 = SoundCloud, 2 = Bandcamp
             val service = when (serviceId) {
                 1 -> ServiceList.SoundCloud
@@ -178,6 +242,11 @@ class YouTubeMusicExtractor {
                                         Pair(url, url)
                                     }
                                 }
+                                val contentType = when {
+                                    serviceId == 1 || serviceId == 2 -> MusicContentType.SONG
+                                    item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM -> MusicContentType.VIDEO
+                                    else -> MusicContentType.SONG
+                                }
 
                                 MusicItem(
                                     id = itemId,
@@ -188,7 +257,8 @@ class YouTubeMusicExtractor {
                                     audioUrl = "",
                                     videoUrl = videoUrl,
                                     isLive = false,
-                                    isPlaylist = false
+                                    isPlaylist = false,
+                                    contentType = contentType
                                 )
                             } else null
                         }
@@ -202,7 +272,8 @@ class YouTubeMusicExtractor {
                                 audioUrl = "",
                                 videoUrl = item.url,
                                 isLive = false,
-                                isPlaylist = true
+                                isPlaylist = true,
+                                contentType = MusicContentType.PLAYLIST
                             )
                         }
                         is org.schabi.newpipe.extractor.channel.ChannelInfoItem -> {
@@ -225,7 +296,8 @@ class YouTubeMusicExtractor {
                                 videoUrl = item.url,
                                 isLive = false,
                                 isPlaylist = false,
-                                artistId = id
+                                artistId = id,
+                                contentType = MusicContentType.ARTIST
                             )
                         }
                         else -> null
@@ -543,7 +615,10 @@ class YouTubeMusicExtractor {
         }
     }
 
-    private fun mapYTItemToMusicItem(item: com.zionhuang.innertube.models.YTItem): MusicItem? {
+    private fun mapYTItemToMusicItem(
+        item: com.zionhuang.innertube.models.YTItem,
+        overrideContentType: MusicContentType? = null
+    ): MusicItem? {
         // Import models locally or use fully qualified names if conflicts exist
         return when (item) {
             is com.zionhuang.innertube.models.SongItem -> {
@@ -580,7 +655,8 @@ class YouTubeMusicExtractor {
                     thumbnailUrl = item.thumbnail ?: "",
                     audioUrl = "",
                     videoUrl = id,
-                    isLive = false
+                    isLive = false,
+                    contentType = overrideContentType ?: MusicContentType.SONG
                 )
             }
             is com.zionhuang.innertube.models.AlbumItem -> MusicItem(
@@ -592,7 +668,8 @@ class YouTubeMusicExtractor {
                 audioUrl = "",
                 videoUrl = item.browseId ?: return null,
                 isLive = false,
-                isPlaylist = true
+                isPlaylist = true,
+                contentType = overrideContentType ?: MusicContentType.ALBUM
             )
             is com.zionhuang.innertube.models.PlaylistItem -> MusicItem(
                 id = item.id ?: return null,
@@ -603,7 +680,21 @@ class YouTubeMusicExtractor {
                 audioUrl = "",
                 videoUrl = item.id ?: return null,
                 isLive = false,
-                isPlaylist = true
+                isPlaylist = true,
+                contentType = overrideContentType ?: MusicContentType.PLAYLIST
+            )
+            is com.zionhuang.innertube.models.ArtistItem -> MusicItem(
+                id = item.id,
+                title = item.title,
+                artist = "Artist",
+                duration = 0L,
+                thumbnailUrl = item.thumbnail ?: "",
+                audioUrl = "",
+                videoUrl = item.shareLink,
+                isLive = false,
+                isPlaylist = false,
+                artistId = item.id,
+                contentType = overrideContentType ?: MusicContentType.ARTIST
             )
             else -> null
         }

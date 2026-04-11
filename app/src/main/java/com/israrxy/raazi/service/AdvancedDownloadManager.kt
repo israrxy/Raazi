@@ -58,6 +58,7 @@ class AdvancedDownloadManager(
 
     // Active download jobs for cancellation
     private val activeJobs = ConcurrentHashMap<String, Job>()
+    @Volatile private var isDestroyed = false
 
     // Observable state from DB
     val activeDownloads: Flow<List<DownloadEntity>> = musicDao.getActiveDownloads()
@@ -83,6 +84,10 @@ class AdvancedDownloadManager(
      * Resolves stream URL, then streams bytes directly to disk with real-time progress.
      */
     fun downloadTrack(track: MusicItem) {
+        if (isDestroyed) {
+            Log.w(TAG, "Download manager destroyed, ignoring download for ${track.title}")
+            return
+        }
         val job = scope.launch {
             try {
                 // Check duplicate
@@ -245,10 +250,20 @@ class AdvancedDownloadManager(
                     }
                 }
 
-                // Rename temp file to final
+                // Rename temp file to final — handle silent failure
                 if (tempFile.exists()) {
                     if (outputFile.exists()) outputFile.delete()
-                    tempFile.renameTo(outputFile)
+                    val renamed = tempFile.renameTo(outputFile)
+                    if (!renamed) {
+                        // Fallback: copy then delete temp
+                        try {
+                            tempFile.copyTo(outputFile, overwrite = true)
+                            tempFile.delete()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "File rename AND copy failed for ${track.title}", e)
+                            throw e
+                        }
+                    }
                 }
 
                 val elapsed = System.currentTimeMillis() - startTime
@@ -451,8 +466,14 @@ class AdvancedDownloadManager(
     }
 
     fun destroy() {
-        activeJobs.values.forEach { it.cancel() }
-        activeJobs.clear()
-        scope.cancel()
+        if (isDestroyed) return
+        isDestroyed = true
+        try {
+            activeJobs.values.forEach { it.cancel() }
+            activeJobs.clear()
+            scope.cancel()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during destroy", e)
+        }
     }
 }

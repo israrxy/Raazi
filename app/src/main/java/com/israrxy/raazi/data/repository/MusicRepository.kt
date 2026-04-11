@@ -2,29 +2,76 @@ package com.israrxy.raazi.data.repository
 
 import com.israrxy.raazi.data.db.AppDatabase
 import com.israrxy.raazi.data.db.PlaylistEntity
+import com.israrxy.raazi.data.db.SavedCollectionEntity
 import com.israrxy.raazi.data.db.TrackEntity
+import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
+import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
+import com.israrxy.raazi.data.lyrics.SavedLyricsStore
+import com.israrxy.raazi.data.local.SettingsDataStore
+import com.israrxy.raazi.data.playlist.buildYouTubePlaylistDescription
+import com.israrxy.raazi.data.playlist.isYouTubeEditablePlaylist
+import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
+import com.israrxy.raazi.data.remote.LyricsSearchResult
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
+import com.israrxy.raazi.model.SavedCollectionItem
 import com.israrxy.raazi.model.SearchResult
+import com.israrxy.raazi.model.toSavedCollectionItem
+import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.service.YouTubeMusicExtractor
+import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
+
+data class AccountSyncResult(
+    val likedSongs: Int,
+    val playlists: Int
+)
 
 class MusicRepository(
     private val db: AppDatabase,
     context: android.content.Context,
-    private val extractor: YouTubeMusicExtractor = YouTubeMusicExtractor()
+    private val extractor: YouTubeMusicExtractor = YouTubeMusicExtractor.getInstance()
 ) {
     private val downloadManager = com.israrxy.raazi.service.SimpleDownloadManager(context)
-    private val lrcLibApi = com.israrxy.raazi.data.remote.LrcLibApi()
+    private val lrcLibApi = com.israrxy.raazi.data.remote.LrcLibApi(context)
+    private val savedLyricsStore = SavedLyricsStore(context)
     private val chartsExtractor = com.israrxy.raazi.data.remote.YouTubeChartsExtractor()
+    private val settingsDataStore = SettingsDataStore(context)
 
     // Remote
-    suspend fun getLyrics(trackName: String, artistName: String, duration: Long): com.israrxy.raazi.data.remote.Lyrics? {
-        return lrcLibApi.getLyrics(trackName, artistName, duration)
+    suspend fun getLyrics(
+        item: MusicItem,
+        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
+    ): com.israrxy.raazi.data.remote.Lyrics? {
+        return savedLyricsStore.get(item.id)
+            ?: lrcLibApi.getLyrics(item.title, item.artist, item.duration, preferredScript)
+    }
+
+    suspend fun searchLyricsOptions(
+        item: MusicItem,
+        titleOverride: String = item.title,
+        artistOverride: String = item.artist,
+        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
+    ): List<LyricsSearchResult> {
+        return lrcLibApi.searchLyricsOptions(
+            trackName = titleOverride,
+            artistName = artistOverride,
+            duration = item.duration,
+            preferredScript = preferredScript
+        )
+    }
+
+    suspend fun saveLyricsForTrack(item: MusicItem, lyrics: com.israrxy.raazi.data.remote.Lyrics) {
+        savedLyricsStore.put(item.id, lyrics.copy(source = "Saved ${lyrics.source}"))
+    }
+
+    suspend fun clearSavedLyricsForTrack(item: MusicItem) {
+        savedLyricsStore.remove(item.id)
     }
 
     suspend fun getSearchSuggestions(query: String): List<String> {
@@ -122,14 +169,32 @@ class MusicRepository(
     }
     
     suspend fun getPlaylist(playlistId: String): Playlist = withContext(Dispatchers.IO) {
-        // Try local DB first
         val localPlaylist = db.musicDao().getPlaylistWithTracks(playlistId)
-        if (localPlaylist != null) {
-            mapToDomain(localPlaylist)
-        } else {
-            // Fallback to network
-            extractor.getPlaylist(playlistId)
+
+        if (localPlaylist != null && !localPlaylist.playlist.isYouTubeSyncedPlaylist()) {
+            return@withContext mapToDomain(localPlaylist)
         }
+
+        try {
+            extractor.getPlaylist(playlistId)
+        } catch (error: Exception) {
+            if (localPlaylist != null) {
+                mapToDomain(localPlaylist)
+            } else {
+                throw error
+            }
+        }
+    }
+
+    suspend fun getLikedSongsPlaylist(): Playlist = withContext(Dispatchers.IO) {
+        val remotePlaylist = YouTube.playlist("LM").getOrThrow()
+        Playlist(
+            id = "favorites",
+            title = remotePlaylist.playlist.title.ifBlank { "Liked Songs" },
+            description = "From your YouTube Music account",
+            thumbnailUrl = remotePlaylist.playlist.thumbnail ?: "",
+            items = remotePlaylist.songs.mapNotNull { song -> song.toMusicItem() }
+        )
     }
 
     // Local
@@ -141,21 +206,27 @@ class MusicRepository(
         entities.map { mapToDomain(it) }
     }
 
+    val savedCollections: Flow<List<SavedCollectionItem>> = db.musicDao().getSavedCollections().map { entities ->
+        entities.map { mapSavedCollectionToDomain(it) }
+    }
+
     suspend fun addToFavorites(item: MusicItem) {
         withContext(Dispatchers.IO) {
-            // Preserve existing data (like download path)
             val existing = db.musicDao().getTrack(item.id)
             val localPath = existing?.localPath
-            
-            // If we have an existing entity, we might want to keep its timestamp or other fields?
-            // For favorites, usually we update timestamp to now to show at top? Yes.
-            
+
             val entity = item.copy(
                 isFavorite = true, 
-                localPath = localPath ?: item.localPath // Keep existing download if any
+                localPath = localPath ?: item.localPath
             ).toEntity()
-            
+
             db.musicDao().insertTrack(entity)
+
+            item.youtubeVideoIdOrNull()?.let { videoId ->
+                if (isYouTubeLoggedIn()) {
+                    YouTube.likeVideo(videoId, like = true).getOrThrow()
+                }
+            }
         }
     }
 
@@ -163,23 +234,13 @@ class MusicRepository(
         withContext(Dispatchers.IO) {
             val existing = db.musicDao().getTrack(item.id)
             if (existing != null) {
-                // Determine if we should delete or just unset flag
-                if (existing.localPath == null) {
-                    // Not downloaded, assume can be deleted from library if not favorite
-                    // But wait, what if it's in history? History is separate table now.
-                    // Tracks table is essentially "Library + Downloads". 
-                    // If not favorite and not downloaded, we can remove from 'tracks' table?
-                    // Actually, let's just unset the flag for safety. 
-                    // A proper implementation would check if it's referenced elsewhere or just keep it cached.
-                    // For "Liked Songs Count" fix, unsetting flag is sufficient.
-                     val updated = existing.copy(isFavorite = false)
-                     // If it's not downloaded and not favorite, we could delete it to clean up?
-                     // Let's stick to unsetting flag to be safe against deleting unintended data.
-                     db.musicDao().insertTrack(updated)
-                } else {
-                    // It is downloaded, MUST keep it, just unlike
-                    val updated = existing.copy(isFavorite = false)
-                    db.musicDao().insertTrack(updated)
+                val updated = existing.copy(isFavorite = false)
+                db.musicDao().insertTrack(updated)
+
+                item.youtubeVideoIdOrNull()?.let { videoId ->
+                    if (isYouTubeLoggedIn()) {
+                        YouTube.likeVideo(videoId, like = false).getOrThrow()
+                    }
                 }
             }
         }
@@ -188,33 +249,112 @@ class MusicRepository(
     // Playlists Management
     val userPlaylists: Flow<List<PlaylistEntity>> = db.musicDao().getAllPlaylists()
 
-    suspend fun createPlaylist(name: String) {
-        withContext(Dispatchers.IO) {
-            val playlist = PlaylistEntity(
-                id = java.util.UUID.randomUUID().toString(),
-                title = name,
-                description = "",
-                thumbnailUrl = ""
+    suspend fun toggleSavedCollection(item: MusicItem) {
+        val savedCollection = item.toSavedCollectionItemOrNull() ?: return
+        toggleSavedCollection(savedCollection)
+    }
+
+    suspend fun toggleSavedCollection(playlist: Playlist) {
+        toggleSavedCollection(playlist.toSavedCollectionItem())
+    }
+
+    suspend fun toggleSavedArtist(
+        artistId: String,
+        artistName: String,
+        thumbnailUrl: String = ""
+    ) {
+        val normalizedId = artistId.ifBlank { artistName.trim() }
+        if (normalizedId.isBlank()) return
+        toggleSavedCollection(
+            SavedCollectionItem(
+                id = com.israrxy.raazi.model.savedCollectionId(MusicContentType.ARTIST, normalizedId),
+                sourceId = normalizedId,
+                title = artistName.ifBlank { "Unknown Artist" },
+                subtitle = "Artist",
+                thumbnailUrl = thumbnailUrl,
+                contentType = MusicContentType.ARTIST
             )
+        )
+    }
+
+    suspend fun createPlaylist(name: String, syncedToYouTube: Boolean = false): PlaylistEntity =
+        withContext(Dispatchers.IO) {
+            val validName = name.ifBlank { "My Playlist" }
+            val playlist = if (syncedToYouTube) {
+                if (!isYouTubeLoggedIn()) {
+                    throw IllegalStateException("Sign in to YouTube Music before creating synced playlists.")
+                }
+
+                val remotePlaylistId = YouTube.createPlaylist(validName)
+                PlaylistEntity(
+                    id = remotePlaylistId,
+                    title = validName,
+                    description = buildYouTubePlaylistDescription(isEditable = true),
+                    thumbnailUrl = ""
+                )
+            } else {
+                PlaylistEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    title = validName,
+                    description = "",
+                    thumbnailUrl = ""
+                )
+            }
             db.musicDao().insertPlaylist(playlist)
+            playlist
         }
+
+    suspend fun syncYouTubeLibrary(): AccountSyncResult = withContext(Dispatchers.IO) {
+        if (!isYouTubeLoggedIn()) {
+            return@withContext AccountSyncResult(likedSongs = 0, playlists = 0)
+        }
+
+        AccountSyncResult(
+            likedSongs = syncLikedSongsFromYouTube(),
+            playlists = syncPlaylistsFromYouTube()
+        )
+    }
+
+    suspend fun clearYouTubePlaylistsCache() = withContext(Dispatchers.IO) {
+        db.musicDao().getAllPlaylists().first()
+            .filter { it.isYouTubeSyncedPlaylist() }
+            .forEach { playlist ->
+                db.musicDao().deletePlaylistTracksByPlaylistId(playlist.id)
+                db.musicDao().deletePlaylistById(playlist.id)
+            }
+    }
+
+    suspend fun addToPlaylist(playlistId: String, track: MusicItem) {
+        val playlist = withContext(Dispatchers.IO) {
+            db.musicDao().getPlaylistById(playlistId)
+        } ?: throw IllegalArgumentException("Playlist not found")
+
+        addToPlaylist(track, playlist)
     }
 
     suspend fun addToPlaylist(track: MusicItem, playlist: PlaylistEntity) {
         withContext(Dispatchers.IO) {
-            // Ensure track exists in DB
+            if (playlist.isYouTubeSyncedPlaylist()) {
+                if (!playlist.isYouTubeEditablePlaylist()) {
+                    throw IllegalStateException("This synced playlist can't be edited from Raazi.")
+                }
+
+                val videoId = track.youtubeVideoIdOrNull()
+                    ?: throw IllegalArgumentException("Only YouTube Music tracks can be added to synced playlists.")
+
+                YouTube.addToPlaylist(playlist.id, videoId).getOrThrow()
+                return@withContext
+            }
+
             val trackEntity = track.toEntity()
             db.musicDao().insertTrack(trackEntity)
-            
-            // Add relation
-            // Determine position - simplest is to put at end, but simpler is just 0 if we don't query order yet
-            // Ideally: val nextPos = db.musicDao().getMaxPosition(playlist.id) + 1
-            // For now, usage 0.
+
+            val nextPosition = (db.musicDao().getMaxPlaylistPosition(playlist.id) ?: -1) + 1
             db.musicDao().insertPlaylistTrackCrossRef(
                 PlaylistTrackCrossRef(
                     playlistId = playlist.id,
                     trackId = track.id,
-                    position = 0 
+                    position = nextPosition
                 )
             )
         }
@@ -223,17 +363,16 @@ class MusicRepository(
     // History
     suspend fun addToHistory(item: MusicItem) {
         withContext(Dispatchers.IO) {
-            db.musicDao().insertPlaybackHistory(
-                com.israrxy.raazi.data.db.PlaybackHistoryEntity(
-                    id = item.id,
-                    title = item.title,
-                    artist = item.artist,
-                    thumbnailUrl = item.thumbnailUrl,
-                    audioUrl = item.audioUrl,
-                    videoUrl = item.videoUrl,
-                    duration = item.duration,
-                    timestamp = System.currentTimeMillis()
-                )
+            // Use upsert to properly increment play count
+            db.musicDao().upsertPlaybackHistory(
+                id = item.id,
+                title = item.title,
+                artist = item.artist,
+                thumbnailUrl = item.thumbnailUrl ?: "",
+                audioUrl = item.audioUrl ?: "",
+                videoUrl = item.videoUrl ?: "",
+                duration = item.duration,
+                timestamp = System.currentTimeMillis()
             )
         }
     }
@@ -336,6 +475,132 @@ class MusicRepository(
             description = playlist.playlist.description,
             thumbnailUrl = playlist.playlist.thumbnailUrl,
             items = playlist.tracks.map { mapToDomain(it) }
+        )
+    }
+
+    private suspend fun toggleSavedCollection(savedCollection: SavedCollectionItem) {
+        withContext(Dispatchers.IO) {
+            if (db.musicDao().getSavedCollectionById(savedCollection.id) != null) {
+                db.musicDao().deleteSavedCollectionById(savedCollection.id)
+            } else {
+                db.musicDao().insertSavedCollection(savedCollection.toEntity())
+            }
+        }
+    }
+
+    private fun SavedCollectionItem.toEntity(): SavedCollectionEntity {
+        return SavedCollectionEntity(
+            id = id,
+            sourceId = sourceId,
+            title = title,
+            subtitle = subtitle,
+            thumbnailUrl = thumbnailUrl,
+            contentType = contentType.name
+        )
+    }
+
+    private fun mapSavedCollectionToDomain(entity: SavedCollectionEntity): SavedCollectionItem {
+        val parsedType = runCatching { enumValueOf<MusicContentType>(entity.contentType) }
+            .getOrDefault(MusicContentType.UNKNOWN)
+        return SavedCollectionItem(
+            id = entity.id,
+            sourceId = entity.sourceId,
+            title = entity.title,
+            subtitle = entity.subtitle,
+            thumbnailUrl = entity.thumbnailUrl,
+            contentType = parsedType
+        )
+    }
+
+    private suspend fun syncLikedSongsFromYouTube(): Int {
+        val remotePlaylist = YouTube.playlist("LM").getOrThrow()
+        var syncedCount = 0
+
+        remotePlaylist.songs.mapNotNull { it.toMusicItem() }.forEach { item ->
+            val existing = db.musicDao().getTrack(item.id)
+            val entity = item.copy(
+                isFavorite = true,
+                localPath = existing?.localPath ?: item.localPath
+            ).toEntity()
+            db.musicDao().insertTrack(entity)
+            syncedCount++
+        }
+
+        return syncedCount
+    }
+
+    private suspend fun syncPlaylistsFromYouTube(): Int {
+        val libraryPage = YouTube.library("FEmusic_liked_playlists").getOrThrow()
+        val remotePlaylists = libraryPage.items
+            .filterIsInstance<com.zionhuang.innertube.models.PlaylistItem>()
+            .filterNot { it.id == "LM" || it.id == "SE" }
+
+        val existingRemoteIds = db.musicDao().getAllPlaylists().first()
+            .filter { it.isYouTubeSyncedPlaylist() }
+            .map { it.id }
+            .toSet()
+
+        val freshRemoteIds = mutableSetOf<String>()
+        remotePlaylists.forEach { playlist ->
+            freshRemoteIds += playlist.id
+            db.musicDao().insertPlaylist(
+                PlaylistEntity(
+                    id = playlist.id,
+                    title = playlist.title,
+                    description = buildYouTubePlaylistDescription(playlist.isEditable),
+                    thumbnailUrl = playlist.thumbnail ?: ""
+                )
+            )
+        }
+
+        (existingRemoteIds - freshRemoteIds).forEach { playlistId ->
+            db.musicDao().deletePlaylistTracksByPlaylistId(playlistId)
+            db.musicDao().deletePlaylistById(playlistId)
+        }
+
+        return freshRemoteIds.size
+    }
+
+    private suspend fun isYouTubeLoggedIn(): Boolean {
+        return settingsDataStore.innerTubeCookie.first()?.contains("SAPISID") == true
+    }
+
+    private fun MusicItem.youtubeVideoIdOrNull(): String? {
+        val candidates = listOf(id, videoUrl)
+        for (candidate in candidates) {
+            if (candidate.isBlank()) continue
+            if (candidate.contains("soundcloud.com", ignoreCase = true) ||
+                candidate.contains("bandcamp.com", ignoreCase = true)
+            ) {
+                return null
+            }
+            if (candidate.matches(Regex("[A-Za-z0-9_-]{11}"))) {
+                return candidate
+            }
+            if (candidate.contains("watch?v=")) {
+                val extracted = candidate.substringAfter("watch?v=").substringBefore("&")
+                return extracted.takeIf { it.isNotBlank() }
+            }
+            if (candidate.contains("youtu.be/")) {
+                val extracted = candidate.substringAfter("youtu.be/").substringBefore("?")
+                return extracted.takeIf { it.isNotBlank() }
+            }
+        }
+        return null
+    }
+
+    private fun com.zionhuang.innertube.models.SongItem.toMusicItem(): MusicItem? {
+        val songId = id ?: return null
+        return MusicItem(
+            id = songId,
+            title = title ?: "Unknown",
+            artist = artists?.joinToString(", ") { it.name ?: "" }.orEmpty().ifBlank { "Unknown Artist" },
+            duration = (duration?.toLong() ?: 0L) * 1000L,
+            thumbnailUrl = thumbnail ?: "",
+            audioUrl = "",
+            videoUrl = songId,
+            isLive = false,
+            isFavorite = true
         )
     }
 }

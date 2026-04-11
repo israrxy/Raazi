@@ -2,10 +2,11 @@ package com.israrxy.raazi.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,14 +27,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
-import com.israrxy.raazi.ui.theme.*
+import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.viewmodel.SearchViewModel
-import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.data.db.SearchHistoryEntity
 
 @Composable
@@ -50,8 +51,11 @@ fun SearchScreen(
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
     
     val searchResults by searchViewModel.searchResults.collectAsState()
+    val isSearching by searchViewModel.isSearching.collectAsState()
     val searchSuggestions by searchViewModel.searchSuggestions.collectAsState()
     val searchHistory by searchViewModel.searchHistory.collectAsState()
+    val favoriteTracks by playerViewModel.favoriteTracks.collectAsStateWithLifecycle()
+    val savedCollectionIds by playerViewModel.savedCollectionIds.collectAsStateWithLifecycle()
     
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -68,9 +72,27 @@ fun SearchScreen(
     }
 
     // Track if showing results
-    val showingResults = searchResults != null && 
-                         searchResults!!.items.isNotEmpty() && 
-                         searchViewModel.submittedQuery == searchQuery
+    val showingResults = searchQuery.isNotBlank() &&
+        searchViewModel.submittedQuery == searchQuery &&
+        (isSearching || searchResults != null)
+    val searchItems = remember(searchResults) {
+        searchResults?.items ?: emptyList()
+    }
+    val searchSections = remember(searchItems) {
+        buildSearchSections(searchItems)
+    }
+    val visibleSections = remember(searchSections) {
+        searchSections.filter { it.items.isNotEmpty() }
+    }
+    var selectedSectionFilter by remember { mutableStateOf<MusicContentType?>(null) }
+    val filteredSections = remember(visibleSections, selectedSectionFilter) {
+        selectedSectionFilter?.let { selectedType ->
+            visibleSections.filter { it.type == selectedType }
+        } ?: visibleSections
+    }
+    val playableItems = remember(searchItems) {
+        searchItems.filter { it.isPlayableSearchItem() }
+    }
     
     // Update query for suggestions
     LaunchedEffect(searchQuery) {
@@ -81,6 +103,15 @@ fun SearchScreen(
     LaunchedEffect(selectedTracks) {
         if (selectedTracks.isEmpty() && isSelectionMode) {
             isSelectionMode = false
+        }
+    }
+
+    LaunchedEffect(searchQuery, visibleSections) {
+        if (selectedSectionFilter != null && visibleSections.none { it.type == selectedSectionFilter }) {
+            selectedSectionFilter = null
+        }
+        if (searchViewModel.submittedQuery != searchQuery) {
+            selectedSectionFilter = null
         }
     }
     
@@ -142,7 +173,7 @@ fun SearchScreen(
                 .padding(16.dp)
                 .height(56.dp),
             placeholder = {
-                Text("Search songs, artists...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Search music, videos, artists...", color = MaterialTheme.colorScheme.onSurfaceVariant)
             },
             leadingIcon = {
                 Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
@@ -182,6 +213,7 @@ fun SearchScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -206,60 +238,103 @@ fun SearchScreen(
         
         // Content: Results OR Suggestions
         if (showingResults) {
-            // ONLY SHOW RESULTS
-            val searchItems = remember(searchResults) {
-                searchResults?.items ?: emptyList()
-            }
+            when {
+                isSearching -> {
+                    SearchLoadingState(query = searchQuery)
+                }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                itemsIndexed(searchItems) { index, musicItem ->
-                    val isArtist = musicItem.artist == "Artist"
-                    
-                    com.israrxy.raazi.ui.components.SongListItem(
-                        song = musicItem,
-                        isSelected = selectedTracks.contains(musicItem),
-                        isSelectionMode = isSelectionMode,
-                        onSelectionChange = { selected ->
-                            if (selected) {
-                                selectedTracks = selectedTracks + musicItem
-                            } else {
-                                selectedTracks = selectedTracks - musicItem
-                            }
-                        },
-                        onLongClick = {
-                            isSelectionMode = true
-                            selectedTracks = selectedTracks + musicItem
-                        },
-                        onClick = {
-                            if (musicItem.isPlaylist) {
-                                onNavigateToPlaylist(musicItem.id)
-                            } else if (isArtist && musicItem.artistId != null) {
-                                onNavigateToArtist(musicItem.artistId!!, musicItem.title)
-                            } else {
-                                val playableItems = searchItems.filter { !it.isPlaylist && it.artist != "Artist" }
-                                val playableIndex = playableItems.indexOf(musicItem)
-                                if (playableIndex != -1) {
-                                     playerViewModel.playPlaylist(playableItems, playableIndex)
-                                     onNavigateToPlayer()
+                visibleSections.isEmpty() -> {
+                    SearchEmptyState(query = searchQuery)
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 80.dp)
+                    ) {
+                        item {
+                            SearchResultsHeader(
+                                query = searchQuery,
+                                sections = visibleSections,
+                                selectedType = selectedSectionFilter,
+                                onSelectType = { selectedType ->
+                                    selectedSectionFilter = selectedType
                                 }
+                            )
+                        }
+
+                        filteredSections.forEach { section ->
+                            item(key = "header_${section.type.name}") {
+                                SearchSectionHeader(
+                                    title = section.title,
+                                    count = section.items.size,
+                                    subtitle = section.subtitle
+                                )
                             }
-                        },
-                        onAddToPlaylist = { showAddToPlaylistItem = musicItem },
-                        onGoToArtist = {
-                            if (musicItem.artistId != null) {
-                                onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
+
+                            items(section.items, key = { item -> "${section.type.name}_${item.id}" }) { musicItem ->
+                                val isArtist = musicItem.isArtistResult()
+                                val isPlayable = musicItem.isPlayableSearchItem()
+                                val canOpenArtist = !isArtist && musicItem.artistId != null
+                                val isLiked = favoriteTracks.any { it.id == musicItem.id }
+                                val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
+                                val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
+
+                                com.israrxy.raazi.ui.components.SongListItem(
+                                    song = musicItem,
+                                    isLiked = isLiked,
+                                    isSaved = isSaved,
+                                    isSelected = selectedTracks.contains(musicItem),
+                                    isSelectionMode = isSelectionMode,
+                                    selectionEnabled = isPlayable,
+                                    onSelectionChange = { selected ->
+                                        if (selected) {
+                                            selectedTracks = selectedTracks + musicItem
+                                        } else {
+                                            selectedTracks = selectedTracks - musicItem
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (isPlayable) {
+                                            isSelectionMode = true
+                                            selectedTracks = selectedTracks + musicItem
+                                        }
+                                    },
+                                    onClick = {
+                                        when {
+                                            musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
+                                            isArtist && musicItem.artistId != null -> onNavigateToArtist(musicItem.artistId!!, musicItem.title)
+                                            else -> {
+                                                val playableIndex = playableItems.indexOf(musicItem)
+                                                if (playableIndex != -1) {
+                                                    playerViewModel.playPlaylist(playableItems, playableIndex)
+                                                    onNavigateToPlayer()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                                    onGoToArtist = {
+                                        if (musicItem.artistId != null) {
+                                            onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
+                                        }
+                                    },
+                                    onDownload = {
+                                        if (isPlayable) {
+                                            playerViewModel.downloadTrack(musicItem)
+                                        }
+                                    },
+                                    onLike = { playerViewModel.toggleFavorite(musicItem) },
+                                    onSave = { playerViewModel.toggleSavedCollection(musicItem) },
+                                    showAddToPlaylist = isPlayable,
+                                    showGoToArtist = canOpenArtist,
+                                    showDownload = isPlayable,
+                                    showLike = isPlayable,
+                                    showSave = musicItem.toSavedCollectionItemOrNull() != null
+                                )
                             }
-                        },
-                        onDownload = { 
-                            if (!musicItem.isPlaylist && !isArtist) {
-                                playerViewModel.downloadTrack(musicItem) 
-                            }
-                        },
-                        onLike = { playerViewModel.toggleFavorite(musicItem) }
-                    )
+                        }
+                    }
                 }
             }
         } else {
@@ -268,6 +343,12 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
+                if (searchQuery.isNotEmpty() && searchSuggestions.isEmpty() && searchHistory.isEmpty()) {
+                    item {
+                        SearchIdleHint(query = searchQuery)
+                    }
+                }
+
                 // History
                 if (searchHistory.isNotEmpty() && searchQuery.isEmpty()) {
                     item {
@@ -327,6 +408,227 @@ fun SearchScreen(
                 playerViewModel.addToPlaylist(showAddToPlaylistItem!!, playlist)
             }
         )
+    }
+}
+
+private data class SearchSectionUiModel(
+    val type: MusicContentType,
+    val title: String,
+    val subtitle: String,
+    val items: List<MusicItem>
+)
+
+private fun buildSearchSections(items: List<MusicItem>): List<SearchSectionUiModel> {
+    return listOf(
+        SearchSectionUiModel(
+            type = MusicContentType.SONG,
+            title = "Music",
+            subtitle = "Songs and audio-first matches",
+            items = items.filter { it.contentType == MusicContentType.SONG || it.contentType == MusicContentType.UNKNOWN }
+        ),
+        SearchSectionUiModel(
+            type = MusicContentType.VIDEO,
+            title = "Videos",
+            subtitle = "Watch-based matches",
+            items = items.filter { it.contentType == MusicContentType.VIDEO }
+        ),
+        SearchSectionUiModel(
+            type = MusicContentType.ARTIST,
+            title = "Artists",
+            subtitle = "Profiles and channels",
+            items = items.filter { it.isArtistResult() }
+        ),
+        SearchSectionUiModel(
+            type = MusicContentType.ALBUM,
+            title = "Albums",
+            subtitle = "Album and release pages",
+            items = items.filter { it.contentType == MusicContentType.ALBUM }
+        ),
+        SearchSectionUiModel(
+            type = MusicContentType.PLAYLIST,
+            title = "Playlists",
+            subtitle = "Curated lists and mixes",
+            items = items.filter { it.contentType == MusicContentType.PLAYLIST }
+        )
+    )
+}
+
+private fun MusicItem.isArtistResult(): Boolean {
+    return contentType == MusicContentType.ARTIST || artistId != null || artist == "Artist"
+}
+
+private fun MusicItem.isPlaylistResult(): Boolean {
+    return isPlaylist || contentType == MusicContentType.ALBUM || contentType == MusicContentType.PLAYLIST
+}
+
+private fun MusicItem.isPlayableSearchItem(): Boolean {
+    return contentType == MusicContentType.SONG ||
+        contentType == MusicContentType.VIDEO ||
+        (contentType == MusicContentType.UNKNOWN && !isPlaylistResult() && !isArtistResult())
+}
+
+@Composable
+private fun SearchResultsHeader(
+    query: String,
+    sections: List<SearchSectionUiModel>,
+    selectedType: MusicContentType?,
+    onSelectType: (MusicContentType?) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = "Results for \"$query\"",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedType == null,
+                onClick = { onSelectType(null) },
+                label = { Text("All (${sections.sumOf { it.items.size }})") }
+            )
+            sections.forEach { section ->
+                FilterChip(
+                    selected = selectedType == section.type,
+                    onClick = {
+                        onSelectType(
+                            if (selectedType == section.type) null else section.type
+                        )
+                    },
+                    label = { Text("${section.title} (${section.items.size})") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchSectionHeader(
+    title: String,
+    count: Int,
+    subtitle: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun SearchLoadingState(query: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = "Searching for \"$query\"",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Grouping music, videos, artists, albums, and playlists.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchEmptyState(query: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SearchOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(40.dp)
+            )
+            Text(
+                text = "No results for \"$query\"",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = "Try a shorter title, artist name, or switch search service.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchIdleHint(query: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Ready to search",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Press search to look for \"$query\" across music, videos, artists, albums, and playlists.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

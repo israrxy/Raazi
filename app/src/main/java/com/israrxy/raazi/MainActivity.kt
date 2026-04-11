@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.israrxy.raazi.ui.MainScreen
 import com.israrxy.raazi.ui.theme.RaaziTheme
@@ -28,9 +29,9 @@ class MainActivity : ComponentActivity() {
     
     // Permission launcher for Android 13+ notifications
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        // Handle permission result - notification functionality will work if granted
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Handle permission results
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,8 +44,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val settingsDataStore = remember { SettingsDataStore(context) }
-            val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = false)
-            val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
+            val useDynamicColor by settingsDataStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = false)
+            val themeMode by settingsDataStore.themeMode.collectAsStateWithLifecycle(initialValue = "System")
             
             // Update Check Logic
             val updateManager = remember { com.israrxy.raazi.data.UpdateManager() }
@@ -72,12 +73,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            val isOnboardingCompleted by settingsDataStore.isOnboardingCompleted.collectAsState(initial = true) // Default to true to prevent flash, wait for real value? No, default false is better for new users.
-            // Actually, for existing users we might want to skip. But we can't distinguish "New Install" from "Update" easily without version tracking.
-            // Let's assume everyone sees it once.
-            
-            // To handle the "loading" state better:
-            val onboardingState = settingsDataStore.isOnboardingCompleted.collectAsState(initial = null)
+            val onboardingCompleted by settingsDataStore.isOnboardingCompleted.collectAsStateWithLifecycle(initialValue = null)
             val scope = rememberCoroutineScope()
 
             RaaziTheme(
@@ -94,12 +90,12 @@ class MainActivity : ComponentActivity() {
                     
                     var showSplash by remember { mutableStateOf(true) }
 
-                    if (showSplash || onboardingState.value == null) {
+                    if (showSplash || onboardingCompleted == null) {
                         com.israrxy.raazi.ui.SplashScreen {
                             showSplash = false
                         }
                     } else {
-                        if (onboardingState.value == false) {
+                        if (onboardingCompleted == false) {
                             com.israrxy.raazi.ui.OnboardingScreen {
                                 scope.launch {
                                     settingsDataStore.setOnboardingCompleted(true)
@@ -139,7 +135,7 @@ class MainActivity : ComponentActivity() {
         }
         
         if (permissionsToRequest.isNotEmpty()) {
-            requestPermissionLauncher.launch(permissionsToRequest.first()) // Simple request for now. Ideally requestMultiplePermissions
+            requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 }

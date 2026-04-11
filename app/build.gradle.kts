@@ -15,8 +15,8 @@ android {
         applicationId = "com.israrxy.raazi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "3.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,6 +43,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -51,6 +52,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.webkit)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.client.core)
     
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
