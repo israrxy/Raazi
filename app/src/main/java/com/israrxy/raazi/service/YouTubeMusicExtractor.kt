@@ -21,6 +21,13 @@ private const val TAG = "YouTubeMusicExtractor"
 class YouTubeMusicExtractor private constructor() {
     private val client: okhttp3.OkHttpClient
 
+    private fun normalizePlaylistId(playlistIdOrUrl: String): String {
+        val trimmed = playlistIdOrUrl.trim()
+        val listId = Regex("[?&]list=([^&#]+)").find(trimmed)?.groupValues?.getOrNull(1)
+        return listId?.let { java.net.URLDecoder.decode(it, java.nio.charset.StandardCharsets.UTF_8.name()) }
+            ?: trimmed.removePrefix("VL")
+    }
+
     companion object {
         @Volatile
         private var INSTANCE: YouTubeMusicExtractor? = null
@@ -313,11 +320,12 @@ class YouTubeMusicExtractor private constructor() {
     }
 
     suspend fun getPlaylist(playlistId: String): Playlist = withContext(Dispatchers.IO) {
+        val normalizedPlaylistId = normalizePlaylistId(playlistId)
         // Try InnerTube first
         try {
-            if (playlistId.startsWith("MPREb")) {
+            if (normalizedPlaylistId.startsWith("MPREb")) {
                 // It's an Album
-                val album = com.zionhuang.innertube.YouTube.album(playlistId).getOrThrow()
+                val album = com.zionhuang.innertube.YouTube.album(normalizedPlaylistId).getOrThrow()
                 val items = album.songs.mapNotNull { song ->
                     MusicItem(
                         id = song.id ?: return@mapNotNull null,
@@ -331,21 +339,21 @@ class YouTubeMusicExtractor private constructor() {
                     )
                 }
                 return@withContext Playlist(
-                    id = playlistId,
+                    id = normalizedPlaylistId,
                     title = items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album", // Fallback to artist name or generic
                     description = "", // Description unavailable in this version of model
                     thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
                 )
-            } else if (playlistId.startsWith("PL") || playlistId.startsWith("OLAK") || playlistId.startsWith("UU") || playlistId.startsWith("FL") || playlistId.startsWith("RD")) {
+            } else if (normalizedPlaylistId.startsWith("PL") || normalizedPlaylistId.startsWith("OLAK") || normalizedPlaylistId.startsWith("UU") || normalizedPlaylistId.startsWith("FL") || normalizedPlaylistId.startsWith("RD")) {
                  // It's a Playlist
-                 val playlist = com.zionhuang.innertube.YouTube.playlist(playlistId).getOrThrow()
+                 val playlist = com.zionhuang.innertube.YouTube.playlist(normalizedPlaylistId).getOrThrow()
                  // Try 'songs' instead of 'items'
                  val items = playlist.songs.mapNotNull { item ->
                     mapYTItemToMusicItem(item)
                  }
                  return@withContext Playlist(
-                    id = playlistId,
+                    id = normalizedPlaylistId,
                     title = "Playlist", // innerTube playlist model missing title/name property in this version
                     description = "", // Author unavailable
                     thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
@@ -353,13 +361,13 @@ class YouTubeMusicExtractor private constructor() {
                  )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "InnerTube failed for $playlistId", e)
+            Log.e(TAG, "InnerTube failed for $normalizedPlaylistId", e)
         }
 
         // Fallback to NewPipe
         try {
             val service = ServiceList.YouTube
-            val playlistUrl = "https://www.youtube.com/playlist?list=$playlistId"
+            val playlistUrl = "https://www.youtube.com/playlist?list=$normalizedPlaylistId"
             val playlistInfo = PlaylistInfo.getInfo(service, playlistUrl)
             
             val items = playlistInfo.relatedItems
@@ -385,7 +393,7 @@ class YouTubeMusicExtractor private constructor() {
                 }
             
             Playlist(
-                id = playlistId,
+                id = normalizedPlaylistId,
                 title = playlistInfo.name,
                 description = playlistInfo.description?.content ?: "",
                 thumbnailUrl = playlistInfo.thumbnails.firstOrNull()?.url ?: "",
@@ -393,7 +401,7 @@ class YouTubeMusicExtractor private constructor() {
             )
         } catch (e: Exception) {
             Playlist(
-                id = playlistId,
+                id = normalizedPlaylistId,
                 title = "Error Playlist",
                 description = "Could not load playlist: ${e.message}",
                 thumbnailUrl = "",
@@ -508,7 +516,7 @@ class YouTubeMusicExtractor private constructor() {
                 .map { item ->
                      // Convert to light Playlist object (without tracks initially to save bandwidth)
                      Playlist(
-                        id = item.url,
+                        id = normalizePlaylistId(item.url),
                         title = item.name,
                         description = "By ${item.uploaderName}",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
@@ -656,7 +664,8 @@ class YouTubeMusicExtractor private constructor() {
                     audioUrl = "",
                     videoUrl = id,
                     isLive = false,
-                    contentType = overrideContentType ?: MusicContentType.SONG
+                    contentType = overrideContentType ?: MusicContentType.SONG,
+                    setVideoId = item.setVideoId
                 )
             }
             is com.zionhuang.innertube.models.AlbumItem -> MusicItem(

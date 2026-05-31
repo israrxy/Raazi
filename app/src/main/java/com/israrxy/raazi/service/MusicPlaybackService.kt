@@ -73,6 +73,9 @@ class MusicPlaybackService : Service() {
     // Playback modes
     private var isShuffleEnabled = false
     private var repeatMode = RepeatMode.OFF
+    private var mediaMode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
+    private var videoQuality = com.israrxy.raazi.model.PlaybackVideoQuality.AUTO
+    private var isVideoAvailable = false
     
     // Position update job for continuous timeline updates
     private var positionUpdateJob: kotlinx.coroutines.Job? = null
@@ -717,6 +720,36 @@ class MusicPlaybackService : Service() {
         }
     }
 
+    fun getPlayer(): ExoPlayer? {
+        return if (::exoPlayer.isInitialized) exoPlayer else null
+    }
+
+    fun togglePlaybackMode(): Boolean {
+        mediaMode = if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO) {
+            com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
+        } else {
+            com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
+        }
+        if (currentIndex >= 0 && currentIndex < currentPlaylist.size) {
+            val currentPos = exoPlayer.currentPosition
+            val isPlaying = exoPlayer.playWhenReady
+            syncPlaylistQueue(currentIndex, currentPos, isPlaying)
+        }
+        notifyPlaybackState()
+        return true
+    }
+
+    fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
+        videoQuality = quality
+        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
+            val currentPos = exoPlayer.currentPosition
+            val isPlaying = exoPlayer.playWhenReady
+            syncPlaylistQueue(currentIndex, currentPos, isPlaying)
+        }
+        notifyPlaybackState()
+        return true
+    }
+
     fun getPlaybackState(): PlaybackState {
         return PlaybackState(
             isPlaying = exoPlayer.isPlaying,
@@ -730,7 +763,10 @@ class MusicPlaybackService : Service() {
             isShuffleEnabled = isShuffleEnabled,
             repeatMode = repeatMode,
             isLoading = false, // Will be overridden by notify calls
-            isBuffering = exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING
+            isBuffering = exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING,
+            mediaMode = mediaMode,
+            isVideoAvailable = isVideoAvailable,
+            videoQuality = videoQuality
         )
     }
 
@@ -1134,8 +1170,13 @@ class MusicPlaybackService : Service() {
                     val title = dataSpec.uri.getQueryParameter("title")
                     val artist = dataSpec.uri.getQueryParameter("artist")
                     
-                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist)
+                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist, mediaMode, videoQuality)
                     android.util.Log.d(TAG, "Resolved stream for $videoId: ${result.url}")
+                    
+                    serviceScope.launch {
+                        isVideoAvailable = result.hasVideo
+                        notifyPlaybackState()
+                    }
                     
                     val headers = mutableMapOf<String, String>()
                     headers["User-Agent"] = result.userAgent
@@ -1165,14 +1206,20 @@ class MusicPlaybackService : Service() {
                          try {
                             val title = dataSpec.uri.getQueryParameter("title")
                             val artist = dataSpec.uri.getQueryParameter("artist")
-                            val result = StreamResolver.resolveStreamUrl(extractedId, title, artist)
-                            val headers = mutableMapOf<String, String>()
-                            headers["User-Agent"] = result.userAgent
-                            
-                            return@Factory dataSpec.buildUpon()
-                                .setUri(Uri.parse(result.url))
-                                .setHttpRequestHeaders(headers)
-                                .build()
+                             val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality)
+                             
+                             serviceScope.launch {
+                                 isVideoAvailable = result.hasVideo
+                                 notifyPlaybackState()
+                             }
+                             
+                             val headers = mutableMapOf<String, String>()
+                             headers["User-Agent"] = result.userAgent
+                             
+                             return@Factory dataSpec.buildUpon()
+                                 .setUri(Uri.parse(result.url))
+                                 .setHttpRequestHeaders(headers)
+                                 .build()
                          } catch(e: Exception) {
                              // Log and fall through
                          }
@@ -1189,6 +1236,38 @@ class MusicPlaybackService : Service() {
             }
             return@Factory dataSpec
         }
+    }
+
+    fun addToQueue(items: List<MusicItem>) {
+        if (isDestroyed || items.isEmpty()) return
+        val newItems = items.filter { item -> currentPlaylist.none { it.id == item.id } }
+        if (newItems.isEmpty()) return
+
+        currentPlaylist = currentPlaylist + newItems
+        originalPlaylist = originalPlaylist + newItems
+
+        val exoItems = newItems.map { createMediaItem(it) }
+        exoPlayer.addMediaItems(exoItems)
+        
+        notifyPlaybackState(refreshNotification = false)
+    }
+
+    fun playNext(items: List<MusicItem>) {
+        if (isDestroyed || items.isEmpty()) return
+        val newItems = items.filter { item -> currentPlaylist.none { it.id == item.id } }
+        if (newItems.isEmpty()) return
+
+        val insertIndex = (currentIndex + 1).coerceIn(0, currentPlaylist.size)
+
+        val head = currentPlaylist.take(insertIndex)
+        val tail = currentPlaylist.drop(insertIndex)
+        currentPlaylist = head + newItems + tail
+        originalPlaylist = originalPlaylist + newItems
+
+        val exoItems = newItems.map { createMediaItem(it) }
+        exoPlayer.addMediaItems(insertIndex, exoItems)
+
+        notifyPlaybackState(refreshNotification = false)
     }
 
     companion object {

@@ -28,6 +28,10 @@ class SettingsDataStore(private val context: Context) {
         val CROSSFADE_DURATION_KEY = stringPreferencesKey("crossfade_duration")
         val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color_enabled")
         val THEME_MODE_KEY = stringPreferencesKey("theme_mode") // "System", "Light", "Dark"
+        val GEMINI_API_KEY_KEY = stringPreferencesKey("gemini_api_key")
+        val USE_GEMINI_IMPORT_KEY = booleanPreferencesKey("use_gemini_import")
+        val BLUR_PLAYER_BACKGROUND_KEY = booleanPreferencesKey("blur_player_background")
+        val PASTEL_ACCENT_KEY = stringPreferencesKey("pastel_accent") // "Emerald", "Lavender", "Sky", "Peach"
         val IS_ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
         val EQUALIZER_PRESET_KEY = stringPreferencesKey("equalizer_preset")
         val EQUALIZER_LEVELS_KEY = stringPreferencesKey("equalizer_levels")
@@ -116,12 +120,55 @@ class SettingsDataStore(private val context: Context) {
     
     // Dynamic Color (Material You)
     val useDynamicColor: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[DYNAMIC_COLOR_KEY] ?: false
+        prefs[DYNAMIC_COLOR_KEY] ?: true
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[DYNAMIC_COLOR_KEY] = enabled
+        }
+    }
+
+    // Gemini AI
+    val geminiApiKey: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[GEMINI_API_KEY_KEY]
+    }
+
+    suspend fun setGeminiApiKey(key: String) {
+        context.dataStore.edit { prefs ->
+            prefs[GEMINI_API_KEY_KEY] = key
+        }
+    }
+
+    val useGeminiImport: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[USE_GEMINI_IMPORT_KEY] ?: false
+    }
+
+    suspend fun setUseGeminiImport(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[USE_GEMINI_IMPORT_KEY] = enabled
+        }
+    }
+
+    // Blur Player Background
+    val blurPlayerBackground: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[BLUR_PLAYER_BACKGROUND_KEY] ?: true
+    }
+
+    suspend fun setBlurPlayerBackground(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[BLUR_PLAYER_BACKGROUND_KEY] = enabled
+        }
+    }
+
+    // Pastel Theme Accents
+    val pastelAccent: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[PASTEL_ACCENT_KEY] ?: "Emerald"
+    }
+
+    suspend fun setPastelAccent(accent: String) {
+        context.dataStore.edit { prefs ->
+            prefs[PASTEL_ACCENT_KEY] = accent
         }
     }
 

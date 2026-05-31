@@ -200,6 +200,8 @@ fun ArtistScreen(
                         onAddToPlaylist = { showAddToPlaylistItem = musicItem },
                         onGoToArtist = { /* Already on artist screen, maybe do nothing or navigate */ },
                         onDownload = { viewModel.downloadTrack(musicItem) },
+                        onDownloadForRingtone = { viewModel.downloadForRingtone(musicItem) },
+                        showRingtone = true,
                         onLike = { viewModel.toggleFavorite(musicItem) }
                     )
                 }

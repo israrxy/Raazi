@@ -7,6 +7,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -81,6 +83,7 @@ import com.israrxy.raazi.ui.downloads.DownloadsScreen
 import com.israrxy.raazi.ui.home.HomeScreen
 import com.israrxy.raazi.ui.library.LibraryScreen
 import com.israrxy.raazi.ui.player.MiniPlayer
+import com.israrxy.raazi.ui.ringtone.RingtoneTrimmerScreen
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -96,6 +99,19 @@ private val topLevelDestinations = listOf(
 
 private val bottomBarBaseHeight = 76.dp
 private val miniPlayerGap = 10.dp
+
+private fun cleanPlaylistId(id: String): String {
+    val trimmed = id.trim()
+    val listId = Regex("[?&]list=([^&#]+)").find(trimmed)?.groupValues?.getOrNull(1)
+    return listId?.let(Uri::decode) ?: trimmed
+}
+
+private fun NavHostController.navigateToPlaylist(id: String) {
+    val cleanId = cleanPlaylistId(id)
+    if (cleanId.isNotBlank()) {
+        navigate("playlist/${Uri.encode(cleanId)}")
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,6 +203,21 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         settingsDataStore.setLastTopLevelRoute(selectedTopLevelRoute)
     }
 
+    val ringtoneState by viewModel.ringtoneState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(ringtoneState) {
+        val isIdle = ringtoneState is MusicPlayerViewModel.RingtoneState.Idle
+        val currentRoute = navController.currentDestination?.route
+
+        if (!isIdle && currentRoute != "ringtone_trimmer") {
+            navController.navigate("ringtone_trimmer") {
+                launchSingleTop = true
+            }
+        } else if (isIdle && currentRoute == "ringtone_trimmer") {
+            navController.popBackStack()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -227,15 +258,58 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(bottom = contentBottomPadding)
+                        .padding(bottom = contentBottomPadding),
+                    enterTransition = {
+                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
+                        if (isPeer) {
+                            fadeIn(animationSpec = tween(150))
+                        } else {
+                            slideInHorizontally(
+                                initialOffsetX = { (it * 0.08f).toInt() },
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(250))
+                        }
+                    },
+                    exitTransition = {
+                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
+                        if (isPeer) {
+                            fadeOut(animationSpec = tween(150))
+                        } else {
+                            slideOutHorizontally(
+                                targetOffsetX = { -(it * 0.08f).toInt() },
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(250))
+                        }
+                    },
+                    popEnterTransition = {
+                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
+                        if (isPeer) {
+                            fadeIn(animationSpec = tween(150))
+                        } else {
+                            slideInHorizontally(
+                                initialOffsetX = { -(it * 0.08f).toInt() },
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(250))
+                        }
+                    },
+                    popExitTransition = {
+                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
+                        if (isPeer) {
+                            fadeOut(animationSpec = tween(150))
+                        } else {
+                            slideOutHorizontally(
+                                targetOffsetX = { (it * 0.08f).toInt() },
+                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(250))
+                        }
+                    }
                 ) {
                     composable("home") {
                         HomeScreen(
                             viewModel = viewModel,
                             onNavigateToPlayer = { scope.launch { sheetState.expand() } },
                             onNavigateToPlaylist = { id ->
-                                val cleanId = id.replace("https://www.youtube.com/playlist?list=", "")
-                                navController.navigate("playlist/$cleanId")
+                                navController.navigateToPlaylist(id)
                             },
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
@@ -250,8 +324,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
                             onNavigateToPlaylist = { id ->
-                                val cleanId = id.replace("https://www.youtube.com/playlist?list=", "")
-                                navController.navigate("playlist/$cleanId")
+                                navController.navigateToPlaylist(id)
                             }
                         )
                     }
@@ -260,13 +333,14 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             viewModel = viewModel,
                             onNavigateToPlayer = { scope.launch { sheetState.expand() } },
                             onNavigateToPlaylist = { id ->
-                                navController.navigate("playlist/$id")
+                                navController.navigateToPlaylist(id)
                             },
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
                             onNavigateToDownloads = { navController.navigate("downloads") },
-                            onNavigateToSettings = { navController.navigate("settings") }
+                            onNavigateToSettings = { navController.navigate("settings") },
+                            onNavigateToSpotifyImport = { navController.navigate("spotify_import") }
                         )
                     }
                     composable("settings") {
@@ -307,6 +381,24 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             viewModel = viewModel,
                             onBack = { navController.popBackStack() },
                             onNavigateToPlayer = { scope.launch { sheetState.expand() } }
+                        )
+                    }
+                    composable("ringtone_trimmer") {
+                        RingtoneTrimmerScreen(
+                            viewModel = viewModel,
+                            onClose = { viewModel.resetRingtoneState() }
+                        )
+                    }
+                    composable("spotify_import") {
+                        com.israrxy.raazi.ui.playlist.SpotifyImportScreen(
+                            viewModel = viewModel,
+                            onNavigateBack = { navController.popBackStack() },
+                            onNavigateToPlaylist = { id ->
+                                val cleanId = cleanPlaylistId(id)
+                                navController.navigate("playlist/${Uri.encode(cleanId)}") {
+                                    popUpTo("library")
+                                }
+                            }
                         )
                     }
                 }
@@ -352,13 +444,12 @@ private fun SimpleBottomNavBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .windowInsetsPadding(WindowInsets.navigationBars),
         contentAlignment = Alignment.BottomCenter
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
             tonalElevation = 10.dp,
             shadowElevation = 18.dp
@@ -366,7 +457,8 @@ private fun SimpleBottomNavBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                    .height(bottomBarBaseHeight)
+                    .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.RaaziApplication
 import com.israrxy.raazi.data.account.YouTubeAccountSession
+import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.data.repository.MusicRepository
 import com.israrxy.raazi.data.db.MusicDao
 import com.israrxy.raazi.data.db.PlaylistEntity
@@ -31,6 +32,9 @@ import com.israrxy.raazi.data.db.DownloadEntity
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.remote.LyricsSearchResult
+import android.os.Build
+import android.provider.Settings
+import com.israrxy.raazi.service.RingtoneType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
@@ -49,7 +53,44 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.withPermit
 import android.util.Log
+
+data class HomeFeedUiState(
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val sections: List<HomeSection> = emptyList(),
+    val errorMessage: String? = null
+)
+
+data class HomeSection(
+    val id: String,
+    val title: String,
+    val type: HomeSectionType,
+    val sourceType: String,
+    val items: List<HomeFeedItem> = emptyList(),
+    val actionLabel: String? = null,
+    val isLoading: Boolean = false
+)
+
+enum class HomeSectionType {
+    STATUS,
+    KEEP_LISTENING,
+    QUICK_PICKS,
+    FORGOTTEN_FAVORITES,
+    RECOMMENDATION,
+    NEW_RELEASES,
+    MOODS,
+    MOOD_PLAYLISTS,
+    YOUTUBE_RAIL
+}
+
+sealed class HomeFeedItem {
+    data class Music(val item: MusicItem) : HomeFeedItem()
+    data class YouTube(val item: com.zionhuang.innertube.models.YTItem) : HomeFeedItem()
+    data class Mood(val title: String) : HomeFeedItem()
+    data class PlaylistResult(val playlist: Playlist) : HomeFeedItem()
+}
 
 class MusicPlayerViewModel(
     private val app: Application,
@@ -71,6 +112,8 @@ class MusicPlayerViewModel(
     val youTubeAccountEmail: StateFlow<String?> = settingsDataStore.accountEmail
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
     val useLoginForBrowse: StateFlow<Boolean> = settingsDataStore.useLoginForBrowse
+        .stateIn(viewModelScope, SharingStarted.Lazily, true)
+    val blurPlayerBackground: StateFlow<Boolean> = settingsDataStore.blurPlayerBackground
         .stateIn(viewModelScope, SharingStarted.Lazily, true)
 
     // Stored listener references for proper cleanup
@@ -141,6 +184,9 @@ class MusicPlayerViewModel(
     val savedCollections: StateFlow<List<SavedCollectionItem>> = repository.savedCollections
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    val userPlaylistsWithTracks: StateFlow<List<com.israrxy.raazi.data.db.PlaylistWithTracks>> = repository.userPlaylistsWithTracks
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
     val savedCollectionIds: StateFlow<Set<String>> = savedCollections
         .map { collections -> collections.mapTo(mutableSetOf()) { it.id } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
@@ -151,6 +197,11 @@ class MusicPlayerViewModel(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _homeFeedState = MutableStateFlow(HomeFeedUiState(isLoading = true))
+    val homeFeedState: StateFlow<HomeFeedUiState> = _homeFeedState.asStateFlow()
+    private var dismissedHomeItemIds: Set<String> = emptySet()
+    private var engagedHomeItemIds: List<String> = emptyList()
 
     // Separate loading state for search to avoid conflicts with home loading
     private val _isSearchLoading = MutableStateFlow(false)
@@ -693,12 +744,15 @@ class MusicPlayerViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
+            _homeFeedState.value = _homeFeedState.value.copy(isLoading = true, errorMessage = null)
             try {
+                loadHomeInteractionSignals()
                 // Load local database content — use first() for one-shot loads
                 launch {
                     try {
                         val quickPicks = repository.quickPicks.first().shuffled().take(50)
                         _quickPicks.value = quickPicks
+                        rebuildHomeFeedState()
                     } catch (e: Exception) {
                         Log.e("MusicVM", "Error loading quick picks", e)
                     }
@@ -709,6 +763,7 @@ class MusicPlayerViewModel(
                         // One-shot load for initial content
                         val history = repository.playbackHistory.first().take(30)
                         _keepListening.value = history
+                        rebuildHomeFeedState()
                     } catch (e: Exception) {
                         Log.e("MusicVM", "Error loading keep listening", e)
                     }
@@ -718,6 +773,7 @@ class MusicPlayerViewModel(
                     try {
                         val forgotten = repository.getForgottenFavorites().first()
                         _forgottenFavorites.value = forgotten
+                        rebuildHomeFeedState()
                     } catch (e: Exception) {
                         Log.e("MusicVM", "Error loading forgotten favorites", e)
                     }
@@ -727,6 +783,7 @@ class MusicPlayerViewModel(
                 launch {
                     try {
                         loadSimilarRecommendations()
+                        rebuildHomeFeedState()
                     } catch (e: Exception) {
                         Log.e("MusicVM", "Error loading similar recommendations", e)
                     }
@@ -737,6 +794,7 @@ class MusicPlayerViewModel(
                     try {
                         com.zionhuang.innertube.YouTube.explore().onSuccess { page ->
                             _explorePage.value = page
+                            rebuildHomeFeedState()
                         }.onFailure {
                             Log.e("MusicVM", "Explore page failed", it)
                         }
@@ -749,6 +807,7 @@ class MusicPlayerViewModel(
                 try {
                     com.zionhuang.innertube.YouTube.home().onSuccess { page ->
                         _homePage.value = page
+                        rebuildHomeFeedState()
                     }.onFailure {
                         Log.e("MusicVM", "InnerTube home failed", it)
                         _error.value = "Failed to load home feed"
@@ -762,6 +821,7 @@ class MusicPlayerViewModel(
                 _error.value = "Failed to load content: ${e.message}"
             } finally {
                 _isLoading.value = false
+                rebuildHomeFeedState()
             }
         }
     }
@@ -769,6 +829,7 @@ class MusicPlayerViewModel(
     fun refreshHomeContent() {
         // Refresh just the local DB content without reloading YouTube data
         viewModelScope.launch {
+            rebuildHomeFeedState(isRefreshing = true)
             try {
                 val quickPicks = repository.quickPicks.first().shuffled().take(50)
                 _quickPicks.value = quickPicks
@@ -781,10 +842,208 @@ class MusicPlayerViewModel(
                 val forgotten = repository.getForgottenFavorites().first()
                 _forgottenFavorites.value = forgotten
                 android.util.Log.d("MusicVM", "Refreshed forgotten favorites: ${forgotten.size} items")
+                loadHomeInteractionSignals()
+                rebuildHomeFeedState(isRefreshing = false)
             } catch (e: Exception) {
                 android.util.Log.e("MusicVM", "Error refreshing home content", e)
+                rebuildHomeFeedState(isRefreshing = false)
             }
         }
+    }
+
+    private suspend fun loadHomeInteractionSignals() {
+        dismissedHomeItemIds = repository.getDismissedHomeItemIds()
+        engagedHomeItemIds = repository.getEngagedHomeItemIds().distinct()
+    }
+
+    private fun rankHomeMusicItems(items: List<MusicItem>): List<MusicItem> {
+        val engagedOrder = engagedHomeItemIds.withIndex().associate { it.value to it.index }
+        return items
+            .filter { it.id !in dismissedHomeItemIds }
+            .sortedWith(
+                compareBy<MusicItem> { engagedOrder[it.id] ?: Int.MAX_VALUE }
+                    .thenBy { it.title.lowercase() }
+            )
+    }
+
+    private fun rebuildHomeFeedState(isRefreshing: Boolean = _homeFeedState.value.isRefreshing) {
+        val sections = mutableListOf<HomeSection>()
+
+        sections += HomeSection(
+            id = "home_status",
+            title = "Home",
+            type = HomeSectionType.STATUS,
+            sourceType = HomeInteractionEntity.SOURCE_LOCAL,
+            actionLabel = "Refresh"
+        )
+
+        val keepListeningItems = rankHomeMusicItems(_keepListening.value).take(7)
+        if (keepListeningItems.isNotEmpty()) {
+            sections += HomeSection(
+                id = "keep_listening",
+                title = "Keep Listening",
+                type = HomeSectionType.KEEP_LISTENING,
+                sourceType = HomeInteractionEntity.SOURCE_LOCAL,
+                actionLabel = "Refresh",
+                items = keepListeningItems.map(HomeFeedItem::Music)
+            )
+        }
+
+        val quickPickItems = rankHomeMusicItems(_quickPicks.value).take(11)
+        if (quickPickItems.isNotEmpty()) {
+            sections += HomeSection(
+                id = "quick_picks",
+                title = "Quick Picks",
+                type = HomeSectionType.QUICK_PICKS,
+                sourceType = HomeInteractionEntity.SOURCE_LOCAL,
+                actionLabel = "Refresh",
+                items = quickPickItems.map(HomeFeedItem::Music)
+            )
+        }
+
+        val forgottenItems = rankHomeMusicItems(_forgottenFavorites.value).take(10)
+        if (forgottenItems.isNotEmpty()) {
+            sections += HomeSection(
+                id = "forgotten_favorites",
+                title = "Rediscover",
+                type = HomeSectionType.FORGOTTEN_FAVORITES,
+                sourceType = HomeInteractionEntity.SOURCE_LOCAL,
+                items = forgottenItems.map(HomeFeedItem::Music)
+            )
+        }
+
+        _similarRecommendations.value.forEachIndexed { index, recommendation ->
+            val items = recommendation.items
+                .mapNotNull { item ->
+                    when (item) {
+                        is RecommendationItem.FromMusicItem ->
+                            item.musicItem.takeIf { it.id !in dismissedHomeItemIds }?.let(HomeFeedItem::Music)
+                        is RecommendationItem.FromYTItem ->
+                            item.ytItem.takeIf { homeYouTubeItemId(it) !in dismissedHomeItemIds }?.let(HomeFeedItem::YouTube)
+                    }
+                }
+                .take(14)
+
+            if (items.isNotEmpty()) {
+                sections += HomeSection(
+                    id = "recommendation_$index",
+                    title = recommendation.title,
+                    type = HomeSectionType.RECOMMENDATION,
+                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                    items = items
+                )
+            }
+        }
+
+        _explorePage.value?.newReleaseAlbums?.takeIf { it.isNotEmpty() }?.let { albums ->
+            sections += HomeSection(
+                id = "new_releases",
+                title = "New Releases",
+                type = HomeSectionType.NEW_RELEASES,
+                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                items = albums
+                    .filter { homeYouTubeItemId(it) !in dismissedHomeItemIds }
+                    .take(12)
+                    .map(HomeFeedItem::YouTube)
+            )
+        }
+
+        _explorePage.value?.moodAndGenres?.takeIf { it.isNotEmpty() }?.let { moods ->
+            sections += HomeSection(
+                id = "moods",
+                title = "Moods & Genres",
+                type = HomeSectionType.MOODS,
+                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                items = moods.take(12).map { HomeFeedItem.Mood(it.title) }
+            )
+        }
+
+        val selectedMood = _selectedChip.value
+        if (selectedMood != null) {
+            sections += HomeSection(
+                id = "mood_playlists",
+                title = "$selectedMood Playlists",
+                type = HomeSectionType.MOOD_PLAYLISTS,
+                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                isLoading = _filteredPlaylists.value == null,
+                items = _filteredPlaylists.value.orEmpty()
+                    .filter { it.id !in dismissedHomeItemIds }
+                    .take(12)
+                    .map(HomeFeedItem::PlaylistResult)
+            )
+        }
+
+        _homePage.value?.sections.orEmpty().forEachIndexed { index, section ->
+            val items = section.items
+                .filter { homeYouTubeItemId(it) !in dismissedHomeItemIds }
+                .take(14)
+                .map(HomeFeedItem::YouTube)
+
+            if (items.isNotEmpty()) {
+                sections += HomeSection(
+                    id = "youtube_$index",
+                    title = section.title,
+                    type = HomeSectionType.YOUTUBE_RAIL,
+                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                    items = items
+                )
+            }
+        }
+
+        _homeFeedState.value = HomeFeedUiState(
+            isLoading = _isLoading.value && sections.size <= 1,
+            isRefreshing = isRefreshing,
+            sections = sections,
+            errorMessage = _error.value
+        )
+    }
+
+    private fun homeYouTubeItemId(item: com.zionhuang.innertube.models.YTItem): String {
+        return when (item) {
+            is com.zionhuang.innertube.models.SongItem -> item.id
+            is com.zionhuang.innertube.models.AlbumItem -> item.id
+            is com.zionhuang.innertube.models.ArtistItem -> item.id
+            is com.zionhuang.innertube.models.PlaylistItem -> item.id
+            else -> item.hashCode().toString()
+        }
+    }
+
+    fun recordHomeInteraction(
+        itemId: String,
+        sectionId: String,
+        action: String,
+        sourceType: String
+    ) {
+        viewModelScope.launch {
+            repository.recordHomeInteraction(itemId, sectionId, action, sourceType)
+            loadHomeInteractionSignals()
+            rebuildHomeFeedState()
+        }
+    }
+
+    fun dismissHomeItem(itemId: String, sectionId: String, sourceType: String) {
+        viewModelScope.launch {
+            repository.recordHomeInteraction(
+                itemId = itemId,
+                sectionId = sectionId,
+                action = HomeInteractionEntity.ACTION_DISMISS,
+                sourceType = sourceType
+            )
+            loadHomeInteractionSignals()
+            rebuildHomeFeedState()
+        }
+    }
+
+    fun refreshHomeSection(sectionId: String) {
+        viewModelScope.launch {
+            repository.recordHomeInteraction(
+                itemId = sectionId,
+                sectionId = sectionId,
+                action = HomeInteractionEntity.ACTION_REFRESH,
+                sourceType = HomeInteractionEntity.SOURCE_LOCAL
+            )
+        }
+        refreshHomeContent()
     }
 
     private suspend fun loadSimilarRecommendations() {
@@ -988,6 +1247,7 @@ class MusicPlayerViewModel(
                         sections = _homePage.value?.sections.orEmpty() + nextPage.sections,
                         continuation = nextPage.continuation
                     )
+                    rebuildHomeFeedState()
                     android.util.Log.d("MusicVM", "Loaded ${nextPage.sections.size} more sections via pagination")
                 }.onFailure {
                     android.util.Log.e("MusicVM", "Pagination failed", it)
@@ -1005,6 +1265,7 @@ class MusicPlayerViewModel(
             try {
                 com.zionhuang.innertube.YouTube.home(params = chip?.endpoint?.params).onSuccess { filteredPage ->
                     _homePage.value = filteredPage
+                    rebuildHomeFeedState()
                     android.util.Log.d("MusicVM", "Filtered home with chip: ${chip?.title}")
                 }.onFailure {
                     android.util.Log.e("MusicVM", "Filter chip failed", it)
@@ -1076,15 +1337,20 @@ class MusicPlayerViewModel(
             // Deselect
             _selectedChip.value = null
             _filteredPlaylists.value = null
+            rebuildHomeFeedState()
         } else {
             // Select & Fetch
             _selectedChip.value = chip
+            _filteredPlaylists.value = null
+            rebuildHomeFeedState()
             viewModelScope.launch {
                 _isLoading.value = true
                 try {
                      _filteredPlaylists.value = repository.getMoodPlaylists(chip)
+                     rebuildHomeFeedState()
                 } catch (e: Exception) {
                     _error.value = "Failed to load $chip playlists"
+                    rebuildHomeFeedState()
                 } finally {
                     _isLoading.value = false
                 }
@@ -1331,6 +1597,14 @@ class MusicPlayerViewModel(
     fun toggleRepeat() {
         try { playbackService?.toggleRepeat() } catch (e: Exception) { Log.w("MusicVM", "toggleRepeat failed", e) }
     }
+
+    fun addToQueue(items: List<MusicItem>) {
+        try { playbackService?.addToQueue(items) } catch (e: Exception) { Log.w("MusicVM", "addToQueue failed", e) }
+    }
+
+    fun playNext(items: List<MusicItem>) {
+        try { playbackService?.playNext(items) } catch (e: Exception) { Log.w("MusicVM", "playNext failed", e) }
+    }
     
 
 
@@ -1505,6 +1779,107 @@ class MusicPlayerViewModel(
         }
     }
 
+    fun addToPlaylist(tracks: List<MusicItem>, playlist: PlaylistEntity) {
+        viewModelScope.launch {
+            try {
+                repository.addToPlaylist(tracks, playlist)
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error adding tracks to playlist", e)
+                _error.value = e.message ?: "Failed to add songs to playlist."
+            }
+        }
+    }
+
+    // --- Playlist Management ---
+
+    fun deletePlaylist(playlistId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deletePlaylist(playlistId)
+                _youTubeSyncStatus.value = "Playlist deleted."
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error deleting playlist", e)
+                _error.value = e.message ?: "Failed to delete playlist."
+            }
+        }
+    }
+
+    fun syncLocalPlaylistToYouTube(playlistId: String) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _error.value = null
+                val remotePlaylistId = repository.syncLocalPlaylistToYouTube(playlistId)
+                loadPlaylist(remotePlaylistId)
+                _youTubeSyncStatus.value = "Playlist synced to YouTube Music successfully!"
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error syncing playlist to YouTube", e)
+                _error.value = e.message ?: "Failed to sync playlist to YouTube."
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun renamePlaylist(playlistId: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                repository.renamePlaylist(playlistId, newName)
+                if (_currentPlaylist.value?.id == playlistId) {
+                    _currentPlaylist.value = _currentPlaylist.value?.copy(title = newName)
+                }
+                _youTubeSyncStatus.value = "Playlist renamed."
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error renaming playlist", e)
+                _error.value = e.message ?: "Failed to rename playlist."
+            }
+        }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: String, trackId: String, setVideoId: String? = null) {
+        viewModelScope.launch {
+            try {
+                repository.removeTrackFromPlaylist(playlistId, trackId, setVideoId)
+                if (_currentPlaylist.value?.id == playlistId) {
+                    _currentPlaylist.value = _currentPlaylist.value?.copy(
+                        items = _currentPlaylist.value?.items?.filter { it.id != trackId } ?: emptyList()
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error removing track from playlist", e)
+                _error.value = e.message ?: "Failed to remove song."
+            }
+        }
+    }
+
+    fun removeTracksFromPlaylist(playlistId: String, tracks: List<MusicItem>) {
+        viewModelScope.launch {
+            try {
+                repository.removeTracksFromPlaylist(playlistId, tracks)
+                val trackIds = tracks.map { it.id }.toSet()
+                if (_currentPlaylist.value?.id == playlistId) {
+                    _currentPlaylist.value = _currentPlaylist.value?.copy(
+                        items = _currentPlaylist.value?.items?.filter { it.id !in trackIds } ?: emptyList()
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error removing tracks from playlist", e)
+                _error.value = e.message ?: "Failed to remove songs."
+            }
+        }
+    }
+
+    fun reorderPlaylistTracks(playlistId: String, trackIds: List<String>) {
+        viewModelScope.launch {
+            try {
+                repository.reorderPlaylistTracks(playlistId, trackIds)
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error reordering playlist", e)
+                _error.value = e.message ?: "Failed to reorder playlist."
+            }
+        }
+    }
+
     // Legacy compatibility — maps DB downloads to old format for LibraryScreen
     private val _activeDownloads = MutableStateFlow<Map<Long, Pair<MusicItem, Int>>>(emptyMap())
     val activeDownloads: StateFlow<Map<Long, Pair<MusicItem, Int>>> = _activeDownloads.asStateFlow()
@@ -1543,6 +1918,261 @@ class MusicPlayerViewModel(
 
     fun deleteAllDownloads() {
         advancedDownloadManager.deleteAllDownloads()
+    }
+
+    fun getPlayer(): androidx.media3.exoplayer.ExoPlayer? {
+        return playbackService?.getPlayer()
+    }
+
+    fun togglePlaybackMode(): Boolean {
+        return playbackService?.togglePlaybackMode() ?: false
+    }
+
+    fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
+        return playbackService?.setPlaybackVideoQuality(quality) ?: false
+    }
+
+    // --- Ringtone Support ---
+
+    sealed class RingtoneState {
+        object Idle : RingtoneState()
+        data class Downloading(val progress: Int = 0) : RingtoneState()
+        data class Ready(val filePath: String, val durationMs: Long) : RingtoneState()
+        object Trimming : RingtoneState()
+        object Setting : RingtoneState()
+        data class Done(val message: String) : RingtoneState()
+        data class Error(val message: String) : RingtoneState()
+    }
+
+    private val _ringtoneState = MutableStateFlow<RingtoneState>(RingtoneState.Idle)
+    val ringtoneState: StateFlow<RingtoneState> = _ringtoneState.asStateFlow()
+
+    private val _ringtoneTrack = MutableStateFlow<MusicItem?>(null)
+    val ringtoneTrack: StateFlow<MusicItem?> = _ringtoneTrack.asStateFlow()
+
+    private val _ringtoneType = MutableStateFlow(RingtoneType.RINGTONE)
+    val ringtoneType: StateFlow<RingtoneType> = _ringtoneType.asStateFlow()
+
+    fun setRingtoneType(type: RingtoneType) {
+        _ringtoneType.value = type
+    }
+
+    fun checkWriteSettingsPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.System.canWrite(app)
+        } else true
+    }
+
+    fun downloadForRingtone(track: MusicItem) {
+        _ringtoneTrack.value = track
+        _ringtoneState.value = RingtoneState.Downloading()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ringtoneHelper = com.israrxy.raazi.service.RingtoneHelper(app)
+                val extractor = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+                val result = ringtoneHelper.downloadAudio(track, extractor) { progress ->
+                    _ringtoneState.value = RingtoneState.Downloading(progress)
+                }
+                _ringtoneState.value = RingtoneState.Ready(result.first, result.second)
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Ringtone download failed", e)
+                _ringtoneState.value = RingtoneState.Error("Download failed: ${e.message}")
+            }
+        }
+    }
+
+    fun setAsRingtone(filePath: String, startMs: Long, endMs: Long) {
+        _ringtoneState.value = RingtoneState.Trimming
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ringtoneHelper = com.israrxy.raazi.service.RingtoneHelper(app)
+                _ringtoneState.value = RingtoneState.Setting
+                val trackTitle = _ringtoneTrack.value?.title ?: "Raazi Ringtone"
+                val type = _ringtoneType.value
+                ringtoneHelper.trimAndSetRingtone(filePath, startMs, endMs, trackTitle, type)
+                val typeLabel = when (type) {
+                    RingtoneType.RINGTONE -> "Ringtone"
+                    RingtoneType.NOTIFICATION -> "Notification"
+                    RingtoneType.ALARM -> "Alarm"
+                }
+                _ringtoneState.value = RingtoneState.Done("$typeLabel set successfully!")
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Ringtone set failed", e)
+                _ringtoneState.value = RingtoneState.Error("Failed to set ringtone: ${e.message}")
+            }
+        }
+    }
+
+    fun resetRingtoneState() {
+        _ringtoneState.value = RingtoneState.Idle
+        _ringtoneTrack.value = null
+        _ringtoneType.value = RingtoneType.RINGTONE
+    }
+
+    // --- Spotify Import Support ---
+
+    sealed class SpotifyImportState {
+        object Idle : SpotifyImportState()
+        object FetchingSpotify : SpotifyImportState()
+        data class ResolvingTracks(val current: Int, val total: Int) : SpotifyImportState()
+        object Reviewing : SpotifyImportState()
+        object Importing : SpotifyImportState()
+        data class Success(val playlistId: String) : SpotifyImportState()
+        data class Error(val message: String) : SpotifyImportState()
+    }
+
+    data class ResolvedSpotifyTrack(
+        val spotifyTrack: com.israrxy.raazi.service.SpotifyTrack,
+        val resolvedItem: MusicItem?,
+        val isResolving: Boolean = false,
+        val isError: Boolean = false
+    )
+
+    private val _spotifyImportState = MutableStateFlow<SpotifyImportState>(SpotifyImportState.Idle)
+    val spotifyImportState: StateFlow<SpotifyImportState> = _spotifyImportState.asStateFlow()
+
+    private val _resolvedSpotifyTracks = MutableStateFlow<List<ResolvedSpotifyTrack>>(emptyList())
+    val resolvedSpotifyTracks: StateFlow<List<ResolvedSpotifyTrack>> = _resolvedSpotifyTracks.asStateFlow()
+
+    private val _spotifyPlaylistName = MutableStateFlow("")
+    val spotifyPlaylistName: StateFlow<String> = _spotifyPlaylistName.asStateFlow()
+
+    fun startSpotifyImport(playlistUrl: String) {
+        _spotifyImportState.value = SpotifyImportState.FetchingSpotify
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val spotifyPlaylist = com.israrxy.raazi.service.SpotifyImportHelper.fetchPlaylist(playlistUrl)
+                _spotifyPlaylistName.value = spotifyPlaylist.title
+
+                val tracksToResolve = spotifyPlaylist.tracks.map { track ->
+                    ResolvedSpotifyTrack(track, null, isResolving = true)
+                }
+                _resolvedSpotifyTracks.value = tracksToResolve
+                _spotifyImportState.value = SpotifyImportState.ResolvingTracks(0, tracksToResolve.size)
+
+                // Fetch Gemini configurations
+                val useGemini = settingsDataStore.useGeminiImport.first()
+                val geminiKey = settingsDataStore.geminiApiKey.first()
+
+                val geminiQueries = if (useGemini && !geminiKey.isNullOrBlank()) {
+                    try {
+                        com.israrxy.raazi.service.GeminiResolverHelper.generateOptimizedQueries(geminiKey, spotifyPlaylist.tracks)
+                    } catch (e: Exception) {
+                        android.util.Log.e("MusicVM", "Gemini pre-resolution failed, falling back to legacy cleaner", e)
+                        null
+                    }
+                } else {
+                    null
+                }
+
+                val semaphore = kotlinx.coroutines.sync.Semaphore(5)
+                val total = tracksToResolve.size
+                var completedCount = 0
+
+                kotlinx.coroutines.coroutineScope {
+                    tracksToResolve.mapIndexed { index, resolvedTrack ->
+                        launch {
+                            semaphore.withPermit {
+                                try {
+                                    val geminiInfo = geminiQueries?.get(index)
+                                    val cleanedTitle = com.israrxy.raazi.service.SpotifyImportHelper.cleanTrackTitleForSearch(resolvedTrack.spotifyTrack.title)
+                                    
+                                    val query = geminiInfo?.query ?: "$cleanedTitle ${resolvedTrack.spotifyTrack.artist}"
+                                    val preference = geminiInfo?.preference ?: "SONG"
+
+                                    val searchResult = musicExtractor.searchMusic(query, 0)
+                                    
+                                    val bestMatch = if (geminiInfo != null) {
+                                        if (preference == "VIDEO") {
+                                            searchResult.items.firstOrNull { 
+                                                it.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO 
+                                            } ?: searchResult.items.firstOrNull {
+                                                it.contentType == com.israrxy.raazi.model.MusicContentType.SONG
+                                            } ?: searchResult.items.firstOrNull()
+                                        } else {
+                                            searchResult.items.firstOrNull { 
+                                                it.contentType == com.israrxy.raazi.model.MusicContentType.SONG 
+                                            } ?: searchResult.items.firstOrNull {
+                                                it.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO
+                                            } ?: searchResult.items.firstOrNull()
+                                        }
+                                    } else {
+                                        // Legacy resolver improvements
+                                        val songs = searchResult.items.filter { it.contentType == com.israrxy.raazi.model.MusicContentType.SONG }
+                                        val firstSong = songs.firstOrNull()
+                                        if (firstSong != null && com.israrxy.raazi.service.SpotifyImportHelper.checkRelaxedMatch(cleanedTitle, firstSong.title)) {
+                                            firstSong
+                                        } else {
+                                            // Fallback to video sections
+                                            val videos = searchResult.items.filter { it.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO }
+                                            videos.firstOrNull() ?: firstSong ?: searchResult.items.firstOrNull()
+                                        }
+                                    }
+
+                                    updateResolvedTrack(index) {
+                                        it.copy(resolvedItem = bestMatch, isResolving = false)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MusicVM", "Error resolving track at index $index", e)
+                                    updateResolvedTrack(index) {
+                                        it.copy(isResolving = false, isError = true)
+                                    }
+                                } finally {
+                                    synchronized(this@MusicPlayerViewModel) {
+                                        completedCount++
+                                        _spotifyImportState.value = SpotifyImportState.ResolvingTracks(completedCount, total)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                _spotifyImportState.value = SpotifyImportState.Reviewing
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Spotify import failed", e)
+                _spotifyImportState.value = SpotifyImportState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun updateResolvedTrack(index: Int, transform: (ResolvedSpotifyTrack) -> ResolvedSpotifyTrack) {
+        val currentList = _resolvedSpotifyTracks.value.toMutableList()
+        if (index in currentList.indices) {
+            currentList[index] = transform(currentList[index])
+            _resolvedSpotifyTracks.value = currentList
+        }
+    }
+
+    fun replaceResolvedTrack(index: Int, newItem: MusicItem) {
+        updateResolvedTrack(index) {
+            it.copy(resolvedItem = newItem, isError = false, isResolving = false)
+        }
+    }
+
+    fun finalizeSpotifyImport(playlistTitle: String, syncedToYouTube: Boolean) {
+        _spotifyImportState.value = SpotifyImportState.Importing
+        viewModelScope.launch {
+            try {
+                val playlistEntity = repository.createPlaylist(playlistTitle, syncedToYouTube = syncedToYouTube)
+                val resolvedItems = _resolvedSpotifyTracks.value.mapNotNull { it.resolvedItem }
+                
+                if (resolvedItems.isNotEmpty()) {
+                    repository.addToPlaylist(resolvedItems, playlistEntity)
+                }
+
+                _spotifyImportState.value = SpotifyImportState.Success(playlistEntity.id)
+            } catch (e: Exception) {
+                android.util.Log.e("MusicVM", "Error finalizing import", e)
+                _spotifyImportState.value = SpotifyImportState.Error(e.message ?: "Failed to save playlist.")
+            }
+        }
+    }
+
+    fun resetSpotifyImportState() {
+        _spotifyImportState.value = SpotifyImportState.Idle
+        _resolvedSpotifyTracks.value = emptyList()
+        _spotifyPlaylistName.value = ""
     }
 
     override fun onCleared() {

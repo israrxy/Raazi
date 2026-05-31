@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 
@@ -38,19 +39,14 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     private val _viewState = MutableStateFlow(SearchSuggestionViewState())
     val viewState = _viewState.asStateFlow()
 
-    // ...
-
-    // Changed to use generic SearchResult from repository which supports mixed types via NewPipe/InnerTube wrapper
     private val _searchResults = MutableStateFlow<com.israrxy.raazi.model.SearchResult?>(null)
     val searchResults = _searchResults.asStateFlow()
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
 
-    // Track the query that generated the current results
     var submittedQuery by androidx.compose.runtime.mutableStateOf("")
         private set
     
-    // Expose individual flows for UI
     val searchSuggestions: StateFlow<List<String>> = viewState.map { it.suggestions }.stateIn(
         viewModelScope,
         SharingStarted.Lazily,
@@ -63,22 +59,41 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         emptyList()
     )
 
+    // Simple in-memory suggestion cache
+    private val suggestionCache = LinkedHashMap<String, com.zionhuang.innertube.models.SearchSuggestions?>(16, 0.75f, true)
+
     init {
-        // Listen to query changes with debounce
         viewModelScope.launch {
             query
-                .debounce(300L)
+                .debounce(150L)
                 .flatMapLatest { query ->
                     if (query.isEmpty()) {
-                        // Show all search history when query is empty
                         musicDao.searchHistory().map { history ->
                             SearchSuggestionViewState(history = history)
                         }
                     } else {
-                        // Fetch suggestions + filter history
-                        val result = YouTube.searchSuggestions(query).getOrNull()
+                        val cached = suggestionCache[query]
+                        val result = if (cached != null) {
+                            cached
+                        } else {
+                            try {
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    YouTube.searchSuggestions(query).getOrNull()
+                                }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (result != null && query.length >= 2) {
+                            suggestionCache[query] = result
+                            // Keep cache size bounded
+                            if (suggestionCache.size > 50) {
+                                val eldest = suggestionCache.keys.first()
+                                suggestionCache.remove(eldest)
+                            }
+                        }
                         musicDao.searchHistory(query)
-                            .map { it.take(3) }  // Limit history to 3
+                            .map { it.take(3) }
                             .map { history ->
                                 SearchSuggestionViewState(
                                     history = history,
@@ -105,7 +120,6 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                // Use repository to get mixed results (Songs, Artists, Playlists)
                 val result = repository.searchMusic(query, _selectedService.value)
                 _searchResults.value = result
                 saveSearchHistory(query)
@@ -140,7 +154,8 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         _searchResults.value = null
         _isSearching.value = false
         submittedQuery = ""
-        query.value = "" // Also clear query to reset UI state
+        query.value = ""
+        suggestionCache.clear()
     }
 }
 

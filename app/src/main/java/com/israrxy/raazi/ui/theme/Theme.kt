@@ -53,6 +53,7 @@ fun RaaziTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+ - enabled by default for Material You
     dynamicColor: Boolean = true,
+    pastelAccent: String = "Emerald",
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -60,8 +61,22 @@ fun RaaziTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> SonicColorScheme
-        else -> SonicLightColorScheme
+        darkTheme -> {
+            when (pastelAccent) {
+                "Lavender" -> SonicColorScheme.copy(primary = Color(0xFFB39DDB), secondary = Color(0xFFD1C4E9))
+                "Sky" -> SonicColorScheme.copy(primary = Color(0xFF90CAF9), secondary = Color(0xFFBBDEFB))
+                "Peach" -> SonicColorScheme.copy(primary = Color(0xFFFFCC80), secondary = Color(0xFFFFE0B2))
+                else -> SonicColorScheme
+            }
+        }
+        else -> {
+            when (pastelAccent) {
+                "Lavender" -> SonicLightColorScheme.copy(primary = Color(0xFF673AB7), secondary = Color(0xFF9575CD))
+                "Sky" -> SonicLightColorScheme.copy(primary = Color(0xFF2196F3), secondary = Color(0xFF64B5F6))
+                "Peach" -> SonicLightColorScheme.copy(primary = Color(0xFFFF9800), secondary = Color(0xFFFFB74D))
+                else -> SonicLightColorScheme
+            }
+        }
     }
 
     val view = LocalView.current

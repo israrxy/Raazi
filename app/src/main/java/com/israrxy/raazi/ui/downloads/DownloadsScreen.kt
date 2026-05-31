@@ -453,6 +453,7 @@ private fun FailedDownloadItem(download: DownloadEntity, onRetry: () -> Unit, on
 @Composable
 private fun CompletedDownloadItem(download: DownloadEntity, onPlay: () -> Unit, onDelete: () -> Unit) {
     val context = LocalContext.current
+    var showMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Card(
@@ -525,11 +526,25 @@ private fun CompletedDownloadItem(download: DownloadEntity, onPlay: () -> Unit, 
 
             Spacer(Modifier.width(4.dp))
 
-            IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(
-                    Icons.Default.MoreVert, "Options",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        Icons.Default.MoreVert, "Options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Delete Download") },
+                        onClick = {
+                            showMenu = false
+                            showDeleteDialog = true
+                        }
+                    )
+                }
             }
         }
     }

@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.israrxy.raazi.data.db.MusicDao
 import com.israrxy.raazi.data.db.FormatEntity
+import com.israrxy.raazi.model.PlaybackMediaMode
+import com.israrxy.raazi.model.PlaybackVideoQuality
+import com.zionhuang.innertube.models.response.PlayerResponse
 
 object StreamResolver {
     private const val TAG = "StreamResolver"
@@ -25,7 +28,13 @@ object StreamResolver {
     // Injected DAO for saving format info
     var musicDao: MusicDao? = null
 
-    data class StreamResult(val url: String, val userAgent: String, val quality: String? = null)
+    data class StreamResult(
+        val url: String,
+        val userAgent: String,
+        val quality: String? = null,
+        val mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
+        val hasVideo: Boolean = false
+    )
 
     private val _currentStreamQuality = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val currentStreamQuality = _currentStreamQuality.asStateFlow()
@@ -49,16 +58,30 @@ object StreamResolver {
     /**
      * Public entry point — wraps internal resolution with a global safety net.
      */
-    fun resolveStreamUrl(videoIdInput: String, title: String? = null, artist: String? = null): StreamResult {
+    fun resolveStreamUrl(
+        videoIdInput: String,
+        title: String? = null,
+        artist: String? = null,
+        mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
+        preferredVideoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
+        preferAac: Boolean = false
+    ): StreamResult {
         try {
-            return resolveStreamUrlInternal(videoIdInput, title, artist)
+            return resolveStreamUrlInternal(videoIdInput, title, artist, mode, preferredVideoQuality, preferAac)
         } catch (e: Exception) {
             Log.e(TAG, "CRITICAL: Stream resolution failed completely for: $videoIdInput", e)
             throw e
         }
     }
 
-    private fun resolveStreamUrlInternal(videoIdInput: String, title: String? = null, artist: String? = null): StreamResult {
+    private fun resolveStreamUrlInternal(
+        videoIdInput: String,
+        title: String? = null,
+        artist: String? = null,
+        mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
+        preferredVideoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
+        preferAac: Boolean = false
+    ): StreamResult {
         var videoId = videoIdInput
         Log.d(TAG, "Resolving stream for input: $videoId")
         
@@ -107,7 +130,7 @@ object StreamResolver {
         // Detect if this is a Bandcamp URL
         if (videoId.contains("bandcamp.com")) {
             Log.i(TAG, "Detected Bandcamp URL, using NewPipe extractor")
-            val cacheKey = normalizeCacheKey(videoId)
+            val cacheKey = normalizeCacheKey(videoId, mode, preferredVideoQuality, preferAac)
             getCachedStream(cacheKey)?.let { cached ->
                 _currentStreamQuality.value = cached.quality
                 return cached
@@ -117,7 +140,7 @@ object StreamResolver {
             }
         }
 
-        val cacheKey = normalizeCacheKey(videoId)
+        val cacheKey = normalizeCacheKey(videoId, mode, preferredVideoQuality, preferAac)
         getCachedStream(cacheKey)?.let { cached ->
             _currentStreamQuality.value = cached.quality
             return cached
@@ -128,14 +151,18 @@ object StreamResolver {
                 Log.i(TAG, "Detected SoundCloud URL, using NewPipe extractor")
                 resolveSoundCloudStream(videoId)
             }
-            else -> resolveYouTubeStream(videoId)
+            else -> resolveYouTubeStream(videoId, mode, preferredVideoQuality, preferAac)
         }
         cacheResolvedStream(cacheKey, resolved)
         return resolved
     }
 
     fun preloadStream(videoIdInput: String, title: String? = null, artist: String? = null) {
-        val cacheKey = normalizeCacheKey(videoIdInput)
+        val cacheKey = normalizeCacheKey(
+            videoIdInput,
+            PlaybackMediaMode.AUDIO,
+            PlaybackVideoQuality.AUTO
+        )
         if (getCachedStream(cacheKey) != null) return
 
         synchronized(preloadLock) {
@@ -177,15 +204,26 @@ object StreamResolver {
         }
     }
 
-    private fun normalizeCacheKey(videoIdInput: String): String {
+    private fun normalizeCacheKey(
+        videoIdInput: String,
+        mode: PlaybackMediaMode,
+        preferredVideoQuality: PlaybackVideoQuality,
+        preferAac: Boolean = false
+    ): String {
         val trimmed = videoIdInput.trim()
-        return when {
+        val normalized = when {
             trimmed.contains("soundcloud.com") || trimmed.contains("bandcamp.com") -> trimmed
             trimmed.contains("v=") -> trimmed.substringAfter("v=").substringBefore("&")
             trimmed.contains("youtu.be/") -> trimmed.substringAfter("youtu.be/").substringBefore("?")
             trimmed.contains("/shorts/") -> trimmed.substringAfter("/shorts/").substringBefore("?")
             else -> trimmed
         }
+        val qualityKey = if (mode == PlaybackMediaMode.VIDEO) {
+            preferredVideoQuality.wireName
+        } else {
+            PlaybackVideoQuality.AUTO.wireName
+        }
+        return "${mode.name}:$qualityKey:$normalized${if (preferAac) ":aac" else ""}"
     }
     
     /**
@@ -206,7 +244,8 @@ object StreamResolver {
                     StreamResult(
                         url = audioStream.content,
                         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        quality = quality
+                        quality = quality,
+                        hasVideo = false
                     )
                 } else {
                     throw Exception("No audio streams found for Bandcamp track")
@@ -237,7 +276,8 @@ object StreamResolver {
                     StreamResult(
                         url = audioStream.content,
                         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        quality = quality
+                        quality = quality,
+                        hasVideo = false
                     )
                 } else {
                     // Fallback to video streams
@@ -247,7 +287,8 @@ object StreamResolver {
                         StreamResult(
                             url = videoStream.content,
                             userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                            quality = "Video Stream"
+                            quality = "Video Stream",
+                            hasVideo = false
                         )
                     } else {
                         throw Exception("No streams found for SoundCloud track")
@@ -260,7 +301,12 @@ object StreamResolver {
     /**
      * Resolve YouTube stream using InnerTube with timeout protection
      */
-    private fun resolveYouTubeStream(videoId: String): StreamResult {
+    private fun resolveYouTubeStream(
+        videoId: String,
+        mode: PlaybackMediaMode,
+        preferredVideoQuality: PlaybackVideoQuality,
+        preferAac: Boolean = false
+    ): StreamResult {
         val clients = listOf(
             YouTubeClient.ANDROID_VR_NO_AUTH,
             YouTubeClient.WEB_REMIX,
@@ -307,57 +353,105 @@ object StreamResolver {
                         )
                         
                         val response = playerResult.getOrThrow()
+                        val streamingData = response.streamingData
+                            ?: throw Exception("Missing streaming data for client $client")
+                        val muxedVideoFormats = streamingData.formats
+                            .orEmpty()
+                            .filter { format ->
+                                !format.isAudio &&
+                                    format.url != null &&
+                                    (format.audioChannels ?: 0) > 0
+                            }
+                        val hasVideo = muxedVideoFormats.isNotEmpty()
                         
                         if (response.playabilityStatus.status != "OK") {
                             Log.w(TAG, "Playability status not OK for $client: ${response.playabilityStatus.status}")
                         }
 
-                        val adaptiveFormats = response.streamingData?.adaptiveFormats ?: emptyList()
+                        val adaptiveFormats = streamingData.adaptiveFormats
                         val audioFormats = adaptiveFormats.filter { it.isAudio }
-                        
-                        val bestFormat = audioFormats.maxByOrNull { format ->
-                            var score = format.bitrate.toLong()
-                            if (format.mimeType.contains("webm") || format.mimeType.contains("opus")) {
-                                score += 10000
+                        val selectedFormat = when (mode) {
+                            PlaybackMediaMode.AUDIO -> {
+                                audioFormats.maxByOrNull { format ->
+                                    var score = format.bitrate.toLong()
+                                    if (preferAac) {
+                                        if (format.mimeType.contains("mp4") || format.mimeType.contains("aac")) {
+                                            score += 100000
+                                        }
+                                    } else {
+                                        if (format.mimeType.contains("webm") || format.mimeType.contains("opus")) {
+                                            score += 10000
+                                        }
+                                    }
+                                    score
+                                }
                             }
-                            score
+                            PlaybackMediaMode.VIDEO -> {
+                                selectPreferredMuxedVideoFormat(
+                                    muxedVideoFormats,
+                                    preferredVideoQuality
+                                )
+                            }
                         }
-                        
-                        if (bestFormat != null && bestFormat.url != null) {
+
+                        if (selectedFormat != null && selectedFormat.url != null) {
                             Log.i(TAG, "SUCCESS: Resolved YouTube stream using client: $client")
-                            var url = bestFormat.url!!
+                            var url = selectedFormat.url!!
                             if (client.useWebPoTokens && webStreamingPot != null) {
                                 url += "&pot=$webStreamingPot"
                             }
                             
                             val codecs = try {
-                                bestFormat.mimeType.substringAfter("codecs=").removeSurrounding("\"")
+                                selectedFormat.mimeType.substringAfter("codecs=").removeSurrounding("\"")
                             } catch (e: Exception) { "unknown" }
-                            val quality = if (bestFormat.mimeType.contains("opus")) {
-                                "Opus ${bestFormat.bitrate / 1000}kbps"
-                            } else if (bestFormat.mimeType.contains("mp4")) {
-                                "M4A ${bestFormat.bitrate / 1000}kbps"
-                            } else {
-                                "YouTube ${bestFormat.bitrate / 1000}kbps"
+                            val quality = when (mode) {
+                                PlaybackMediaMode.AUDIO -> {
+                                    if (selectedFormat.mimeType.contains("opus")) {
+                                        "Opus ${selectedFormat.bitrate / 1000}kbps"
+                                    } else if (selectedFormat.mimeType.contains("mp4")) {
+                                        "M4A ${selectedFormat.bitrate / 1000}kbps"
+                                    } else {
+                                        "YouTube ${selectedFormat.bitrate / 1000}kbps"
+                                    }
+                                }
+                                PlaybackMediaMode.VIDEO -> {
+                                    selectedFormat.qualityLabel
+                                        ?: listOfNotNull(
+                                            selectedFormat.height?.let { "${it}p" },
+                                            "Video"
+                                        ).joinToString(" ")
+                                }
                             }
                             _currentStreamQuality.value = quality
 
                             try {
                                 musicDao?.upsertFormat(FormatEntity(
                                     id = videoId,
-                                    mimeType = bestFormat.mimeType.split(";")[0],
+                                    mimeType = selectedFormat.mimeType.split(";")[0],
                                     codecs = codecs,
-                                    bitrate = bestFormat.bitrate,
-                                    sampleRate = bestFormat.audioSampleRate,
-                                    contentLength = bestFormat.contentLength ?: 0L
+                                    bitrate = selectedFormat.bitrate,
+                                    sampleRate = selectedFormat.audioSampleRate,
+                                    contentLength = selectedFormat.contentLength ?: 0L
                                 ))
                             } catch (e: Exception) {
                                 Log.w(TAG, "Failed to save format info", e)
                             }
 
-                            StreamResult(url, client.userAgent, quality)
+                            StreamResult(
+                                url = url,
+                                userAgent = client.userAgent,
+                                quality = quality,
+                                mode = mode,
+                                hasVideo = hasVideo
+                            )
                         } else {
-                            throw Exception("No audio formats found with client $client")
+                            throw Exception(
+                                if (mode == PlaybackMediaMode.VIDEO) {
+                                    "No video formats found with client $client"
+                                } else {
+                                    "No audio formats found with client $client"
+                                }
+                            )
                         }
                     } // end withTimeoutOrNull
                 } // end runBlocking
@@ -369,17 +463,54 @@ object StreamResolver {
             }
         }
         
-        // If all InnerTube clients failed, try NewPipe as a final fallback
-        Log.w(TAG, "All InnerTube clients failed, attempting fallback to NewPipe for YouTube")
-        try {
-            return resolveYouTubeWithNewPipe(videoId)
-        } catch (e: Exception) {
-            Log.e(TAG, "NewPipe fallback also failed", e)
-            lastError = e
+        if (mode == PlaybackMediaMode.AUDIO) {
+            // If all InnerTube clients failed, try NewPipe as a final fallback
+            Log.w(TAG, "All InnerTube clients failed, attempting fallback to NewPipe for YouTube")
+            try {
+                return resolveYouTubeWithNewPipe(videoId)
+            } catch (e: Exception) {
+                Log.e(TAG, "NewPipe fallback also failed", e)
+                lastError = e
+            }
         }
         
         Log.e(TAG, "CRITICAL: All resolution methods failed for $videoId", lastError)
         throw lastError ?: Exception("Failed to resolve YouTube stream after trying all clients")
+    }
+
+    private fun selectPreferredMuxedVideoFormat(
+        formats: List<PlayerResponse.StreamingData.Format>,
+        preferredVideoQuality: PlaybackVideoQuality
+    ): PlayerResponse.StreamingData.Format? {
+        val safeFormats = formats.filter { it.url != null }
+        if (safeFormats.isEmpty()) return null
+
+        fun pickHighestCandidate(candidates: List<PlayerResponse.StreamingData.Format>): PlayerResponse.StreamingData.Format? {
+            return candidates.maxWithOrNull(
+                compareBy<PlayerResponse.StreamingData.Format>(
+                    { if (it.mimeType.contains("mp4")) 1 else 0 },
+                    { it.height ?: 0 },
+                    { it.bitrate }
+                )
+            )
+        }
+
+        return preferredVideoQuality.maxHeight?.let { maxHeight ->
+            val atOrBelowTarget = safeFormats.filter { (it.height ?: Int.MAX_VALUE) <= maxHeight }
+            if (atOrBelowTarget.isNotEmpty()) {
+                pickHighestCandidate(atOrBelowTarget)
+            } else {
+                safeFormats
+                    .filter { (it.height ?: 0) > 0 }
+                    .minWithOrNull(
+                        compareBy<PlayerResponse.StreamingData.Format>(
+                            { kotlin.math.abs((it.height ?: Int.MAX_VALUE) - maxHeight) },
+                            { it.height ?: Int.MAX_VALUE },
+                            { if (it.mimeType.contains("mp4")) 0 else 1 }
+                        )
+                    ) ?: pickHighestCandidate(safeFormats)
+            }
+        } ?: pickHighestCandidate(safeFormats)
     }
 
     /**
@@ -407,7 +538,8 @@ object StreamResolver {
                     StreamResult(
                         url = audioStream.content,
                         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        quality = quality
+                        quality = quality,
+                        hasVideo = false
                     )
                 } else {
                     throw Exception("No audio streams found via NewPipe")

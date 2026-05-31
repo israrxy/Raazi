@@ -1,6 +1,7 @@
 package com.israrxy.raazi
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         enableEdgeToEdge()
         
         // Request permissions
@@ -44,8 +46,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val settingsDataStore = remember { SettingsDataStore(context) }
-            val useDynamicColor by settingsDataStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = false)
+            val useDynamicColor by settingsDataStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = true)
             val themeMode by settingsDataStore.themeMode.collectAsStateWithLifecycle(initialValue = "System")
+            val pastelAccent by settingsDataStore.pastelAccent.collectAsStateWithLifecycle(initialValue = "Emerald")
             
             // Update Check Logic
             val updateManager = remember { com.israrxy.raazi.data.UpdateManager() }
@@ -78,7 +81,8 @@ class MainActivity : ComponentActivity() {
 
             RaaziTheme(
                 darkTheme = darkTheme,
-                dynamicColor = useDynamicColor
+                dynamicColor = useDynamicColor,
+                pastelAccent = pastelAccent
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -96,7 +100,7 @@ class MainActivity : ComponentActivity() {
                         }
                     } else {
                         if (onboardingCompleted == false) {
-                            com.israrxy.raazi.ui.OnboardingScreen {
+                            com.israrxy.raazi.ui.OnboardingScreen(viewModel = viewModel) {
                                 scope.launch {
                                     settingsDataStore.setOnboardingCompleted(true)
                                 }
@@ -137,13 +141,5 @@ class MainActivity : ComponentActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MainScreenPreview() {
-    RaaziTheme {
-        // Preview content would go here
     }
 }

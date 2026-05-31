@@ -82,15 +82,14 @@ fun Modifier.shimmerEffect(): Modifier = composed {
         label = "ShimmerOffset"
     )
 
+    val baseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val highlightColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+
     background(
         brush = Brush.linearGradient(
-            colors = listOf(
-                Color(0xFFB8B5B5),
-                Color(0xFF8F8B8B),
-                Color(0xFFB8B5B5),
-            ),
+            colors = listOf(baseColor, highlightColor, baseColor),
             start = Offset(startOffsetX, 0f),
-            end = Offset(startOffsetX + size.width.toFloat(), size.height.toFloat())
+            end = Offset(startOffsetX + size.width, size.height)
         )
     )
     .onGloballyPositioned {

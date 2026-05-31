@@ -12,9 +12,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
+
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.*
@@ -30,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.toSavedCollectionItem
 import com.israrxy.raazi.ui.theme.*
@@ -54,11 +59,33 @@ fun PlaylistDetailScreen(
     
     // Add To Playlist Dialog State
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    val userPlaylists by viewModel.userPlaylists.collectAsStateWithLifecycle()
+    val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsStateWithLifecycle()
+    val isLocalPlaylist = remember(playlistId, userPlaylists) {
+        playlistId != "favorites" && userPlaylists.any { it.id == playlistId && !it.isYouTubeSyncedPlaylist() }
+    }
+    val isEditable = remember(playlistId, userPlaylists) {
+        playlistId == "favorites" || userPlaylists.any { it.id == playlistId }
+    }
+    var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
+    var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
     
     // Auto-exit selection mode if empty
     LaunchedEffect(selectedTracks) {
         if (selectedTracks.isEmpty() && isSelectionMode) {
             isSelectionMode = false
+        }
+    }
+
+    // Playlist context menu state
+    var showPlaylistMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renamePlaylistName by remember { mutableStateOf("") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentPlaylist?.title) {
+        if (!showRenameDialog) {
+            renamePlaylistName = currentPlaylist?.title ?: ""
         }
     }
     
@@ -69,45 +96,7 @@ fun PlaylistDetailScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (isSelectionMode) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(8.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    tonalElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { 
-                            isSelectionMode = false
-                            selectedTracks = emptySet()
-                        }) {
-                            Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        Text(
-                            "${selectedTracks.size} selected",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { 
-                            selectedTracks.forEach { viewModel.downloadTrack(it) }
-                            isSelectionMode = false
-                            selectedTracks = emptySet()
-                        }) {
-                            Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        IconButton(onClick = { showAddToPlaylistDialog = true }) {
-                            Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                }
-            } else {
+            Box(modifier = Modifier.statusBarsPadding()) {
                 TopAppBar(
                     title = { 
                         Text(
@@ -145,8 +134,142 @@ fun PlaylistDetailScreen(
                         }) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = "Play Playlist", tint = MaterialTheme.colorScheme.onBackground)
                         }
+                        Box {
+                            IconButton(onClick = { showPlaylistMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = MaterialTheme.colorScheme.onBackground)
+                            }
+                            DropdownMenu(
+                                expanded = showPlaylistMenu,
+                                onDismissRequest = { showPlaylistMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    onClick = {
+                                        showPlaylistMenu = false
+                                        showRenameDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    onClick = {
+                                        showPlaylistMenu = false
+                                        showDeleteDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Download All") },
+                                    onClick = {
+                                        showPlaylistMenu = false
+                                        currentPlaylist?.items?.let { viewModel.downloadPlaylist(it) }
+                                    }
+                                )
+                                if (isYouTubeLoggedIn && isLocalPlaylist) {
+                                    DropdownMenuItem(
+                                        text = { Text("Sync to YouTube Music") },
+                                        onClick = {
+                                            showPlaylistMenu = false
+                                            viewModel.syncLocalPlaylistToYouTube(playlistId)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 )
+
+                AnimatedVisibility(
+                    visible = isSelectionMode,
+                    enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                        tonalElevation = 6.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val playlistItems = currentPlaylist?.items ?: emptyList()
+                            val allSelected = playlistItems.isNotEmpty() && playlistItems.all { selectedTracks.contains(it) }
+                            Checkbox(
+                                checked = allSelected,
+                                onCheckedChange = { checkAll ->
+                                    if (checkAll) {
+                                        selectedTracks = selectedTracks + playlistItems
+                                    } else {
+                                        selectedTracks = selectedTracks - playlistItems.toSet()
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    uncheckedColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "${selectedTracks.size} selected",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = {
+                                if (selectedTracks.isNotEmpty()) {
+                                    val list = selectedTracks.toList()
+                                    viewModel.playPlaylist(list, 0)
+                                    isSelectionMode = false
+                                    selectedTracks = emptySet()
+                                    onNavigateToPlayer()
+                                }
+                            }) {
+                                Icon(Icons.Default.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            IconButton(onClick = {
+                                if (selectedTracks.isNotEmpty()) {
+                                    viewModel.addToQueue(selectedTracks.toList())
+                                    isSelectionMode = false
+                                    selectedTracks = emptySet()
+                                }
+                            }) {
+                                Icon(Icons.Default.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            IconButton(onClick = {
+                                if (selectedTracks.isNotEmpty()) {
+                                    tracksToAddToPlaylist = selectedTracks.toList()
+                                }
+                            }) {
+                                Icon(Icons.Default.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            IconButton(onClick = {
+                                selectedTracks.forEach { viewModel.downloadTrack(it) }
+                                isSelectionMode = false
+                                selectedTracks = emptySet()
+                            }) {
+                                Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            if (isEditable) {
+                                IconButton(onClick = {
+                                    if (selectedTracks.isNotEmpty()) {
+                                        showBulkDeleteConfirmation = true
+                                    }
+                                }) {
+                                    Icon(Icons.Default.Delete, "Remove from Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+                            }
+                            IconButton(onClick = {
+                                isSelectionMode = false
+                                selectedTracks = emptySet()
+                            }) {
+                                Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
             }
         },
         floatingActionButton = {
@@ -180,7 +303,6 @@ fun PlaylistDetailScreen(
         ) {
             when {
                 isLoading && currentPlaylist == null -> {
-                    // Loading state
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -198,7 +320,6 @@ fun PlaylistDetailScreen(
                     }
                 }
                 error != null -> {
-                    // Error state
                     Column(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -238,114 +359,213 @@ fun PlaylistDetailScreen(
                 }
                 currentPlaylist != null -> {
                     val playlist = currentPlaylist!!
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        // Premium header with gradient
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(280.dp)
-                            ) {
-                                // Gradient background
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            item {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                                                    MaterialTheme.colorScheme.background
+                                        .fillMaxWidth()
+                                        .height(280.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                                                        MaterialTheme.colorScheme.background
+                                                    )
                                                 )
                                             )
-                                        )
-                                )
-                                
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    // Album art
-                                    AsyncImage(
-                                        model = playlist.thumbnailUrl,
-                                        contentDescription = playlist.title,
+                                    )
+                                    
+                                    Column(
                                         modifier = Modifier
-                                            .size(180.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                    
-                                    // Title
-                                    Text(
-                                        text = playlist.title,
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    
-                                    // Song count
-                                    Text(
-                                        text = "${playlist.items.size} songs",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                            .fillMaxSize()
+                                            .padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        AsyncImage(
+                                            model = playlist.thumbnailUrl,
+                                            contentDescription = playlist.title,
+                                            modifier = Modifier
+                                                .size(180.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        
+                                        Text(
+                                            text = playlist.title,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        Text(
+                                            text = "${playlist.items.size} songs",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
+                            }
+
+                            itemsIndexed(items = playlist.items) { index, item ->
+                                PremiumPlaylistItemCard(
+                                    index = index + 1,
+                                    item = item,
+                                    isSelected = selectedTracks.contains(item),
+                                    isSelectionMode = isSelectionMode,
+                                    onRemoveFromPlaylist = {
+                                        viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
+                                    },
+                                    onDownloadForRingtone = {
+                                        viewModel.downloadForRingtone(item)
+                                    },
+                                    onSelectionChange = { selected ->
+                                        if (selected) {
+                                            selectedTracks = selectedTracks + item
+                                        } else {
+                                            selectedTracks = selectedTracks - item
+                                        }
+                                    },
+                                    onLongClick = {
+                                        isSelectionMode = true
+                                        selectedTracks = selectedTracks + item
+                                    },
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            val isCurrentlySelected = selectedTracks.contains(item)
+                                            if (isCurrentlySelected) {
+                                                selectedTracks = selectedTracks - item
+                                            } else {
+                                                selectedTracks = selectedTracks + item
+                                            }
+                                        } else {
+                                            viewModel.playPlaylist(playlist.items, index)
+                                            onNavigateToPlayer()
+                                        }
+                                    }
+                                )
+                            }
+                            
+                            item {
+                                Spacer(modifier = Modifier.height(100.dp))
                             }
                         }
 
-                        // Songs list
-                        itemsIndexed(items = playlist.items) { index, item ->
-                            PremiumPlaylistItemCard(
-                                index = index + 1,
-                                item = item,
-                                isSelected = selectedTracks.contains(item),
-                                isSelectionMode = isSelectionMode,
-                                onSelectionChange = { selected ->
-                                    if (selected) {
-                                        selectedTracks = selectedTracks + item
-                                    } else {
-                                        selectedTracks = selectedTracks - item
-                                    }
-                                },
-                                onLongClick = {
-                                    isSelectionMode = true
-                                    selectedTracks = selectedTracks + item
-                                },
-                                onClick = {
-                                    if (isSelectionMode) {
-                                        val isCurrentlySelected = selectedTracks.contains(item)
-                                        if (isCurrentlySelected) {
-                                            selectedTracks = selectedTracks - item
-                                        } else {
-                                            selectedTracks = selectedTracks + item
-                                        }
-                                    } else {
-                                        viewModel.playPlaylist(playlist.items, index)
-                                        onNavigateToPlayer()
-                                    }
-                                }
+                        if (isLoading) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.TopCenter),
+                                color = MaterialTheme.colorScheme.primary
                             )
-                        }
-                        
-                        // Bottom spacing for FAB
-                        item {
-                            Spacer(modifier = Modifier.height(100.dp))
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showRenameDialog && currentPlaylist != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename Playlist") },
+            text = {
+                TextField(
+                    value = renamePlaylistName,
+                    onValueChange = { renamePlaylistName = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.renamePlaylist(currentPlaylist!!.id, renamePlaylistName)
+                        showRenameDialog = false
+                    },
+                    enabled = renamePlaylistName.isNotBlank()
+                ) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteDialog && currentPlaylist != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Playlist") },
+            text = { Text("Are you sure you want to delete '${currentPlaylist?.title}'? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deletePlaylist(currentPlaylist!!.id)
+                        showDeleteDialog = false
+                        onNavigateBack()
+                    }
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (tracksToAddToPlaylist != null) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = viewModel,
+            onDismiss = { tracksToAddToPlaylist = null },
+            onPlaylistSelected = { playlist ->
+                viewModel.addToPlaylist(tracksToAddToPlaylist!!, playlist)
+                tracksToAddToPlaylist = null
+                isSelectionMode = false
+                selectedTracks = emptySet()
+            }
+        )
+    }
+
+    if (showBulkDeleteConfirmation && currentPlaylist != null) {
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteConfirmation = false },
+            title = { Text("Remove Songs") },
+            text = { Text("Are you sure you want to remove the selected ${selectedTracks.size} songs from this playlist?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBulkDeleteConfirmation = false
+                        if (playlistId == "favorites") {
+                            selectedTracks.forEach { viewModel.toggleFavorite(it) }
+                        } else {
+                            viewModel.removeTracksFromPlaylist(playlistId, selectedTracks.toList())
+                        }
+                        isSelectionMode = false
+                        selectedTracks = emptySet()
+                    }
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -358,8 +578,12 @@ fun PremiumPlaylistItemCard(
     isSelectionMode: Boolean = false,
     onSelectionChange: (Boolean) -> Unit = {},
     onLongClick: () -> Unit = {},
+    onRemoveFromPlaylist: () -> Unit = {},
+    onDownloadForRingtone: () -> Unit = {},
     onClick: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -379,7 +603,6 @@ fun PremiumPlaylistItemCard(
                 modifier = Modifier.padding(end = 12.dp)
             )
         }
-        // Index number
         Text(
             text = index.toString(),
             style = MaterialTheme.typography.bodyMedium,
@@ -387,7 +610,6 @@ fun PremiumPlaylistItemCard(
             modifier = Modifier.width(32.dp)
         )
         
-        // Thumbnail
         AsyncImage(
             model = item.thumbnailUrl,
             contentDescription = null,
@@ -400,7 +622,6 @@ fun PremiumPlaylistItemCard(
         
         Spacer(modifier = Modifier.width(16.dp))
         
-        // Song info
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -421,8 +642,7 @@ fun PremiumPlaylistItemCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        
-        // Duration
+
         if (item.duration > 0) {
             val totalSeconds = item.duration / 1000
             val minutes = totalSeconds / 60
@@ -433,6 +653,31 @@ fun PremiumPlaylistItemCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.padding(start = 8.dp)
             )
+        }
+
+        Box {
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Options")
+            }
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Remove from Playlist") },
+                    onClick = {
+                        showMenu = false
+                        onRemoveFromPlaylist()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Set as Ringtone") },
+                    onClick = {
+                        showMenu = false
+                        onDownloadForRingtone()
+                    }
+                )
+            }
         }
     }
 }

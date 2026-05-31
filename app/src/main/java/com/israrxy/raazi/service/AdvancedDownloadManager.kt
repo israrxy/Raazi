@@ -166,8 +166,21 @@ class AdvancedDownloadManager(
                         return@launch
                     }
 
+                    // Specify range parameter to bypass YouTube throttling
+                    var downloadUrl = audioUrl
+                    if ((downloadUrl.contains("youtube.com") || downloadUrl.contains("googlevideo.com")) && !downloadUrl.contains("&range=")) {
+                        val format = musicDao.getFormat(track.id)
+                        val length = if (format != null && format.contentLength > 0L) {
+                            format.contentLength
+                        } else {
+                            10_000_000L // 10MB default fallback range
+                        }
+                        downloadUrl += "&range=0-$length"
+                        Log.d(TAG, "Bypassing YouTube throttling for ${track.title} with range=0-$length")
+                    }
+
                     // Direct OkHttp download with streaming
-                    streamDownload(track, audioUrl)
+                    streamDownload(track, downloadUrl)
 
                 } finally {
                     downloadSemaphore.release()
@@ -224,6 +237,7 @@ class AdvancedDownloadManager(
                 val contentLength = body.contentLength()
                 var downloaded = 0L
                 var lastProgressUpdate = 0L
+                var lastEmittedProgress = -1
 
                 body.byteStream().use { inputStream ->
                     FileOutputStream(tempFile).use { outputStream ->
@@ -237,14 +251,14 @@ class AdvancedDownloadManager(
                             outputStream.write(buffer, 0, bytesRead)
                             downloaded += bytesRead
 
-                            // Update progress every ~50KB to avoid DB spam
+                            val progress = if (contentLength > 0) {
+                                (downloaded * 100 / contentLength).toInt()
+                            } else 0
                             val now = System.currentTimeMillis()
-                            if (now - lastProgressUpdate > 100 || downloaded == contentLength) {
-                                val progress = if (contentLength > 0) {
-                                    (downloaded * 100 / contentLength).toInt()
-                                } else 0
+                            if (progress > lastEmittedProgress || now - lastProgressUpdate > 500 || downloaded == contentLength) {
                                 musicDao.updateDownloadProgress(track.id, progress, downloaded)
                                 lastProgressUpdate = now
+                                lastEmittedProgress = progress
                             }
                         }
                     }

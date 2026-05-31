@@ -8,6 +8,7 @@ import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
 import com.israrxy.raazi.data.db.PlaybackHistoryEntity
 import com.israrxy.raazi.data.db.RelatedSongEntity
 import com.israrxy.raazi.data.db.SearchHistoryEntity
+import com.israrxy.raazi.data.db.HomeInteractionEntity
 
 @Dao
 interface MusicDao {
@@ -15,6 +16,9 @@ interface MusicDao {
     // Favorites
     @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY timestamp DESC")
     fun getAllTracks(): Flow<List<TrackEntity>>
+
+    @Query("SELECT * FROM tracks WHERE favoriteSyncState != 0 ORDER BY timestamp ASC")
+    fun getPendingFavoriteSyncTracks(): List<TrackEntity>
     
     @Query("SELECT * FROM tracks WHERE id = :id")
     fun getTrack(id: String): TrackEntity?
@@ -25,12 +29,19 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertTrack(track: TrackEntity): Long
 
+    @Query("UPDATE tracks SET favoriteSyncState = :syncState WHERE id = :trackId")
+    fun updateFavoriteSyncState(trackId: String, syncState: Int): Int
+
     @Delete
     fun deleteTrack(track: TrackEntity): Int
 
     // Playlists
     @Query("SELECT * FROM playlists")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM playlists")
+    fun getAllPlaylistsWithTracks(): Flow<List<PlaylistWithTracks>>
 
     @Query("SELECT * FROM saved_collections ORDER BY timestamp DESC")
     fun getSavedCollections(): Flow<List<SavedCollectionEntity>>
@@ -70,6 +81,22 @@ interface MusicDao {
 
     @Query("SELECT MAX(position) FROM playlist_tracks WHERE playlistId = :playlistId")
     fun getMaxPlaylistPosition(playlistId: String): Int?
+
+    // --- Playlist Management: Rename, Reorder, Track Count ---
+
+    @Query("UPDATE playlists SET customTitle = :newTitle WHERE id = :playlistId")
+    fun renamePlaylist(playlistId: String, newTitle: String): Int
+
+    @Query("SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = :playlistId")
+    fun getPlaylistTrackCount(playlistId: String): Int
+
+    @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
+    fun getPlaylistTrackIds(playlistId: String): List<String>
+
+    @Query("UPDATE playlist_tracks SET position = :position WHERE playlistId = :playlistId AND trackId = :trackId")
+    fun updatePlaylistTrackPosition(playlistId: String, trackId: String, position: Int): Int
+
+    // --- End Playlist Management ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaybackHistory(history: PlaybackHistoryEntity): Long
@@ -182,6 +209,19 @@ interface MusicDao {
 
     @Query("SELECT * FROM format WHERE id = :trackId")
     fun getFormatFlow(trackId: String): Flow<FormatEntity?>
+
+    // Home personalization metrics
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertHomeInteraction(interaction: HomeInteractionEntity): Long
+
+    @Query("SELECT * FROM home_interactions WHERE timestamp > :since ORDER BY timestamp DESC")
+    fun getHomeInteractionsSince(since: Long): List<HomeInteractionEntity>
+
+    @Query("SELECT itemId FROM home_interactions WHERE action = :action AND timestamp > :since GROUP BY itemId ORDER BY COUNT(*) DESC")
+    fun getHomeInteractionItemIds(action: String, since: Long): List<String>
+
+    @Query("DELETE FROM home_interactions WHERE timestamp < :before")
+    fun deleteOldHomeInteractions(before: Long): Int
 }
 
 data class PlaylistWithTracks(

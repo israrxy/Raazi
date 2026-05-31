@@ -16,16 +16,27 @@ data class TrackEntity(
     val isLive: Boolean,
     val localPath: String? = null,
     val isFavorite: Boolean = false,
+    val favoriteSyncState: Int = FAVORITE_SYNCED,
     val timestamp: Long = System.currentTimeMillis() // For recently played/added
-)
+) {
+    companion object {
+        const val FAVORITE_SYNCED = 0
+        const val FAVORITE_PENDING_LIKE = 1
+        const val FAVORITE_PENDING_UNLIKE = 2
+    }
+}
 
 @Entity(tableName = "playlists")
 data class PlaylistEntity(
     @PrimaryKey val id: String,
     val title: String,
     val description: String,
-    val thumbnailUrl: String
-)
+    val thumbnailUrl: String,
+    val customTitle: String? = null
+) {
+    /** Returns customTitle if set, otherwise the original title. */
+    val displayTitle: String get() = customTitle ?: title
+}
 
 @Entity(tableName = "saved_collections")
 data class SavedCollectionEntity(
@@ -89,3 +100,30 @@ data class FormatEntity(
     val loudnessDb: Double? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(
+    tableName = "home_interactions",
+    indices = [
+        Index(value = ["itemId"]),
+        Index(value = ["sectionId"]),
+        Index(value = ["timestamp"])
+    ]
+)
+data class HomeInteractionEntity(
+    @PrimaryKey val id: String,
+    val itemId: String,
+    val sectionId: String,
+    val action: String,
+    val sourceType: String,
+    val timestamp: Long = System.currentTimeMillis()
+) {
+    companion object {
+        const val ACTION_PLAY = "play"
+        const val ACTION_OPEN = "open"
+        const val ACTION_DISMISS = "dismiss"
+        const val ACTION_REFRESH = "refresh"
+        const val SOURCE_LOCAL = "local"
+        const val SOURCE_YOUTUBE = "youtube"
+        const val SOURCE_EXPLORE = "explore"
+    }
+}

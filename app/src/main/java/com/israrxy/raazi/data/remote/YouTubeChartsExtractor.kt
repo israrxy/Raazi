@@ -6,6 +6,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.SearchResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,15 +33,15 @@ class YouTubeChartsExtractor {
     private val PL_GLOBAL_TOP_VIDEOS = "VLPL4fGSI1pDJn67l9H4E8v4x99-b1d5L3y"
     private val PL_TRENDING = "FEmusic_trending" // Or FEmusic_explore
     
-    suspend fun getCharts(): Map<String, List<MusicItem>> {
+    suspend fun getCharts(): Map<String, List<MusicItem>> = withContext(Dispatchers.IO) {
         val results = mutableMapOf<String, List<MusicItem>>()
-        
+
         // 1. Try Main Charts Page
         val mainJson = browse("FEmusic_charts")
         if (mainJson != null) {
             results.putAll(parseCharts(mainJson))
         }
-        
+
         // 2. Fallbacks if specific sections are missing
         if (results.keys.none { it.contains("Top songs", true) }) {
              browse(PL_GLOBAL_TOP_SONGS)?.let { json ->
@@ -47,15 +49,15 @@ class YouTubeChartsExtractor {
                  if (items.isNotEmpty()) results["Global Top 100 Songs"] = items
              }
         }
-        
+
         if (results.keys.none { it.contains("Top music videos", true) }) {
              browse(PL_GLOBAL_TOP_VIDEOS)?.let { json ->
                  val items = parsePlaylist(json)
                  if (items.isNotEmpty()) results["Global Top 100 Music Videos"] = items
              }
         }
-        
-        return results
+
+        results
     }
 
     private fun browse(browseId: String): JsonObject? {
@@ -94,12 +96,13 @@ class YouTubeChartsExtractor {
                 }
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val bodyString = response.body?.string()
-                return gson.fromJson(bodyString, JsonObject::class.java)
-            } else {
-                Log.e("ChartsExtractor", "Error: ${response.code}")
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyString = response.body?.string()
+                    return gson.fromJson(bodyString, JsonObject::class.java)
+                } else {
+                    Log.e("ChartsExtractor", "Error: ${response.code}")
+                }
             }
         } catch (e: Exception) {
             Log.e("ChartsExtractor", "Exception", e)

@@ -1,5 +1,6 @@
 package com.israrxy.raazi.ui
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -84,15 +85,25 @@ fun SearchScreen(
     val visibleSections = remember(searchSections) {
         searchSections.filter { it.items.isNotEmpty() }
     }
-    var selectedSectionFilter by remember { mutableStateOf<MusicContentType?>(null) }
-    val filteredSections = remember(visibleSections, selectedSectionFilter) {
-        selectedSectionFilter?.let { selectedType ->
-            visibleSections.filter { it.type == selectedType }
-        } ?: visibleSections
+    var selectedFilter by remember { mutableStateOf("Personalized") }
+    val filteredSections = remember(visibleSections, selectedFilter) {
+        if (selectedFilter == "All" || selectedFilter == "Personalized") {
+            visibleSections
+        } else {
+            visibleSections.filter { it.type.name == selectedFilter }
+        }
     }
     val playableItems = remember(searchItems) {
         searchItems.filter { it.isPlayableSearchItem() }
     }
+    val currentPlayableItems = remember(filteredSections, selectedFilter, playableItems) {
+        if (selectedFilter == "Personalized") {
+            playableItems
+        } else {
+            filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }
+        }
+    }
+    var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
     
     // Update query for suggestions
     LaunchedEffect(searchQuery) {
@@ -107,11 +118,11 @@ fun SearchScreen(
     }
 
     LaunchedEffect(searchQuery, visibleSections) {
-        if (selectedSectionFilter != null && visibleSections.none { it.type == selectedSectionFilter }) {
-            selectedSectionFilter = null
+        if (selectedFilter != "Personalized" && selectedFilter != "All" && visibleSections.none { it.type.name == selectedFilter }) {
+            selectedFilter = "Personalized"
         }
         if (searchViewModel.submittedQuery != searchQuery) {
-            selectedSectionFilter = null
+            selectedFilter = "Personalized"
         }
     }
     
@@ -122,44 +133,84 @@ fun SearchScreen(
             .statusBarsPadding()
     ) {
         // Bulk Actions Bar
-        if (isSelectionMode) {
+        AnimatedVisibility(
+            visible = isSelectionMode,
+            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+        ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                tonalElevation = 4.dp
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                tonalElevation = 6.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { 
-                        isSelectionMode = false
-                        selectedTracks = emptySet()
-                    }) {
-                        Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
+                    val allPlayableSelected = currentPlayableItems.isNotEmpty() && currentPlayableItems.all { selectedTracks.contains(it) }
+                    Checkbox(
+                        checked = allPlayableSelected,
+                        onCheckedChange = { checkAll ->
+                            if (checkAll) {
+                                selectedTracks = selectedTracks + currentPlayableItems
+                            } else {
+                                selectedTracks = selectedTracks - currentPlayableItems.toSet()
+                            }
+                        },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            uncheckedColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         "${selectedTracks.size} selected",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { 
+                    IconButton(onClick = {
+                        if (selectedTracks.isNotEmpty()) {
+                            val list = selectedTracks.toList()
+                            playerViewModel.playPlaylist(list, 0)
+                            isSelectionMode = false
+                            selectedTracks = emptySet()
+                            onNavigateToPlayer()
+                        }
+                    }) {
+                        Icon(Icons.Default.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    IconButton(onClick = {
+                        if (selectedTracks.isNotEmpty()) {
+                            playerViewModel.addToQueue(selectedTracks.toList())
+                            isSelectionMode = false
+                            selectedTracks = emptySet()
+                        }
+                    }) {
+                        Icon(Icons.Default.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    IconButton(onClick = {
+                        if (selectedTracks.isNotEmpty()) {
+                            tracksToAddToPlaylist = selectedTracks.toList()
+                        }
+                    }) {
+                        Icon(Icons.Default.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    IconButton(onClick = {
                         selectedTracks.forEach { playerViewModel.downloadTrack(it) }
                         isSelectionMode = false
                         selectedTracks = emptySet()
                     }) {
-                        Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
-                    IconButton(onClick = { 
-                        if (selectedTracks.isNotEmpty()) {
-                            showAddToPlaylistItem = selectedTracks.first()
-                        }
+                    IconButton(onClick = {
+                        isSelectionMode = false
+                        selectedTracks = emptySet()
                     }) {
-                        Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
@@ -255,27 +306,15 @@ fun SearchScreen(
                         item {
                             SearchResultsHeader(
                                 query = searchQuery,
-                                sections = visibleSections,
-                                selectedType = selectedSectionFilter,
-                                onSelectType = { selectedType ->
-                                    selectedSectionFilter = selectedType
-                                }
+                                selectedFilter = selectedFilter,
+                                onSelectFilter = { selectedFilter = it },
+                                sections = visibleSections
                             )
                         }
 
-                        filteredSections.forEach { section ->
-                            item(key = "header_${section.type.name}") {
-                                SearchSectionHeader(
-                                    title = section.title,
-                                    count = section.items.size,
-                                    subtitle = section.subtitle
-                                )
-                            }
-
-                            items(section.items, key = { item -> "${section.type.name}_${item.id}" }) { musicItem ->
-                                val isArtist = musicItem.isArtistResult()
+                        if (selectedFilter == "Personalized") {
+                            items(playableItems, key = { item -> "personalized_${item.id}" }) { musicItem ->
                                 val isPlayable = musicItem.isPlayableSearchItem()
-                                val canOpenArtist = !isArtist && musicItem.artistId != null
                                 val isLiked = favoriteTracks.any { it.id == musicItem.id }
                                 val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
                                 val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
@@ -301,16 +340,10 @@ fun SearchScreen(
                                         }
                                     },
                                     onClick = {
-                                        when {
-                                            musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
-                                            isArtist && musicItem.artistId != null -> onNavigateToArtist(musicItem.artistId!!, musicItem.title)
-                                            else -> {
-                                                val playableIndex = playableItems.indexOf(musicItem)
-                                                if (playableIndex != -1) {
-                                                    playerViewModel.playPlaylist(playableItems, playableIndex)
-                                                    onNavigateToPlayer()
-                                                }
-                                            }
+                                        val playableIndex = playableItems.indexOf(musicItem)
+                                        if (playableIndex != -1) {
+                                            playerViewModel.playPlaylist(playableItems, playableIndex)
+                                            onNavigateToPlayer()
                                         }
                                     },
                                     onAddToPlaylist = { showAddToPlaylistItem = musicItem },
@@ -327,11 +360,83 @@ fun SearchScreen(
                                     onLike = { playerViewModel.toggleFavorite(musicItem) },
                                     onSave = { playerViewModel.toggleSavedCollection(musicItem) },
                                     showAddToPlaylist = isPlayable,
-                                    showGoToArtist = canOpenArtist,
+                                    showGoToArtist = !musicItem.isArtistResult() && musicItem.artistId != null,
                                     showDownload = isPlayable,
                                     showLike = isPlayable,
                                     showSave = musicItem.toSavedCollectionItemOrNull() != null
                                 )
+                            }
+                        } else {
+                            filteredSections.forEach { section ->
+                                item(key = "header_${section.type.name}") {
+                                    SearchSectionHeader(
+                                        title = section.title,
+                                        count = section.items.size,
+                                        subtitle = section.subtitle
+                                    )
+                                }
+
+                                items(section.items, key = { item -> "${section.type.name}_${item.id}" }) { musicItem ->
+                                    val isArtist = musicItem.isArtistResult()
+                                    val isPlayable = musicItem.isPlayableSearchItem()
+                                    val canOpenArtist = !isArtist && musicItem.artistId != null
+                                    val isLiked = favoriteTracks.any { it.id == musicItem.id }
+                                    val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
+                                    val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
+
+                                    com.israrxy.raazi.ui.components.SongListItem(
+                                        song = musicItem,
+                                        isLiked = isLiked,
+                                        isSaved = isSaved,
+                                        isSelected = selectedTracks.contains(musicItem),
+                                        isSelectionMode = isSelectionMode,
+                                        selectionEnabled = isPlayable,
+                                        onSelectionChange = { selected ->
+                                            if (selected) {
+                                                selectedTracks = selectedTracks + musicItem
+                                            } else {
+                                                selectedTracks = selectedTracks - musicItem
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (isPlayable) {
+                                                isSelectionMode = true
+                                                selectedTracks = selectedTracks + musicItem
+                                            }
+                                        },
+                                        onClick = {
+                                            when {
+                                                musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
+                                                isArtist && musicItem.artistId != null -> onNavigateToArtist(musicItem.artistId!!, musicItem.title)
+                                                else -> {
+                                                    val playableIndex = playableItems.indexOf(musicItem)
+                                                    if (playableIndex != -1) {
+                                                        playerViewModel.playPlaylist(playableItems, playableIndex)
+                                                        onNavigateToPlayer()
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                                        onGoToArtist = {
+                                            if (musicItem.artistId != null) {
+                                                onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
+                                            }
+                                        },
+                                        onDownload = {
+                                            if (isPlayable) {
+                                                playerViewModel.downloadTrack(musicItem)
+                                            }
+                                        },
+                                        onLike = { playerViewModel.toggleFavorite(musicItem) },
+                                        onSave = { playerViewModel.toggleSavedCollection(musicItem) },
+                                        showAddToPlaylist = isPlayable,
+                                        showGoToArtist = canOpenArtist,
+                                        showDownload = isPlayable,
+                                        showLike = isPlayable,
+                                        showSave = musicItem.toSavedCollectionItemOrNull() != null
+                                    )
+                                }
                             }
                         }
                     }
@@ -404,8 +509,21 @@ fun SearchScreen(
             viewModel = playerViewModel,
             onDismiss = { showAddToPlaylistItem = null },
             onPlaylistSelected = { playlist ->
-                // Assuming addToPlaylist exists in viewModel and takes MusicItem, PlaylistEntity
                 playerViewModel.addToPlaylist(showAddToPlaylistItem!!, playlist)
+                showAddToPlaylistItem = null
+            }
+        )
+    }
+
+    if (tracksToAddToPlaylist != null) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = playerViewModel,
+            onDismiss = { tracksToAddToPlaylist = null },
+            onPlaylistSelected = { playlist ->
+                playerViewModel.addToPlaylist(tracksToAddToPlaylist!!, playlist)
+                tracksToAddToPlaylist = null
+                isSelectionMode = false
+                selectedTracks = emptySet()
             }
         )
     }
@@ -470,9 +588,9 @@ private fun MusicItem.isPlayableSearchItem(): Boolean {
 @Composable
 private fun SearchResultsHeader(
     query: String,
-    sections: List<SearchSectionUiModel>,
-    selectedType: MusicContentType?,
-    onSelectType: (MusicContentType?) -> Unit
+    selectedFilter: String,
+    onSelectFilter: (String) -> Unit,
+    sections: List<SearchSectionUiModel>
 ) {
     Column(
         modifier = Modifier
@@ -493,16 +611,21 @@ private fun SearchResultsHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(
-                selected = selectedType == null,
-                onClick = { onSelectType(null) },
+                selected = selectedFilter == "Personalized",
+                onClick = { onSelectFilter("Personalized") },
+                label = { Text("Personalized") }
+            )
+            FilterChip(
+                selected = selectedFilter == "All",
+                onClick = { onSelectFilter("All") },
                 label = { Text("All (${sections.sumOf { it.items.size }})") }
             )
             sections.forEach { section ->
                 FilterChip(
-                    selected = selectedType == section.type,
+                    selected = selectedFilter == section.type.name,
                     onClick = {
-                        onSelectType(
-                            if (selectedType == section.type) null else section.type
+                        onSelectFilter(
+                            if (selectedFilter == section.type.name) "Personalized" else section.type.name
                         )
                     },
                     label = { Text("${section.title} (${section.items.size})") }

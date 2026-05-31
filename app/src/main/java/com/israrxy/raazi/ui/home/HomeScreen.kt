@@ -7,7 +7,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,8 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.ui.theme.*
+import com.israrxy.raazi.viewmodel.HomeFeedItem
+import com.israrxy.raazi.viewmodel.HomeSection
+import com.israrxy.raazi.viewmodel.HomeSectionType
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.data.db.PlaylistEntity
 import java.util.Calendar
@@ -40,19 +47,14 @@ fun HomeScreen(
     onNavigateToPlaylist: (String) -> Unit,
     onNavigateToArtist: (String, String) -> Unit
 ) {
+    val homeFeedState by viewModel.homeFeedState.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
-    val quickPicks by viewModel.quickPicks.collectAsState()
-    val keepListening by viewModel.keepListening.collectAsState()
-    val similarRecommendations by viewModel.similarRecommendations.collectAsState()
-    val explorePage by viewModel.explorePage.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (isLoading && homePage == null && quickPicks.isEmpty()) {
-            // Modern shimmer loading state
+        if (homeFeedState.isLoading) {
             androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
@@ -71,208 +73,74 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // Greeting Section
-                item {
-                    GreetingSection()
-                }
-                
-                // Keep Listening Section - NOW ON TOP!
-                if (keepListening.isNotEmpty()) {
-                    item {
-                        SectionTitle(text = "Keep Listening")
-                    }
-                    
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            itemsIndexed(keepListening) { index, track ->
-                                MusicCard(
-                                    musicItem = track,
-                                    viewModel = viewModel,
-                                    onNavigateToPlayer = onNavigateToPlayer,
-                                    onClick = { viewModel.playFromKeepListening(index) }
-                                )
-                            }
+                homeFeedState.sections.forEach { section ->
+                    when (section.type) {
+                        HomeSectionType.STATUS -> item {
+                            HomeStatusHeader(
+                                isRefreshing = homeFeedState.isRefreshing,
+                                onRefresh = { viewModel.refreshHomeSection(section.id) }
+                            )
+                        }
+
+                        HomeSectionType.KEEP_LISTENING -> item {
+                            HomeSectionHeader(section = section, onAction = { viewModel.refreshHomeSection(section.id) })
+                            KeepListeningPanel(
+                                items = section.musicItems(),
+                                viewModel = viewModel,
+                                onNavigateToPlayer = onNavigateToPlayer,
+                                sectionId = section.id,
+                                sourceType = section.sourceType
+                            )
+                        }
+
+                        HomeSectionType.QUICK_PICKS -> item {
+                            HomeSectionHeader(section = section, onAction = { viewModel.refreshHomeSection(section.id) })
+                            QuickPicksPanel(
+                                items = section.musicItems(),
+                                viewModel = viewModel,
+                                onNavigateToPlayer = onNavigateToPlayer,
+                                sectionId = section.id,
+                                sourceType = section.sourceType
+                            )
+                        }
+
+                        HomeSectionType.FORGOTTEN_FAVORITES -> item {
+                            HomeSectionHeader(section = section)
+                            HomeMusicRail(
+                                section = section,
+                                viewModel = viewModel,
+                                onNavigateToPlayer = onNavigateToPlayer
+                            )
+                        }
+
+                        HomeSectionType.MOODS -> item {
+                            HomeSectionHeader(section = section)
+                            MoodRail(section = section, viewModel = viewModel)
+                        }
+
+                        HomeSectionType.MOOD_PLAYLISTS -> item {
+                            HomeSectionHeader(section = section)
+                            MoodPlaylistRail(
+                                section = section,
+                                onNavigateToPlaylist = onNavigateToPlaylist
+                            )
+                        }
+
+                        HomeSectionType.RECOMMENDATION,
+                        HomeSectionType.NEW_RELEASES,
+                        HomeSectionType.YOUTUBE_RAIL -> item {
+                            HomeSectionHeader(section = section)
+                            HomeFeedRail(
+                                section = section,
+                                viewModel = viewModel,
+                                onNavigateToPlayer = onNavigateToPlayer,
+                                onNavigateToPlaylist = onNavigateToPlaylist,
+                                onNavigateToArtist = onNavigateToArtist
+                            )
                         }
                     }
                 }
                 
-                // Quick Picks Section - Compact Numbered List
-                if (quickPicks.isNotEmpty()) {
-                    item {
-                        SectionTitle(text = "Quick Picks")
-                    }
-                    
-                    items(quickPicks.take(10).size) { index ->
-                        val track = quickPicks[index]
-                        QuickPickListItem(
-                            number = index + 1,
-                            musicItem = track,
-                            viewModel = viewModel,
-                            onNavigateToPlayer = onNavigateToPlayer
-                        )
-                    }
-                }
-                
-                // Similar Recommendations (3-5 personalized sections!)
-                similarRecommendations.forEach { recommendation ->
-                    item {
-                        SectionTitle(text = recommendation.title)
-                    }
-                    
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(recommendation.items) { recItem ->
-                                when (recItem) {
-                                    is MusicPlayerViewModel.RecommendationItem.FromYTItem -> {
-                                        when (val ytItem = recItem.ytItem) {
-                                            is com.zionhuang.innertube.models.SongItem -> {
-                                                YouTubeSongCard(
-                                                    songItem = ytItem,
-                                                    viewModel = viewModel,
-                                                    onNavigateToPlayer = onNavigateToPlayer
-                                                )
-                                            }
-                                            is com.zionhuang.innertube.models.AlbumItem -> {
-                                                YouTubeAlbumCard(
-                                                    albumItem = ytItem,
-                                                    onNavigateToPlaylist = onNavigateToPlaylist
-                                                )
-                                            }
-                                            is com.zionhuang.innertube.models.ArtistItem -> {
-                                                YouTubeArtistCard(
-                                                    artistItem = ytItem,
-                                                    onNavigateToArtist = onNavigateToArtist
-                                                )
-                                            }
-                                            is com.zionhuang.innertube.models.PlaylistItem -> {
-                                                YouTubePlaylistCard(
-                                                    playlistItem = ytItem,
-                                                    onNavigateToPlaylist = onNavigateToPlaylist
-                                                )
-                                            }
-                                            else -> { /* Unsupported YTItem type */ }
-                                        }
-                                    }
-                                    is MusicPlayerViewModel.RecommendationItem.FromMusicItem -> {
-                                        MusicCard(
-                                            musicItem = recItem.musicItem,
-                                            viewModel = viewModel,
-                                            onNavigateToPlayer = onNavigateToPlayer
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Explore Page Sections (New Releases, etc.)
-                explorePage?.let { explore ->
-                    explore.newReleaseAlbums.takeIf { it.isNotEmpty() }?.let { albums ->
-                        item {
-                            SectionTitle(text = "New Releases")
-                        }
-                        
-                        item {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(albums) { album ->
-                                    YouTubeAlbumCard(
-                                        albumItem = album,
-                                        onNavigateToPlaylist = onNavigateToPlaylist
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    
-                    explore.moodAndGenres.takeIf { it.isNotEmpty() }?.let { moods ->
-                        item {
-                            SectionTitle(text = "Moods & Genres")
-                        }
-                        
-                        item {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(moods) { mood ->
-                                    Box(
-                                        modifier = Modifier
-                                            .width(160.dp)
-                                            .height(160.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .clickable { onNavigateToPlaylist(mood.endpoint.browseId ?: "") },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = mood.title,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // YouTube HomePage Sections (EXACTLY like OuterTune)
-                homePage?.sections?.forEach { section ->
-                    item {
-                        SectionTitle(text = section.title)
-                    }
-                    
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(section.items) { ytItem ->
-                                when (ytItem) {
-                                    is com.zionhuang.innertube.models.SongItem -> {
-                                        YouTubeSongCard(
-                                            songItem = ytItem,
-                                            viewModel = viewModel,
-                                            onNavigateToPlayer = onNavigateToPlayer
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.AlbumItem -> {
-                                        YouTubeAlbumCard(
-                                            albumItem = ytItem,
-                                            onNavigateToPlaylist = onNavigateToPlaylist
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.ArtistItem -> {
-                                        YouTubeArtistCard(
-                                            artistItem = ytItem,
-                                            onNavigateToArtist = onNavigateToArtist
-                                        )
-                                    }
-                                    is com.zionhuang.innertube.models.PlaylistItem -> {
-                                        YouTubePlaylistCard(
-                                            playlistItem = ytItem,
-                                            onNavigateToPlaylist = onNavigateToPlaylist
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Pagination: Load More trigger
                 if (homePage?.continuation != null && !isLoadingMore) {
                     item {
                         LaunchedEffect(Unit) {
@@ -280,8 +148,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                
-                // Loading More Indicator
+
                 if (isLoadingMore) {
                     item {
                         Box(
@@ -312,84 +179,390 @@ fun HomeScreen(
 }
 
 @Composable
-fun GreetingSection() {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+fun HomeStatusHeader(
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit
+) {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = when (hour) {
-        in 0..11 -> "Good Morning"
+        in 0..5 -> "Good Night"
+        in 6..11 -> "Good Morning"
         in 12..16 -> "Good Afternoon"
         in 17..20 -> "Good Evening"
         else -> "Good Night"
     }
-
     val context = androidx.compose.ui.platform.LocalContext.current
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Branding Header (Centered Pill)
+        // Branding pill — top left
         Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                .clickable {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://israrxy.qzz.io")
+                    )
+                    context.startActivity(intent)
+                }
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f)) // Lighter "glass" white
-                    .clickable {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://israrxy.qzz.io"))
-                        context.startActivity(intent)
-                    }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 androidx.compose.foundation.Image(
                     painter = androidx.compose.ui.res.painterResource(id = com.israrxy.raazi.R.drawable.raazi_logo),
                     contentDescription = null,
                     modifier = Modifier
-                        .size(24.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape),
+                        .size(20.dp)
+                        .clip(CircleShape),
                     contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-
                 Text(
                     text = "Raazi",
-                    style = MaterialTheme.typography.titleMedium, // Slightly smaller for pill
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "by Israr Ahamed",
+                    text = "@israrxy",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 2.dp) // Align visually
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(12.dp))
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Greeting
         Text(
             text = greeting,
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f) // Slightly softer than branding
+            color = MaterialTheme.colorScheme.onBackground
         )
-        
+    }
+}
+
+@Composable
+fun HomeSectionHeader(
+    section: HomeSection,
+    onAction: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
-            text = "Welcome Back",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            text = section.title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
-        
-        Spacer(modifier = Modifier.height(24.dp))
+        if (section.actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) {
+                Text(section.actionLabel)
+            }
+        }
+    }
+}
+
+private fun HomeSection.musicItems(): List<MusicItem> =
+    items.mapNotNull { (it as? HomeFeedItem.Music)?.item }
+
+private fun HomeFeedItem.stableId(): String = when (this) {
+    is HomeFeedItem.Music -> item.id
+    is HomeFeedItem.PlaylistResult -> playlist.id
+    is HomeFeedItem.Mood -> title
+    is HomeFeedItem.YouTube -> when (item) {
+        is com.zionhuang.innertube.models.SongItem -> item.id
+        is com.zionhuang.innertube.models.AlbumItem -> item.id
+        is com.zionhuang.innertube.models.ArtistItem -> item.id
+        is com.zionhuang.innertube.models.PlaylistItem -> item.id
+        else -> item.hashCode().toString()
+    }
+}
+
+@Composable
+fun HomeMusicRail(
+    section: HomeSection,
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlayer: () -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(section.musicItems()) { musicItem ->
+            MusicCard(
+                musicItem = musicItem,
+                viewModel = viewModel,
+                onNavigateToPlayer = onNavigateToPlayer,
+                onClick = {
+                    viewModel.recordHomeInteraction(
+                        itemId = musicItem.id,
+                        sectionId = section.id,
+                        action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                        sourceType = section.sourceType
+                    )
+                    viewModel.playMusic(musicItem)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeFeedRail(
+    section: HomeSection,
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlayer: () -> Unit,
+    onNavigateToPlaylist: (String) -> Unit,
+    onNavigateToArtist: (String, String) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(section.items) { item ->
+            HomeFeedItemCard(
+                item = item,
+                section = section,
+                viewModel = viewModel,
+                onNavigateToPlayer = onNavigateToPlayer,
+                onNavigateToPlaylist = onNavigateToPlaylist,
+                onNavigateToArtist = onNavigateToArtist
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeFeedItemCard(
+    item: HomeFeedItem,
+    section: HomeSection,
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlayer: () -> Unit,
+    onNavigateToPlaylist: (String) -> Unit,
+    onNavigateToArtist: (String, String) -> Unit
+) {
+    when (item) {
+        is HomeFeedItem.Music -> MusicCard(
+            musicItem = item.item,
+            viewModel = viewModel,
+            onNavigateToPlayer = onNavigateToPlayer,
+            onClick = {
+                viewModel.recordHomeInteraction(
+                    itemId = item.item.id,
+                    sectionId = section.id,
+                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                    sourceType = section.sourceType
+                )
+                viewModel.playMusic(item.item)
+            }
+        )
+        is HomeFeedItem.YouTube -> YouTubeFeedCard(
+            ytItem = item.item,
+            onClick = {
+                viewModel.recordHomeInteraction(
+                    itemId = item.stableId(),
+                    sectionId = section.id,
+                    action = if (item.item is com.zionhuang.innertube.models.SongItem) {
+                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY
+                    } else {
+                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN
+                    },
+                    sourceType = section.sourceType
+                )
+                when (val ytItem = item.item) {
+                    is com.zionhuang.innertube.models.SongItem -> {
+                        viewModel.playMusic(ytItem.toHomeMusicItem())
+                        onNavigateToPlayer()
+                    }
+                    is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.id)
+                    is com.zionhuang.innertube.models.PlaylistItem -> onNavigateToPlaylist(ytItem.id)
+                    is com.zionhuang.innertube.models.ArtistItem -> onNavigateToArtist(ytItem.id, ytItem.title)
+                }
+            }
+        )
+        is HomeFeedItem.PlaylistResult -> MoodPlaylistCard(
+            playlist = item.playlist,
+            onNavigateToPlaylist = {
+                viewModel.recordHomeInteraction(
+                    itemId = item.playlist.id,
+                    sectionId = section.id,
+                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN,
+                    sourceType = section.sourceType
+                )
+                onNavigateToPlaylist(it)
+            }
+        )
+        is HomeFeedItem.Mood -> Unit
+    }
+}
+
+@Composable
+fun YouTubeFeedCard(
+    ytItem: com.zionhuang.innertube.models.YTItem,
+    onClick: () -> Unit
+) {
+    val title = when (ytItem) {
+        is com.zionhuang.innertube.models.SongItem -> ytItem.title
+        is com.zionhuang.innertube.models.AlbumItem -> ytItem.title
+        is com.zionhuang.innertube.models.ArtistItem -> ytItem.title
+        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.title
+        else -> ""
+    }
+    val subtitle = when (ytItem) {
+        is com.zionhuang.innertube.models.SongItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Song"
+        is com.zionhuang.innertube.models.AlbumItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Album"
+        is com.zionhuang.innertube.models.ArtistItem -> "Artist"
+        is com.zionhuang.innertube.models.PlaylistItem -> "Playlist"
+        else -> ""
+    }
+    val thumbnail = when (ytItem) {
+        is com.zionhuang.innertube.models.SongItem -> ytItem.thumbnail
+        is com.zionhuang.innertube.models.AlbumItem -> ytItem.thumbnail
+        is com.zionhuang.innertube.models.ArtistItem -> ytItem.thumbnail
+        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.thumbnail
+        else -> null
+    }
+
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
+            contentDescription = null,
+            modifier = Modifier
+                .size(160.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun com.zionhuang.innertube.models.SongItem.toHomeMusicItem(): MusicItem {
+    return MusicItem(
+        id = id,
+        title = title,
+        artist = artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
+        duration = (duration ?: 0) * 1000L,
+        thumbnailUrl = thumbnail,
+        audioUrl = "",
+        videoUrl = id,
+        isLive = false
+    )
+}
+
+@Composable
+fun MoodRail(
+    section: HomeSection,
+    viewModel: MusicPlayerViewModel
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(section.items.filterIsInstance<HomeFeedItem.Mood>()) { mood ->
+            Box(
+                modifier = Modifier
+                    .width(150.dp)
+                    .height(96.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable {
+                        viewModel.recordHomeInteraction(
+                            itemId = mood.title,
+                            sectionId = section.id,
+                            action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN,
+                            sourceType = section.sourceType
+                        )
+                        viewModel.onChipSelected(mood.title)
+                    }
+                    .padding(12.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = mood.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MoodPlaylistRail(
+    section: HomeSection,
+    onNavigateToPlaylist: (String) -> Unit
+) {
+    when {
+        section.isLoading -> Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+        section.items.isEmpty() -> Text(
+            text = "No playlists found",
+            modifier = Modifier.padding(horizontal = 16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        else -> LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(section.items.filterIsInstance<HomeFeedItem.PlaylistResult>()) { item ->
+                MoodPlaylistCard(
+                    playlist = item.playlist,
+                    onNavigateToPlaylist = onNavigateToPlaylist
+                )
+            }
+        }
     }
 }
 
@@ -402,6 +575,211 @@ fun SectionTitle(text: String) {
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(horizontal = 16.dp)
     )
+}
+
+@Composable
+fun KeepListeningPanel(
+    items: List<MusicItem>,
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlayer: () -> Unit,
+    sectionId: String = "keep_listening",
+    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL
+) {
+    if (items.isEmpty()) return
+
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        KeepListeningResumeItem(
+            musicItem = items.first(),
+            onClick = {
+                viewModel.recordHomeInteraction(
+                    itemId = items.first().id,
+                    sectionId = sectionId,
+                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                    sourceType = sourceType
+                )
+                viewModel.playMusic(items.first())
+                onNavigateToPlayer()
+            }
+        )
+
+        if (items.size > 1) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(items.drop(1)) { index, track ->
+                    KeepListeningRecentItem(
+                        musicItem = track,
+                        onClick = {
+                            viewModel.recordHomeInteraction(
+                                itemId = track.id,
+                                sectionId = sectionId,
+                                action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                                sourceType = sourceType
+                            )
+                            viewModel.playMusic(track)
+                            onNavigateToPlayer()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KeepListeningResumeItem(
+    musicItem: MusicItem,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(104.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AsyncImage(
+                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(84.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Resume",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = musicItem.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = listOf(musicItem.artist, formatTrackDuration(musicItem.duration))
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                shadowElevation = 2.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(27.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KeepListeningRecentItem(
+    musicItem: MusicItem,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(244.dp)
+            .height(70.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            AsyncImage(
+                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = musicItem.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = musicItem.artist,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = "Play",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+private fun formatTrackDuration(durationMs: Long): String {
+    if (durationMs <= 0L) return ""
+    val totalSeconds = durationMs / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 @Composable
@@ -423,69 +801,200 @@ fun FilterChipButton(
 }
 
 @Composable
-fun QuickPickListItem(
-    number: Int,
-    musicItem: MusicItem,
+fun QuickPicksPanel(
+    items: List<MusicItem>,
     viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit
+    onNavigateToPlayer: () -> Unit,
+    sectionId: String = "quick_picks",
+    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                // Play as playlist starting from this index
-                // Since 'number' is 1-based index passed from caller (index + 1), we need original 0-based index.
-                // But wait, the caller passes 'index + 1' as number.
-                // We don't have the original index here easily unless we infer from number?
-                // Actually, let's just pass the index to this composable or subtract 1.
-                // The caller in HomeScreen is: items(quickPicks.take(10).size) { index -> ... number = index + 1 }
-                // So index = number - 1.
-                viewModel.playFromQuickPicks(number - 1)
+    if (items.isEmpty()) return
+
+    val featuredTrack = items.first()
+    val compactTracks = items.drop(1)
+
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        QuickPickFeaturedItem(
+            musicItem = featuredTrack,
+            onClick = {
+                viewModel.recordHomeInteraction(
+                    itemId = featuredTrack.id,
+                    sectionId = sectionId,
+                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                    sourceType = sourceType
+                )
+                viewModel.playMusic(featuredTrack)
                 onNavigateToPlayer()
             }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        )
+
+        compactTracks.chunked(2).forEachIndexed { rowIndex, rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                rowItems.forEachIndexed { columnIndex, track ->
+                    val quickPickIndex = 1 + rowIndex * 2 + columnIndex
+                    QuickPickTile(
+                        number = quickPickIndex + 1,
+                        musicItem = track,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            viewModel.recordHomeInteraction(
+                                itemId = track.id,
+                                sectionId = sectionId,
+                                action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
+                                sourceType = sourceType
+                            )
+                            viewModel.playMusic(track)
+                            onNavigateToPlayer()
+                        }
+                    )
+                }
+
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickPickFeaturedItem(
+    musicItem: MusicItem,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+        tonalElevation = 2.dp
     ) {
-        // Number
-        Text(
-            text = "$number",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.width(24.dp)
-        )
-        
-        // Small Album Art
-        AsyncImage(
-            model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-            contentDescription = null,
+        Row(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        
-        // Track Info
-        Column(
-            modifier = Modifier.weight(1f)
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = musicItem.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            AsyncImage(
+                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(92.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
             )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = musicItem.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = musicItem.artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                shadowElevation = 2.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickPickTile(
+    number: Int,
+    musicItem: MusicItem,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .height(72.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AsyncImage(
+                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = musicItem.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = musicItem.artist,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
             Text(
-                text = musicItem.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                text = number.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+                modifier = Modifier.width(18.dp)
             )
         }
     }
@@ -545,20 +1054,22 @@ fun YouTubeSongCard(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit
 ) {
+    val musicItem = remember(songItem) {
+        MusicItem(
+            id = songItem.id,
+            title = songItem.title,
+            artist = songItem.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
+            duration = (songItem.duration ?: 0) * 1000L,
+            thumbnailUrl = songItem.thumbnail,
+            audioUrl = "",
+            videoUrl = songItem.id,
+            isLive = false
+        )
+    }
     Column(
         modifier = Modifier
             .width(160.dp)
             .clickable {
-                val musicItem = MusicItem(
-                    id = songItem.id,
-                    title = songItem.title,
-                    artist = songItem.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
-                    duration = (songItem.duration ?: 0) * 1000L,
-                    thumbnailUrl = songItem.thumbnail,
-                    audioUrl = "",
-                    videoUrl = songItem.id,
-                    isLive = false
-                )
                 viewModel.playMusic(musicItem)
                 onNavigateToPlayer()
             }
@@ -595,7 +1106,9 @@ fun YouTubeSongCard(
 @Composable
 fun YouTubeAlbumCard(
     albumItem: com.zionhuang.innertube.models.AlbumItem,
-    onNavigateToPlaylist: (String) -> Unit
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlaylist: (String) -> Unit,
+    onNavigateToPlayer: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -677,7 +1190,9 @@ fun YouTubeArtistCard(
 @Composable
 fun YouTubePlaylistCard(
     playlistItem: com.zionhuang.innertube.models.PlaylistItem,
-    onNavigateToPlaylist: (String) -> Unit
+    viewModel: MusicPlayerViewModel,
+    onNavigateToPlaylist: (String) -> Unit,
+    onNavigateToPlayer: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -715,4 +1230,40 @@ fun YouTubePlaylistCard(
     }
 }
 
-
+@Composable
+fun MoodPlaylistCard(
+    playlist: Playlist,
+    onNavigateToPlaylist: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .clickable { onNavigateToPlaylist(playlist.id) }
+    ) {
+        AsyncImage(
+            model = playlist.thumbnailUrl,
+            contentDescription = null,
+            modifier = Modifier
+                .size(160.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = playlist.title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = playlist.description.ifBlank { "Playlist" },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}

@@ -15,8 +15,8 @@ android {
         applicationId = "com.israrxy.raazi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "3.1.1"
+        versionCode = 5
+        versionName = "4.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,6 +31,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -90,20 +91,27 @@ dependencies {
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    // Note: KSP plugin needed for Room compiler
-    // implementation("androidx.room:room-compiler:2.6.1") // This usually goes in ksp()
-
+    
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Extended Icons
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 
+    // Google AI Client SDK (Gemini)
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    
+    // Android Credential Manager
+    implementation("androidx.credentials:credentials:1.2.2")
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     // Palette API for dynamic colors
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Legacy Media for NotificationCompat.MediaStyle
     implementation("androidx.media:media:1.7.0")
+    coreLibraryDesugaring(libs.desugaring)
     
     ksp("androidx.room:room-compiler:2.6.1")
 

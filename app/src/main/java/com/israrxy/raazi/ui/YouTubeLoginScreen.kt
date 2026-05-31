@@ -60,6 +60,7 @@ fun YouTubeLoginScreen(
         mutableStateOf("Sign in to YouTube Music to sync likes and playlists into Raazi.")
     }
     var isFinalizing by remember { mutableStateOf(false) }
+    var isWebViewLoading by remember { mutableStateOf(true) }
     var hasCapturedSession by remember { mutableStateOf(false) }
 
     LaunchedEffect(innerTubeCookie, visitorData, dataSyncId, hasCapturedSession) {
@@ -149,7 +150,7 @@ fun YouTubeLoginScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            if (isFinalizing) {
+            if (isWebViewLoading || isFinalizing) {
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,7 +165,13 @@ fun YouTubeLoginScreen(
                 factory = { viewContext ->
                     WebView(viewContext).apply {
                         webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                super.onPageStarted(view, url, favicon)
+                                isWebViewLoading = true
+                            }
+
                             override fun onPageFinished(view: WebView, url: String?) {
+                                isWebViewLoading = false
                                 loadUrl("javascript:Android.onVisitorData(window.yt?.config_?.VISITOR_DATA)")
                                 loadUrl("javascript:Android.onDataSyncId(window.yt?.config_?.DATASYNC_ID)")
 

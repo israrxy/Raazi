@@ -41,15 +41,20 @@ fun SongListItem(
     onAddToPlaylist: () -> Unit = {},
     onGoToArtist: () -> Unit = {},
     onDownload: () -> Unit = {},
+    onDownloadForRingtone: () -> Unit = {},
     showAddToPlaylist: Boolean = true,
     showGoToArtist: Boolean = true,
     showDownload: Boolean = true,
+    showRingtone: Boolean = false,
     showLike: Boolean = true,
     showSave: Boolean = false,
-    isSaved: Boolean = false
+    isSaved: Boolean = false,
+    previewPlaying: Boolean = false,
+    previewLoading: Boolean = false,
+    onPreviewToggle: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showLike || showSave
+    val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showRingtone || showLike || showSave || selectionEnabled
 
     Row(
         modifier = modifier
@@ -76,15 +81,17 @@ fun SongListItem(
                 modifier = Modifier.padding(end = 12.dp)
             )
         }
-        AsyncImage(
-            model = ThumbnailUtils.getListThumbnail(song.thumbnailUrl),
-            contentDescription = null,
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
+        Box(modifier = Modifier.size(56.dp)) {
+            AsyncImage(
+                model = ThumbnailUtils.getListThumbnail(song.thumbnailUrl),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+        }
         
         Spacer(modifier = Modifier.width(12.dp))
         
@@ -124,6 +131,36 @@ fun SongListItem(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(MaterialTheme.colorScheme.surface)
                 ) {
+                    if (selectionEnabled) {
+                        DropdownMenuItem(
+                            text = { 
+                                Text(
+                                    text = if (previewPlaying) "Pause Preview" else "Preview Song", 
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ) 
+                            },
+                            onClick = {
+                                showMenu = false
+                                onPreviewToggle()
+                            },
+                            leadingIcon = {
+                                if (previewLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = if (previewPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                        contentDescription = null,
+                                        tint = if (previewPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        )
+                    }
+
                     if (showAddToPlaylist) {
                         DropdownMenuItem(
                             text = { Text("Add to Playlist", color = MaterialTheme.colorScheme.onSurface) },
@@ -154,6 +191,17 @@ fun SongListItem(
                                 onDownload()
                             },
                             leadingIcon = { Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+                    }
+
+                    if (showRingtone) {
+                        DropdownMenuItem(
+                            text = { Text("Set as Ringtone", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                showMenu = false
+                                onDownloadForRingtone()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Phone, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
                     }
 

@@ -22,7 +22,8 @@ data class MusicItem(
     val isFavorite: Boolean = false,
     val isPlaylist: Boolean = false,
     val artistId: String? = null,
-    val contentType: MusicContentType = MusicContentType.SONG
+    val contentType: MusicContentType = MusicContentType.SONG,
+    val setVideoId: String? = null
 )
 
 data class Playlist(
@@ -99,6 +100,23 @@ enum class RepeatMode {
     ALL       // Repeat entire playlist
 }
 
+enum class PlaybackMediaMode {
+    AUDIO,
+    VIDEO
+}
+
+enum class PlaybackVideoQuality(val maxHeight: Int?, val label: String) {
+    AUTO(null, "Auto"),
+    HD1080(1080, "1080p"),
+    HD720(720, "720p"),
+    SD480(480, "480p"),
+    SD360(360, "360p"),
+    SD240(240, "240p"),
+    SD144(144, "144p");
+
+    val wireName: String get() = name
+}
+
 data class PlaybackState(
     val isPlaying: Boolean = false,
     val currentPosition: Long = 0,
@@ -109,5 +127,8 @@ data class PlaybackState(
     val isShuffleEnabled: Boolean = false,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val isLoading: Boolean = false,
-    val isBuffering: Boolean = false
+    val isBuffering: Boolean = false,
+    val mediaMode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
+    val isVideoAvailable: Boolean = false,
+    val videoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO
 )
