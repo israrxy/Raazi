@@ -59,6 +59,67 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         emptyList()
     )
 
+    val topResults: StateFlow<List<com.israrxy.raazi.model.MusicItem>> = viewState.map { state ->
+        state.items.mapNotNull { ytItem ->
+            when (ytItem) {
+                is com.zionhuang.innertube.models.SongItem -> com.israrxy.raazi.model.MusicItem(
+                    id = ytItem.id ?: return@mapNotNull null,
+                    title = ytItem.title ?: "Unknown",
+                    artist = ytItem.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                    duration = (ytItem.duration?.toLong() ?: 0) * 1000L,
+                    thumbnailUrl = ytItem.thumbnail ?: "",
+                    audioUrl = "",
+                    videoUrl = ytItem.id ?: return@mapNotNull null,
+                    isLive = false,
+                    contentType = com.israrxy.raazi.model.MusicContentType.SONG,
+                    setVideoId = ytItem.setVideoId
+                )
+                is com.zionhuang.innertube.models.ArtistItem -> com.israrxy.raazi.model.MusicItem(
+                    id = ytItem.id,
+                    title = ytItem.title,
+                    artist = "Artist",
+                    duration = 0L,
+                    thumbnailUrl = ytItem.thumbnail ?: "",
+                    audioUrl = "",
+                    videoUrl = ytItem.shareLink.orEmpty(),
+                    isLive = false,
+                    isPlaylist = false,
+                    artistId = ytItem.id,
+                    contentType = com.israrxy.raazi.model.MusicContentType.ARTIST
+                )
+                is com.zionhuang.innertube.models.AlbumItem -> com.israrxy.raazi.model.MusicItem(
+                    id = ytItem.browseId ?: return@mapNotNull null,
+                    title = ytItem.title ?: "Unknown",
+                    artist = ytItem.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                    duration = 0L,
+                    thumbnailUrl = ytItem.thumbnail ?: "",
+                    audioUrl = "",
+                    videoUrl = ytItem.browseId ?: return@mapNotNull null,
+                    isLive = false,
+                    isPlaylist = true,
+                    contentType = com.israrxy.raazi.model.MusicContentType.ALBUM
+                )
+                is com.zionhuang.innertube.models.PlaylistItem -> com.israrxy.raazi.model.MusicItem(
+                    id = ytItem.id ?: return@mapNotNull null,
+                    title = ytItem.title ?: "Unknown",
+                    artist = ytItem.author?.name ?: "Unknown Artist",
+                    duration = 0L,
+                    thumbnailUrl = ytItem.thumbnail ?: "",
+                    audioUrl = "",
+                    videoUrl = ytItem.id ?: return@mapNotNull null,
+                    isLive = false,
+                    isPlaylist = true,
+                    contentType = com.israrxy.raazi.model.MusicContentType.PLAYLIST
+                )
+                else -> null
+            }
+        }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        emptyList()
+    )
+
     // Simple in-memory suggestion cache
     private val suggestionCache = LinkedHashMap<String, com.zionhuang.innertube.models.SearchSuggestions?>(16, 0.75f, true)
 
@@ -78,7 +139,15 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                         } else {
                             try {
                                 withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    YouTube.searchSuggestions(query).getOrNull()
+                                    // Temporarily disable login-for-browse for suggestions
+                                    // YouTube suggestion API doesn't handle authenticated requests
+                                    val wasLoginForBrowse = YouTube.useLoginForBrowse
+                                    try {
+                                        YouTube.useLoginForBrowse = false
+                                        YouTube.searchSuggestions(query).getOrNull()
+                                    } finally {
+                                        YouTube.useLoginForBrowse = wasLoginForBrowse
+                                    }
                                 }
                             } catch (e: Exception) {
                                 null

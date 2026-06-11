@@ -313,6 +313,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             },
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
+                            },
+                            onNavigateToSearch = {
+                                navController.navigate("search") {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
                         )
                     }

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +48,7 @@ fun SearchScreen(
 ) {
     val searchViewModel: SearchViewModel = viewModel()
     var searchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
     
     // Add To Playlist Dialog State
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
@@ -55,6 +57,7 @@ fun SearchScreen(
     val isSearching by searchViewModel.isSearching.collectAsState()
     val searchSuggestions by searchViewModel.searchSuggestions.collectAsState()
     val searchHistory by searchViewModel.searchHistory.collectAsState()
+    val topResults by searchViewModel.topResults.collectAsStateWithLifecycle()
     val favoriteTracks by playerViewModel.favoriteTracks.collectAsStateWithLifecycle()
     val savedCollectionIds by playerViewModel.savedCollectionIds.collectAsStateWithLifecycle()
     
@@ -496,6 +499,88 @@ fun SearchScreen(
                                 keyboardController?.hide()
                                 focusManager.clearFocus()
                             }
+                        )
+                    }
+                }
+
+                // Top Results (matching typing)
+                if (topResults.isNotEmpty() && searchQuery.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Top Results",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
+                        )
+                    }
+                    
+                    val playableTopItems = topResults.filter { it.isPlayableSearchItem() }
+                    
+                    items(topResults, key = { item -> "top_result_${item.contentType}_${item.id}" }) { musicItem ->
+                        val isArtist = musicItem.isArtistResult()
+                        val isPlayable = musicItem.isPlayableSearchItem()
+                        val isLiked = favoriteTracks.any { it.id == musicItem.id }
+                        val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
+                        val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
+
+                        com.israrxy.raazi.ui.components.SongListItem(
+                            song = musicItem,
+                            isLiked = isLiked,
+                            isSaved = isSaved,
+                            showAddToPlaylist = isPlayable,
+                            showGoToArtist = !isArtist && musicItem.artistId != null,
+                            showDownload = isPlayable,
+                            showRingtone = isPlayable,
+                            showAddToQueue = isPlayable,
+                            showMoreOptions = isPlayable,
+                            showLike = isPlayable,
+                            showSave = musicItem.toSavedCollectionItemOrNull() != null,
+                            onClick = {
+                                when {
+                                    musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
+                                    isArtist && musicItem.artistId != null -> onNavigateToArtist(musicItem.artistId!!, musicItem.title)
+                                    else -> {
+                                        val playableIndex = playableTopItems.indexOf(musicItem)
+                                        if (playableIndex != -1) {
+                                            playerViewModel.playPlaylist(playableTopItems, playableIndex)
+                                            onNavigateToPlayer()
+                                        } else {
+                                            playerViewModel.playPlaylist(listOf(musicItem), 0)
+                                            onNavigateToPlayer()
+                                        }
+                                    }
+                                }
+                            },
+                            onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                            onGoToArtist = {
+                                if (musicItem.artistId != null) {
+                                    onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
+                                }
+                            },
+                            onDownload = {
+                                if (isPlayable) {
+                                    playerViewModel.downloadTrack(musicItem)
+                                }
+                            },
+                            onDownloadForRingtone = {
+                                if (isPlayable) {
+                                    playerViewModel.downloadForRingtone(musicItem)
+                                }
+                            },
+                            onAddToQueue = {
+                                if (isPlayable) {
+                                    playerViewModel.addToQueue(listOf(musicItem))
+                                    android.widget.Toast.makeText(context, "Added to queue", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onShowMoreOptions = {
+                                if (isPlayable) {
+                                    android.widget.Toast.makeText(context, "More options for ${musicItem.title}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onLike = { playerViewModel.toggleFavorite(musicItem) },
+                            onSave = { playerViewModel.toggleSavedCollection(musicItem) }
                         )
                     }
                 }

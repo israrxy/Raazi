@@ -26,7 +26,7 @@ class YouTubeChartsExtractor {
     
     // OuterTune uses "WEB_REMIX" for music.
     private val CLIENT_NAME = "WEB_REMIX"
-    private val CLIENT_VERSION = "1.20250310.01.00" // From OuterTune
+    private val CLIENT_VERSION = "1.20260530.01.00" // From OuterTune
     
     // Official Chart Playlist IDs (Fallback)
     private val PL_GLOBAL_TOP_SONGS = "VLPL4fGSI1pDJn69On1fCwI33tF3oqSHqKBV"
@@ -70,7 +70,7 @@ class YouTubeChartsExtractor {
                 "Referer" to "https://music.youtube.com/",
                 "Content-Type" to "application/json",
                 // User Agent from OuterTune
-                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
+                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0"
             )
 
             // Context Payload

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material3.*
@@ -77,6 +78,15 @@ fun RingtoneTrimmerScreen(
             is MusicPlayerViewModel.RingtoneState.Error -> {
                 showErrorDialog = true
                 errorMessage = s.message
+            }
+            is MusicPlayerViewModel.RingtoneState.NeedsPermission -> {
+                val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                runCatching { context.startActivity(intent) }
+                showErrorDialog = true
+                errorMessage = "Raazi needs permission to modify system settings. Grant it and try again."
             }
             else -> {}
         }
@@ -206,6 +216,13 @@ fun RingtoneTrimmerScreen(
                         onRingtoneTypeChange = { viewModel.setRingtoneType(it) },
                         onSetRingtone = { startMs, endMs ->
                             viewModel.setAsRingtone(currentState.filePath, startMs, endMs)
+                        },
+                        onRequestPermission = {
+                            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            runCatching { context.startActivity(intent) }
                         }
                     )
                 }
@@ -272,7 +289,8 @@ private fun TrimmerContent(
     durationMs: Long,
     ringtoneType: RingtoneType,
     onRingtoneTypeChange: (RingtoneType) -> Unit,
-    onSetRingtone: (Long, Long) -> Unit
+    onSetRingtone: (Long, Long) -> Unit,
+    onRequestPermission: () -> Unit
 ) {
     val maxDuration = 30_000L
     var sliderRange by remember {
@@ -389,13 +407,7 @@ private fun TrimmerContent(
                     }
                 }
                 Button(
-                    onClick = {
-                        context.startActivity(
-                            Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-                                data = Uri.parse("package:${context.packageName}")
-                            }
-                        )
-                    },
+                    onClick = onRequestPermission,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
@@ -405,6 +417,8 @@ private fun TrimmerContent(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
+                    Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Grant Permission")
                 }
             }
@@ -589,20 +603,28 @@ private fun TrimmerContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         // --- Set Button ---
+        val isSelectionValid = (sliderRange.endInclusive - sliderRange.start) >= 1000f
+        val canSet = hasWriteSettings && isSelectionValid
         Button(
             onClick = {
+                if (!hasWriteSettings) {
+                    onRequestPermission()
+                    return@Button
+                }
                 if (isPlaying) {
                     exoPlayer.pause()
                     isPlaying = false
                 }
                 onSetRingtone(sliderRange.start.toLong(), sliderRange.endInclusive.toLong())
             },
+            enabled = canSet,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
             val typeLabel = when (ringtoneType) {
@@ -611,8 +633,13 @@ private fun TrimmerContent(
                 RingtoneType.ALARM -> "Alarm"
             }
             val durationLabel = formatDuration((sliderRange.endInclusive - sliderRange.start).toLong())
+            val text = when {
+                !hasWriteSettings -> "Grant Permission to Set $typeLabel"
+                !isSelectionValid -> "Pick at least 1 second"
+                else -> "Set as $typeLabel ($durationLabel)"
+            }
             Text(
-                "Set as $typeLabel ($durationLabel)",
+                text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )

@@ -39,7 +39,7 @@ object StreamResolver {
     private val _currentStreamQuality = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val currentStreamQuality = _currentStreamQuality.asStateFlow()
 
-    private val poTokenGenerator = com.israrxy.raazi.player.potoken.PoTokenGenerator()
+    private val poTokenGenerator = com.israrxy.raazi.player.potoken.PoTokenGenerator.getInstance()
     private val preloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cacheLock = Any()
     private val preloadLock = Any()

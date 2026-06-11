@@ -146,15 +146,27 @@ class AdvancedDownloadManager(
                     _downloadEvents.emit(DownloadEvent.Started(track.id, track.title))
 
                     val audioUrl = try {
-                        musicExtractor.getAudioStreamUrl(track.videoUrl)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Stream resolution failed for ${track.title}", e)
-                        musicDao.updateDownloadStatus(
-                            track.id, DownloadEntity.STATUS_FAILED,
-                            errorMessage = "Could not resolve audio stream: ${e.message}"
+                        val result = com.israrxy.raazi.player.StreamResolver.resolveStreamUrl(
+                            videoIdInput = track.videoUrl,
+                            title = track.title,
+                            artist = track.artist,
+                            mode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO,
+                            preferAac = true
                         )
-                        _downloadEvents.emit(DownloadEvent.Failed(track.id, track.title, "Stream resolution failed"))
-                        return@launch
+                        result.url
+                    } catch (e: Exception) {
+                        Log.w(TAG, "StreamResolver failed for ${track.title}, falling back to NewPipe", e)
+                        try {
+                            musicExtractor.getAudioStreamUrl(track.videoUrl)
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "Both stream resolution methods failed for ${track.title}", e2)
+                            musicDao.updateDownloadStatus(
+                                track.id, DownloadEntity.STATUS_FAILED,
+                                errorMessage = "Could not resolve audio stream: ${e.message}"
+                            )
+                            _downloadEvents.emit(DownloadEvent.Failed(track.id, track.title, "Stream resolution failed"))
+                            return@launch
+                        }
                     }
 
                     if (audioUrl.isEmpty()) {
@@ -173,7 +185,7 @@ class AdvancedDownloadManager(
                         val length = if (format != null && format.contentLength > 0L) {
                             format.contentLength
                         } else {
-                            10_000_000L // 10MB default fallback range
+                            50_000_000L // 50MB default — covers most tracks
                         }
                         downloadUrl += "&range=0-$length"
                         Log.d(TAG, "Bypassing YouTube throttling for ${track.title} with range=0-$length")

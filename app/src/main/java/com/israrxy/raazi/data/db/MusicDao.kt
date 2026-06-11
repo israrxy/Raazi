@@ -222,6 +222,13 @@ interface MusicDao {
 
     @Query("DELETE FROM home_interactions WHERE timestamp < :before")
     fun deleteOldHomeInteractions(before: Long): Int
+
+    @Query("""
+        SELECT t.* FROM tracks t
+        INNER JOIN related_songs r ON t.id = r.relatedTrackId
+        WHERE r.sourceTrackId = :trackId
+    """)
+    fun getRelatedTracks(trackId: String): Flow<List<TrackEntity>>
 }
 
 data class PlaylistWithTracks(

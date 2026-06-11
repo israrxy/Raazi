@@ -40,6 +40,25 @@ class RingtoneHelper(private val context: Context) {
         .followSslRedirects(true)
         .build()
 
+    fun hasWriteSettingsPermission(): Boolean {
+        return try {
+            Settings.System.canWrite(context)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun buildWriteSettingsIntent(): Intent? {
+        return try {
+            Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * Downloads audio to a temp file and returns its path and total duration in ms.
      * [onProgress] is called with a percentage (0-100) during download.
@@ -130,10 +149,19 @@ class RingtoneHelper(private val context: Context) {
         title: String,
         ringtoneType: RingtoneType = RingtoneType.RINGTONE
     ) = withContext(Dispatchers.IO) {
-        
+
         // 1. Check permission
         if (!Settings.System.canWrite(context)) {
-            throw Exception("Missing WRITE_SETTINGS permission. Please grant it in settings.")
+            throw Exception("Missing WRITE_SETTINGS permission. Please grant it in system settings.")
+        }
+
+        val inputFile = File(inputFilePath)
+        if (!inputFile.exists() || inputFile.length() == 0L) {
+            throw Exception("Downloaded audio is missing or empty. Please try again.")
+        }
+
+        if (endMs - startMs < 200L) {
+            throw Exception("Selected ringtone is too short. Pick at least 1 second.")
         }
 
         // Detect if input format is webm/opus
@@ -142,20 +170,36 @@ class RingtoneHelper(private val context: Context) {
 
         // 2. Trim audio
         val outputDir = File(context.cacheDir, "ringtones")
+        if (!outputDir.exists()) outputDir.mkdirs()
         val outputFile = File(outputDir, "trimmed_${System.currentTimeMillis()}.$ext")
-        
+
         trimAudio(inputFilePath, outputFile.absolutePath, startMs, endMs)
+
+        if (!outputFile.exists() || outputFile.length() == 0L) {
+            outputFile.delete()
+            throw Exception("Trimming produced an empty file. Please try a different selection.")
+        }
 
         // 3. Save to MediaStore
         val uri = saveToMediaStore(outputFile.absolutePath, title, ringtoneType)
-            ?: throw Exception("Failed to save to MediaStore")
+            ?: run {
+                outputFile.delete()
+                throw Exception("Failed to write ringtone to system storage. Check storage permissions.")
+            }
 
         // 4. Set as default ringtone/notification/alarm
-        RingtoneManager.setActualDefaultRingtoneUri(context, ringtoneType.ringtoneManagerType, uri)
-        
+        try {
+            RingtoneManager.setActualDefaultRingtoneUri(context, ringtoneType.ringtoneManagerType, uri)
+        } catch (e: Exception) {
+            android.util.Log.e("RingtoneHelper", "Failed to set actual default ringtone", e)
+            outputFile.delete()
+            inputFile.delete()
+            throw Exception("Saved ringtone to storage but couldn't set it as default. Try again from system Settings > Sound.")
+        }
+
         // Clean up temp file
         outputFile.delete()
-        File(inputFilePath).delete()
+        inputFile.delete()
     }
 
     private fun isWebmFormat(filePath: String): Boolean {
@@ -227,7 +271,13 @@ class RingtoneHelper(private val context: Context) {
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
             }
 
-            muxer = MediaMuxer(outputPath, outputFormat)
+            try {
+                muxer = MediaMuxer(outputPath, outputFormat)
+            } catch (e: Exception) {
+                Log.e("RingtoneHelper", "Failed to create MediaMuxer with $outputFormat", e)
+                throw Exception("This device cannot write the audio format. Try a different track.")
+            }
+
             val muxerTrackIndex = muxer.addTrack(format)
             muxer.start()
 
@@ -238,7 +288,7 @@ class RingtoneHelper(private val context: Context) {
             while (true) {
                 bufferInfo.size = extractor.readSampleData(buffer, 0)
                 if (bufferInfo.size < 0) break
-                
+
                 val presentationTimeUs = extractor.sampleTime
                 if (presentationTimeUs > endMs * 1000) break
 
@@ -252,18 +302,26 @@ class RingtoneHelper(private val context: Context) {
             extractor.release()
             try {
                 muxer?.stop()
+            } catch (e: Exception) {
+                Log.w("RingtoneHelper", "MediaMuxer.stop failed", e)
+            }
+            try {
                 muxer?.release()
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w("RingtoneHelper", "MediaMuxer.release failed", e)
             }
         }
     }
 
     private fun saveToMediaStore(filePath: String, title: String, ringtoneType: RingtoneType = RingtoneType.RINGTONE): Uri? {
         val file = File(filePath)
+        if (!file.exists() || file.length() == 0L) {
+            Log.e("RingtoneHelper", "saveToMediaStore called with missing/empty file: $filePath")
+            return null
+        }
         val ext = file.extension.lowercase()
         val mimeType = if (ext == "webm") "audio/webm" else "audio/mp4"
-        
+
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
         // Delete existing with same title to avoid duplicates
@@ -282,7 +340,7 @@ class RingtoneHelper(private val context: Context) {
                 put(MediaStore.Audio.Media.IS_NOTIFICATION, ringtoneType == RingtoneType.NOTIFICATION)
                 put(MediaStore.Audio.Media.IS_ALARM, ringtoneType == RingtoneType.ALARM)
                 put(MediaStore.Audio.Media.IS_MUSIC, false)
-                
+
                 val relativePath = when (ringtoneType) {
                     RingtoneType.RINGTONE -> android.os.Environment.DIRECTORY_RINGTONES
                     RingtoneType.NOTIFICATION -> android.os.Environment.DIRECTORY_NOTIFICATIONS
@@ -295,15 +353,23 @@ class RingtoneHelper(private val context: Context) {
             val newUri = context.contentResolver.insert(uri, values)
             if (newUri != null) {
                 try {
+                    var copySucceeded = false
                     context.contentResolver.openOutputStream(newUri)?.use { out ->
                         file.inputStream().use { input ->
                             input.copyTo(out)
                         }
+                        copySucceeded = true
                     }
-                    val updateValues = ContentValues().apply {
-                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    if (copySucceeded) {
+                        val updateValues = ContentValues().apply {
+                            put(MediaStore.MediaColumns.IS_PENDING, 0)
+                        }
+                        context.contentResolver.update(newUri, updateValues, null, null)
+                        return newUri
+                    } else {
+                        try { context.contentResolver.delete(newUri, null, null) } catch (_: Exception) {}
+                        return null
                     }
-                    context.contentResolver.update(newUri, updateValues, null, null)
                 } catch (e: Exception) {
                     Log.e("RingtoneHelper", "Failed to write media file to MediaStore", e)
                     try {

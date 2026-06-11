@@ -67,7 +67,7 @@ class YouTubeMusicExtractor private constructor() {
                         }
                         
                         if (headers["User-Agent"].isNullOrEmpty()) {
-                            requestBuilder.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                            requestBuilder.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
                         }
 
                         val response = client.newCall(requestBuilder.build()).execute()
@@ -133,6 +133,122 @@ class YouTubeMusicExtractor private constructor() {
         }
     }
 
+    private fun runNewPipeSearch(query: String, serviceId: Int): SearchResult {
+        // 0 = YouTube, 1 = SoundCloud, 2 = Bandcamp
+        val service = when (serviceId) {
+            1 -> ServiceList.SoundCloud
+            2 -> ServiceList.Bandcamp
+            else -> ServiceList.YouTube
+        }
+
+        Log.d(TAG, "NewPipe searching for: $query on ${service.serviceInfo.name}")
+        val searchResult = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query))
+        Log.d(TAG, "NewPipe search finished, processing results")
+
+        val results = searchResult.relatedItems
+            .mapNotNull { item ->
+                when (item) {
+                    is StreamInfoItem -> {
+                        if (item.streamType == org.schabi.newpipe.extractor.stream.StreamType.AUDIO_STREAM ||
+                            item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM ||
+                            serviceId == 1 || serviceId == 2
+                        ) {
+                            val url = item.getUrl()
+                            Log.d(TAG, "Processing search item: ${item.name}, URL: $url")
+
+                            if (url.isNullOrEmpty()) {
+                                Log.w(TAG, "Skipping empty URL item: ${item.name}")
+                                return@mapNotNull null
+                            }
+
+                            val (itemId, videoUrl) = when {
+                                serviceId == 1 || serviceId == 2 -> {
+                                    Pair(url, url)
+                                }
+                                url.contains("youtube.com") || url.contains("youtu.be") -> {
+                                    val extractedId = when {
+                                        url.contains("v=") -> url.substringAfter("v=").substringBefore("&")
+                                        url.contains("youtu.be/") -> url.substringAfter("youtu.be/").substringBefore("?")
+                                        else -> null
+                                    }
+
+                                    if (extractedId.isNullOrEmpty()) {
+                                        Log.w(TAG, "Skipping YouTube item with no extractable ID: $url")
+                                        return@mapNotNull null
+                                    }
+
+                                    Log.d(TAG, "Extracted YouTube ID: $extractedId from $url")
+                                    Pair(extractedId, extractedId)
+                                }
+                                else -> {
+                                    Pair(url, url)
+                                }
+                            }
+                            val contentType = when {
+                                serviceId == 1 || serviceId == 2 -> MusicContentType.SONG
+                                item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM -> MusicContentType.VIDEO
+                                else -> MusicContentType.SONG
+                            }
+
+                            MusicItem(
+                                id = itemId,
+                                title = item.name,
+                                artist = item.uploaderName ?: "Unknown Artist",
+                                duration = item.duration * 1000,
+                                thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
+                                audioUrl = "",
+                                videoUrl = videoUrl,
+                                isLive = false,
+                                isPlaylist = false,
+                                contentType = contentType
+                            )
+                        } else null
+                    }
+                    is org.schabi.newpipe.extractor.playlist.PlaylistInfoItem -> {
+                        MusicItem(
+                            id = item.url,
+                            title = item.name,
+                            artist = item.uploaderName ?: "Unknown",
+                            duration = 0,
+                            thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
+                            audioUrl = "",
+                            videoUrl = item.url,
+                            isLive = false,
+                            isPlaylist = true,
+                            contentType = MusicContentType.PLAYLIST
+                        )
+                    }
+                    is org.schabi.newpipe.extractor.channel.ChannelInfoItem -> {
+                        val url = item.url
+                        val id = when {
+                            url.contains("/channel/") -> url.substringAfter("/channel/")
+                            url.contains("/user/") -> url.substringAfter("/user/")
+                            url.contains("/c/") -> url.substringAfter("/c/")
+                            else -> url
+                        }
+
+                        MusicItem(
+                            id = id,
+                            title = item.name,
+                            artist = "Artist",
+                            duration = 0,
+                            thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
+                            audioUrl = "",
+                            videoUrl = item.url,
+                            isLive = false,
+                            isPlaylist = false,
+                            artistId = id,
+                            contentType = MusicContentType.ARTIST
+                        )
+                    }
+                    else -> null
+                }
+            }
+
+        Log.d(TAG, "NewPipe found ${results.size} results")
+        return SearchResult(query, results)
+    }
+
     suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
             if (serviceId == 0) {
@@ -189,130 +305,21 @@ class YouTubeMusicExtractor private constructor() {
                     .distinctBy { "${it.contentType}:${it.id}" }
 
                 Log.d(TAG, "InnerTube typed search returned ${results.size} results")
-                return@withContext SearchResult(query, results)
-            }
-
-            // 0 = YouTube, 1 = SoundCloud, 2 = Bandcamp
-            val service = when (serviceId) {
-                1 -> ServiceList.SoundCloud
-                2 -> ServiceList.Bandcamp
-                else -> ServiceList.YouTube
-            }
-            
-            Log.d(TAG, "Searching for: $query on ${service.serviceInfo.name}")
-            val searchResult = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query))
-            Log.d(TAG, "Search finished, processing results")
-            
-            val results = searchResult.relatedItems
-                .mapNotNull { item ->
-                    when (item) {
-                        is StreamInfoItem -> {
-                            // SoundCloud also returns StreamInfoItems
-                            if (item.streamType == org.schabi.newpipe.extractor.stream.StreamType.AUDIO_STREAM || 
-                                item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM ||
-                                serviceId == 1 || serviceId == 2 // SoundCloud and Bandcamp items act similarly
-                            ) {
-                                val url = item.getUrl()
-                                Log.d(TAG, "Processing search item: ${item.name}, URL: $url")
-                                
-                                if (url.isNullOrEmpty()) {
-                                    Log.w(TAG, "Skipping empty URL item: ${item.name}")
-                                    return@mapNotNull null
-                                }
-                                
-                                // For YouTube, extract the video ID and use it directly (like home screen does)
-                                // For SoundCloud/Bandcamp, keep the full URL
-                                val (itemId, videoUrl) = when {
-                                    serviceId == 1 || serviceId == 2 -> {
-                                        // SoundCloud or Bandcamp - use full URL
-                                        Pair(url, url)
-                                    }
-                                    url.contains("youtube.com") || url.contains("youtu.be") -> {
-                                        // YouTube - extract video ID
-                                        val extractedId = when {
-                                            url.contains("v=") -> url.substringAfter("v=").substringBefore("&")
-                                            url.contains("youtu.be/") -> url.substringAfter("youtu.be/").substringBefore("?")
-                                            else -> null
-                                        }
-                                        
-                                        if (extractedId.isNullOrEmpty()) {
-                                            Log.w(TAG, "Skipping YouTube item with no extractable ID: $url")
-                                            return@mapNotNull null
-                                        }
-                                        
-                                        Log.d(TAG, "Extracted YouTube ID: $extractedId from $url")
-                                        // Use just the ID - StreamResolver and MusicPlaybackService handle this correctly
-                                        Pair(extractedId, extractedId)
-                                    }
-                                    else -> {
-                                        // Unknown service, use URL as-is
-                                        Pair(url, url)
-                                    }
-                                }
-                                val contentType = when {
-                                    serviceId == 1 || serviceId == 2 -> MusicContentType.SONG
-                                    item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM -> MusicContentType.VIDEO
-                                    else -> MusicContentType.SONG
-                                }
-
-                                MusicItem(
-                                    id = itemId,
-                                    title = item.name,
-                                    artist = item.uploaderName ?: "Unknown Artist",
-                                    duration = item.duration * 1000,
-                                    thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                                    audioUrl = "",
-                                    videoUrl = videoUrl,
-                                    isLive = false,
-                                    isPlaylist = false,
-                                    contentType = contentType
-                                )
-                            } else null
-                        }
-                        is org.schabi.newpipe.extractor.playlist.PlaylistInfoItem -> {
-                            MusicItem(
-                                id = item.url, // Playlist URL or ID
-                                title = item.name,
-                                artist = item.uploaderName ?: "Unknown",
-                                duration = 0, // Playlist duration not always available easily
-                                thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                                audioUrl = "",
-                                videoUrl = item.url,
-                                isLive = false,
-                                isPlaylist = true,
-                                contentType = MusicContentType.PLAYLIST
-                            )
-                        }
-                        is org.schabi.newpipe.extractor.channel.ChannelInfoItem -> {
-                            // Extract ID from URL
-                            val url = item.url
-                            val id = when {
-                                url.contains("/channel/") -> url.substringAfter("/channel/")
-                                url.contains("/user/") -> url.substringAfter("/user/")
-                                url.contains("/c/") -> url.substringAfter("/c/")
-                                else -> url
-                            }
-                            
-                            MusicItem(
-                                id = id,
-                                title = item.name,
-                                artist = "Artist",
-                                duration = 0,
-                                thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                                audioUrl = "",
-                                videoUrl = item.url,
-                                isLive = false,
-                                isPlaylist = false,
-                                artistId = id,
-                                contentType = MusicContentType.ARTIST
-                            )
-                        }
-                        else -> null
-                    }
+                if (results.isNotEmpty()) {
+                    return@withContext SearchResult(query, results)
                 }
-            
-            Log.d(TAG, "Found ${results.size} results")
-            SearchResult(query, results)
+
+                // Fallback: InnerTube search returned nothing (common when anonymous or client stale).
+                // Try NewPipe's search which uses its own clients and historical home feed.
+                Log.w(TAG, "InnerTube search empty for '$query', falling back to NewPipe")
+                val newpipeResults = runNewPipeSearch(query, serviceId)
+                if (newpipeResults.items.isNotEmpty()) {
+                    return@withContext newpipeResults
+                }
+            }
+
+            // For non-YouTube services (or final fallback), use NewPipe directly
+            runNewPipeSearch(query, serviceId)
         } catch (e: Exception) {
             Log.e(TAG, "Search failed", e)
             SearchResult(query, emptyList())

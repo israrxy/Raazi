@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,7 +46,8 @@ fun HomeScreen(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToArtist: (String, String) -> Unit
+    onNavigateToArtist: (String, String) -> Unit,
+    onNavigateToSearch: () -> Unit = {}
 ) {
     val homeFeedState by viewModel.homeFeedState.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
@@ -64,6 +66,53 @@ fun HomeScreen(
                 items(4) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
                 item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
                 items(3) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
+            }
+        } else if (homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
+            // Empty state — new user with no history or content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                HomeStatusHeader(
+                    isRefreshing = homeFeedState.isRefreshing,
+                    onRefresh = { viewModel.refreshHomeSection("home_status") }
+                )
+                Spacer(modifier = Modifier.height(64.dp))
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Search for a song",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Find your favorite music to get started.\nYour history will appear here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onNavigateToSearch,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Search, null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Search a Song", fontWeight = FontWeight.Bold)
+                }
             }
         } else {
             LazyColumn(
@@ -293,7 +342,6 @@ private fun HomeFeedItem.stableId(): String = when (this) {
         is com.zionhuang.innertube.models.AlbumItem -> item.id
         is com.zionhuang.innertube.models.ArtistItem -> item.id
         is com.zionhuang.innertube.models.PlaylistItem -> item.id
-        else -> item.hashCode().toString()
     }
 }
 
@@ -425,21 +473,18 @@ fun YouTubeFeedCard(
         is com.zionhuang.innertube.models.AlbumItem -> ytItem.title
         is com.zionhuang.innertube.models.ArtistItem -> ytItem.title
         is com.zionhuang.innertube.models.PlaylistItem -> ytItem.title
-        else -> ""
     }
     val subtitle = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Song"
         is com.zionhuang.innertube.models.AlbumItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Album"
         is com.zionhuang.innertube.models.ArtistItem -> "Artist"
         is com.zionhuang.innertube.models.PlaylistItem -> "Playlist"
-        else -> ""
     }
     val thumbnail = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.thumbnail
         is com.zionhuang.innertube.models.AlbumItem -> ytItem.thumbnail
         is com.zionhuang.innertube.models.ArtistItem -> ytItem.thumbnail
         is com.zionhuang.innertube.models.PlaylistItem -> ytItem.thumbnail
-        else -> null
     }
 
     Column(

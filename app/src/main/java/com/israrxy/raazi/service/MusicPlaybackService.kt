@@ -51,7 +51,10 @@ class MusicPlaybackService : Service() {
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private val serviceBinder = MusicBinder()
-    
+
+    // Local cache of favorite track IDs so the notification can reflect like state instantly
+    private val favoriteTrackIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     // Coroutine scope for background tasks
     private val extractor = YouTubeMusicExtractor.getInstance()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -137,6 +140,8 @@ class MusicPlaybackService : Service() {
                     when (action) {
                         ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
                         ACTION_TOGGLE_REPEAT -> toggleRepeat()
+                        ACTION_TOGGLE_FAVORITE -> toggleFavoriteFromNotification()
+                        ACTION_CYCLE_SPEED -> cyclePlaybackSpeed()
                     }
                 }
             })
@@ -257,8 +262,8 @@ class MusicPlaybackService : Service() {
         if (isDestroyed) return
         try {
             val currentTrack = currentPlaylist.getOrNull(currentIndex) ?: getCurrentTrack()
-            val currentPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val shouldKeepPlaying = exoPlayer.playWhenReady
+            val currentPosition = try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L } catch (_: Exception) { 0L }
+            val shouldKeepPlaying = try { if (::exoPlayer.isInitialized) exoPlayer.playWhenReady else false } catch (_: Exception) { false }
             isShuffleEnabled = !isShuffleEnabled
             if (currentPlaylist.isNotEmpty()) {
                 if (isShuffleEnabled) {
@@ -275,6 +280,7 @@ class MusicPlaybackService : Service() {
                     shouldPlay = shouldKeepPlaying
                 )
             }
+            sendFeedbackBroadcast(if (isShuffleEnabled) "Shuffle on" else "Shuffle off")
             notifyPlaybackState(refreshNotification = true)
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Error toggling shuffle", e)
@@ -287,7 +293,95 @@ class MusicPlaybackService : Service() {
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
+        val label = when (repeatMode) {
+            RepeatMode.OFF -> "Repeat off"
+            RepeatMode.ALL -> "Repeat all"
+            RepeatMode.ONE -> "Repeat one"
+        }
+        sendFeedbackBroadcast(label)
         notifyPlaybackState(refreshNotification = true)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        if (isDestroyed) return
+        if (speed.isNaN() || speed.isInfinite()) {
+            android.util.Log.w(TAG, "Refusing to set invalid playback speed: $speed")
+            return
+        }
+        val safeSpeed = speed.coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED)
+        try {
+            if (::exoPlayer.isInitialized) {
+                exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(safeSpeed)
+            }
+        } catch (e: IllegalStateException) {
+            android.util.Log.w(TAG, "Player not ready for speed change yet", e)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error setting playback speed", e)
+        }
+        try {
+            notifyPlaybackState(refreshNotification = false)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "notifyPlaybackState failed after speed change", e)
+        }
+    }
+
+    fun getPlaybackSpeed(): Float {
+        return try {
+            if (::exoPlayer.isInitialized) exoPlayer.playbackParameters.speed else 1.0f
+        } catch (_: Exception) {
+            1.0f
+        }
+    }
+
+    fun cyclePlaybackSpeed(): Float {
+        if (isDestroyed) return 1.0f
+        val current = getPlaybackSpeed()
+        val next = SPEED_CYCLE_PRESETS.firstOrNull { it > current + 0.01f } ?: SPEED_CYCLE_PRESETS.first()
+        setPlaybackSpeed(next)
+        sendFeedbackBroadcast("Speed: ${formatSpeedText(next)}")
+        return next
+    }
+
+    fun updateFavoriteTrackIds(ids: Set<String>) {
+        favoriteTrackIds.clear()
+        favoriteTrackIds.addAll(ids)
+        notifyPlaybackState(refreshNotification = true)
+    }
+
+    fun isTrackFavorite(trackId: String?): Boolean {
+        return trackId != null && favoriteTrackIds.contains(trackId)
+    }
+
+    private fun toggleFavoriteFromNotification() {
+        val track = getCurrentTrack() ?: return
+        val trackId = track.id
+        val nowFavorite = !favoriteTrackIds.contains(trackId)
+        if (nowFavorite) favoriteTrackIds.add(trackId) else favoriteTrackIds.remove(trackId)
+        sendLikeEventBroadcast(trackId, nowFavorite)
+        sendFeedbackBroadcast(if (nowFavorite) "Added to Liked Songs" else "Removed from Liked Songs")
+        notifyPlaybackState(refreshNotification = true)
+    }
+
+    private fun sendLikeEventBroadcast(trackId: String, nowFavorite: Boolean) {
+        val intent = Intent(NOTIFICATION_LIKE_CHANNEL).apply {
+            putExtra(EXTRA_TRACK_ID, trackId)
+            putExtra("is_favorite", nowFavorite)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun sendFeedbackBroadcast(message: String) {
+        if (isDestroyed || message.isBlank()) return
+        try {
+            val intent = Intent(NOTIFICATION_FEEDBACK_CHANNEL).apply {
+                putExtra(EXTRA_FEEDBACK_MESSAGE, message)
+                setPackage(packageName)
+            }
+            sendBroadcast(intent)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Failed to send feedback broadcast", e)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -331,44 +425,71 @@ class MusicPlaybackService : Service() {
         val isPlaying = playbackState.isPlaying
         val largeIcon = currentAlbumArt ?: BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
 
-        // Action intents
-        val prevIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_PREV }
-        val prevPending = PendingIntent.getService(this, 1, prevIntent, PendingIntent.FLAG_IMMUTABLE)
+        val isFav = isTrackFavorite(currentTrack?.id)
 
-        val shuffleIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_TOGGLE_SHUFFLE }
-        val shufflePending = PendingIntent.getService(this, 5, shuffleIntent, PendingIntent.FLAG_IMMUTABLE)
-
-        val playPauseIntent = Intent(this, MusicPlaybackService::class.java).apply { 
-            action = if (isPlaying) ACTION_PAUSE else ACTION_PLAY 
+        // ----- Pending Intents for each action -----
+        fun servicePending(action: String, requestCode: Int): PendingIntent {
+            val intent = Intent(this, MusicPlaybackService::class.java).apply { this.action = action }
+            return PendingIntent.getService(
+                this,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         }
-        val playPausePending = PendingIntent.getService(this, 2, playPauseIntent, PendingIntent.FLAG_IMMUTABLE)
 
-        val nextIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_NEXT }
-        val nextPending = PendingIntent.getService(this, 3, nextIntent, PendingIntent.FLAG_IMMUTABLE)
+        val shufflePending = servicePending(ACTION_TOGGLE_SHUFFLE, 10)
+        val prevPending = servicePending(ACTION_PREV, 11)
+        val playPausePending = servicePending(if (isPlaying) ACTION_PAUSE else ACTION_PLAY, 12)
+        val nextPending = servicePending(ACTION_NEXT, 13)
+        val repeatPending = servicePending(ACTION_TOGGLE_REPEAT, 14)
+        val favoritePending = servicePending(ACTION_TOGGLE_FAVORITE, 15)
+        val speedPending = servicePending(ACTION_CYCLE_SPEED, 16)
+        val stopPending = servicePending(ACTION_STOP, 17)
 
-        val repeatIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_TOGGLE_REPEAT }
-        val repeatPending = PendingIntent.getService(this, 6, repeatIntent, PendingIntent.FLAG_IMMUTABLE)
-        
-        val stopIntent = Intent(this, MusicPlaybackService::class.java).apply { action = ACTION_STOP }
-        val stopPending = PendingIntent.getService(this, 4, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        // ----- Action labels and icons (use active drawables when state is on) -----
+        val shuffleIcon = if (playbackState.isShuffleEnabled) R.drawable.ic_shuffle_active else R.drawable.ic_shuffle
+        val shuffleLabel = if (playbackState.isShuffleEnabled) "Shuffle" else "Shuffle off"
 
-        val shuffleLabel = if (playbackState.isShuffleEnabled) "Shuffle On" else "Shuffle Off"
-        val repeatLabel = when (playbackState.repeatMode) {
-            RepeatMode.OFF -> "Repeat Off"
-            RepeatMode.ALL -> "Repeat All"
-            RepeatMode.ONE -> "Repeat One"
-        }
         val repeatIcon = when (playbackState.repeatMode) {
-            RepeatMode.ONE -> android.R.drawable.ic_menu_revert
-            RepeatMode.ALL -> android.R.drawable.ic_menu_rotate
-            RepeatMode.OFF -> android.R.drawable.ic_menu_rotate
+            RepeatMode.ONE -> R.drawable.ic_repeat_one_active
+            RepeatMode.ALL -> R.drawable.ic_repeat_active
+            RepeatMode.OFF -> R.drawable.ic_repeat
         }
-        val modeSummary = buildPlaybackModeSummary(playbackState)
+        val repeatLabel = when (playbackState.repeatMode) {
+            RepeatMode.ONE -> "Repeat one"
+            RepeatMode.ALL -> "Repeat all"
+            RepeatMode.OFF -> "Repeat off"
+        }
 
+        val favoriteIcon = if (isFav) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
+        val favoriteLabel = if (isFav) "Unlike" else "Like"
+
+        val speedIcon = if (playbackState.playbackSpeed != 1.0f) R.drawable.ic_speed_active else R.drawable.ic_speed
+        val speedText = formatSpeedText(playbackState.playbackSpeed)
+        val speedLabel = if (playbackState.playbackSpeed != 1.0f) "Speed · $speedText" else "Speed"
+
+        // ----- Subtext composition: queue position · speed · modes -----
+        val queuePosition = if (currentPlaylist.isNotEmpty() && currentIndex >= 0) {
+            "Track ${currentIndex + 1} of ${currentPlaylist.size}"
+        } else null
+        val speedBadge = if (playbackState.playbackSpeed != 1.0f) speedText else null
+        val subText = listOfNotNull(
+            queuePosition,
+            speedBadge,
+            if (playbackState.isShuffleEnabled) "Shuffle" else null,
+            when (playbackState.repeatMode) {
+                RepeatMode.ONE -> "Repeat One"
+                RepeatMode.ALL -> "Repeat All"
+                RepeatMode.OFF -> null
+            }
+        ).joinToString("  ·  ")
+
+        // ----- Build notification -----
         val builder = NotificationCompat.Builder(this, notificationChannelId)
             .setContentTitle(title)
             .setContentText(artist)
-            .setSubText(modeSummary)
+            .setSubText(subText.ifEmpty { null })
             .setSmallIcon(R.drawable.ic_music_note)
             .setLargeIcon(largeIcon)
             .setContentIntent(contentPendingIntent)
@@ -382,34 +503,46 @@ class MusicPlaybackService : Service() {
             .setShowWhen(false)
             .setColor(android.graphics.Color.parseColor("#10B981"))
             .setColorized(currentAlbumArt != null)
-            .setTicker("$title - $artist")
-            
-            // Actions
-            .addAction(NotificationCompat.Action(
-                android.R.drawable.ic_menu_sort_by_size, shuffleLabel, shufflePending
-            ))
-            .addAction(NotificationCompat.Action(
-                R.drawable.ic_skip_previous, "Previous", prevPending
-            ))
-            .addAction(NotificationCompat.Action(
+            .setUsesChronometer(true)
+            .setWhen(System.currentTimeMillis() - (try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition else 0L } catch (_: Exception) { 0L }))
+
+        // ----- Actions (order matters: shown in expanded view, indices referenced by MediaStyle) -----
+        // 0: Shuffle   1: Like   2: Previous   3: Play/Pause   4: Next   5: Repeat   6: Speed
+        builder.addAction(NotificationCompat.Action(shuffleIcon, shuffleLabel, shufflePending))
+        builder.addAction(NotificationCompat.Action(favoriteIcon, favoriteLabel, favoritePending))
+        builder.addAction(NotificationCompat.Action(R.drawable.ic_skip_previous, "Previous", prevPending))
+        builder.addAction(
+            NotificationCompat.Action(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
                 if (isPlaying) "Pause" else "Play",
                 playPausePending
-            ))
-            .addAction(NotificationCompat.Action(
-                R.drawable.ic_skip_next, "Next", nextPending
-            ))
-            .addAction(NotificationCompat.Action(
-                repeatIcon, repeatLabel, repeatPending
-            ))
-            
-            // Media style with session token
-            .setStyle(MediaStyle()
-                .setShowActionsInCompactView(0, 2, 4)
-                .setMediaSession(mediaSession.sessionToken)
             )
-            
+        )
+        builder.addAction(NotificationCompat.Action(R.drawable.ic_skip_next, "Next", nextPending))
+        builder.addAction(NotificationCompat.Action(repeatIcon, repeatLabel, repeatPending))
+        builder.addAction(NotificationCompat.Action(speedIcon, speedLabel, speedPending))
+
+        // MediaStyle: compact view shows previous, play/pause, next (indices 2, 3, 4)
+        val mediaStyle = MediaStyle()
+            .setMediaSession(mediaSession.sessionToken)
+            .setShowActionsInCompactView(2, 3, 4)
+            .setShowCancelButton(true)
+            .setCancelButtonIntent(stopPending)
+
+        builder.setStyle(mediaStyle)
         return builder.build()
+    }
+
+    private fun formatSpeedText(speed: Float): String {
+        if (speed.isNaN() || speed.isInfinite()) return "1x"
+        val rounded = (speed * 100f).toInt()
+        val value = rounded / 100f
+        val intValue = value.toInt()
+        return if (value == intValue.toFloat()) {
+            "${intValue}x"
+        } else {
+            String.format("%.2f", value).trimEnd('0').trimEnd('.') + "x"
+        }
     }
 
     private fun buildPlaybackModeSummary(playbackState: PlaybackState): String {
@@ -419,7 +552,8 @@ class MusicPlaybackService : Service() {
             RepeatMode.ALL -> "Repeat all"
             RepeatMode.ONE -> "Repeat one"
         }
-        return "$shuffleState / $repeatState"
+        val speedState = if (playbackState.playbackSpeed != 1.0f) " · ${formatSpeedText(playbackState.playbackSpeed)}" else ""
+        return "$shuffleState / $repeatState$speedState"
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -430,6 +564,8 @@ class MusicPlaybackService : Service() {
             ACTION_NEXT -> next()
             ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
             ACTION_TOGGLE_REPEAT -> toggleRepeat()
+            ACTION_TOGGLE_FAVORITE -> toggleFavoriteFromNotification()
+            ACTION_CYCLE_SPEED -> cyclePlaybackSpeed()
             ACTION_STOP -> {
                 stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -494,6 +630,20 @@ class MusicPlaybackService : Service() {
                         RepeatMode.ALL -> android.R.drawable.ic_menu_rotate
                         RepeatMode.OFF -> android.R.drawable.ic_menu_rotate
                     }
+                ).build()
+            )
+            .addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    ACTION_TOGGLE_FAVORITE,
+                    if (isTrackFavorite(getCurrentTrack()?.id)) "Unlike" else "Like",
+                    R.drawable.ic_heart_outline
+                ).build()
+            )
+            .addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    ACTION_CYCLE_SPEED,
+                    "Speed · ${formatSpeedText(getPlaybackSpeed())}",
+                    R.drawable.ic_speed
                 ).build()
             )
             
@@ -685,8 +835,9 @@ class MusicPlaybackService : Service() {
 
     fun previous() {
         // If more than 3 seconds in, restart current track
-        if (exoPlayer.currentPosition > 3000) {
-            exoPlayer.seekTo(0)
+        val currentPos = try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition else 0L } catch (_: Exception) { 0L }
+        if (currentPos > 3000) {
+            try { exoPlayer.seekTo(0) } catch (_: Exception) {}
             notifyPlaybackState()
             return
         }
@@ -706,11 +857,11 @@ class MusicPlaybackService : Service() {
         try { exoPlayer.seekTo(position) } catch (e: Exception) { android.util.Log.e(TAG, "Error seeking", e) }
     }
 
-    fun getCurrentPosition(): Long = try { exoPlayer.currentPosition } catch (_: Exception) { 0L }
+    fun getCurrentPosition(): Long = try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition else 0L } catch (_: Exception) { 0L }
 
-    fun getDuration(): Long = try { exoPlayer.duration } catch (_: Exception) { 0L }
+    fun getDuration(): Long = try { if (::exoPlayer.isInitialized) exoPlayer.duration.coerceAtLeast(0L) else 0L } catch (_: Exception) { 0L }
 
-    fun isPlaying(): Boolean = try { exoPlayer.isPlaying } catch (_: Exception) { false }
+    fun isPlaying(): Boolean = try { if (::exoPlayer.isInitialized) exoPlayer.isPlaying else false } catch (_: Exception) { false }
 
     fun getCurrentTrack(): MusicItem? {
         return if (currentPlaylist.isNotEmpty() && currentIndex >= 0) {
@@ -751,10 +902,33 @@ class MusicPlaybackService : Service() {
     }
 
     fun getPlaybackState(): PlaybackState {
+        var playing = false
+        var position = 0L
+        var duration = 0L
+        var buffering = false
+        var speed = 1.0f
+        try {
+            playing = if (::exoPlayer.isInitialized) exoPlayer.isPlaying else false
+        } catch (_: Exception) { playing = false }
+        try {
+            position = if (::exoPlayer.isInitialized) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L
+        } catch (_: Exception) { position = 0L }
+        try {
+            duration = if (::exoPlayer.isInitialized) exoPlayer.duration.coerceAtLeast(0L) else 0L
+        } catch (_: Exception) { duration = 0L }
+        try {
+            buffering = if (::exoPlayer.isInitialized)
+                exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING
+            else false
+        } catch (_: Exception) { buffering = false }
+        try {
+            speed = if (::exoPlayer.isInitialized) exoPlayer.playbackParameters.speed else 1.0f
+        } catch (_: Exception) { speed = 1.0f }
+
         return PlaybackState(
-            isPlaying = exoPlayer.isPlaying,
-            currentPosition = exoPlayer.currentPosition,
-            duration = exoPlayer.duration.coerceAtLeast(0),
+            isPlaying = playing,
+            currentPosition = position,
+            duration = duration,
             currentTrack = if (currentPlaylist.isNotEmpty() && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
                 currentPlaylist[currentIndex]
             } else null,
@@ -763,10 +937,11 @@ class MusicPlaybackService : Service() {
             isShuffleEnabled = isShuffleEnabled,
             repeatMode = repeatMode,
             isLoading = false, // Will be overridden by notify calls
-            isBuffering = exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING,
+            isBuffering = buffering,
             mediaMode = mediaMode,
             isVideoAvailable = isVideoAvailable,
-            videoQuality = videoQuality
+            videoQuality = videoQuality,
+            playbackSpeed = if (speed.isNaN() || speed.isInfinite()) 1.0f else speed
         )
     }
 
@@ -1280,5 +1455,17 @@ class MusicPlaybackService : Service() {
         const val ACTION_TOGGLE_SHUFFLE = "com.israrxy.raazi.ACTION_TOGGLE_SHUFFLE"
         const val ACTION_TOGGLE_REPEAT = "com.israrxy.raazi.ACTION_TOGGLE_REPEAT"
         const val ACTION_STOP = "com.israrxy.raazi.ACTION_STOP"
+        const val ACTION_TOGGLE_FAVORITE = "com.israrxy.raazi.ACTION_TOGGLE_FAVORITE"
+        const val ACTION_CYCLE_SPEED = "com.israrxy.raazi.ACTION_CYCLE_SPEED"
+
+        const val NOTIFICATION_LIKE_CHANNEL = "com.israrxy.raazi.LIKE_EVENT"
+        const val NOTIFICATION_FEEDBACK_CHANNEL = "com.israrxy.raazi.NOTIFICATION_FEEDBACK"
+        const val EXTRA_TRACK_ID = "track_id"
+        const val EXTRA_FEEDBACK_MESSAGE = "feedback_message"
+
+        val SPEED_CYCLE_PRESETS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+
+        const val MIN_PLAYBACK_SPEED = 0.25f
+        const val MAX_PLAYBACK_SPEED = 3.0f
     }
 }

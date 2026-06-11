@@ -58,6 +58,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.ui.components.shimmerEffect
+import android.net.Uri
+import com.israrxy.raazi.model.MusicContentType
+import com.israrxy.raazi.model.savedCollectionId
 
 import androidx.compose.material.icons.filled.Download // Import
 import androidx.compose.material.icons.filled.PlaylistAdd // Import
@@ -101,6 +104,11 @@ fun PlayerScreen(
     val isPlaying = playbackState.isPlaying
     val progress = playbackState.currentPosition
     val duration = playbackState.duration
+    val currentTrackRelated by viewModel.currentTrackRelated.collectAsStateWithLifecycle()
+    val currentArtistSongs by viewModel.currentArtistSongs.collectAsStateWithLifecycle()
+    val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
+    val savedCollectionIds by viewModel.savedCollectionIds.collectAsStateWithLifecycle()
+    var playlistTargetTrack by remember { mutableStateOf<com.israrxy.raazi.model.MusicItem?>(null) }
 
     // State Hoisting for Lyrics
     val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
@@ -254,12 +262,20 @@ fun PlayerScreen(
             exit = fadeOut(tween(300))
         ) {
             // Main Scrollable Content
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding() // Moved padding here
-                .padding(horizontal = 24.dp)
-        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val screenHeight = maxHeight
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(screenHeight)
+                            .statusBarsPadding()
+                            .padding(horizontal = 24.dp)
+                    ) {
             // HEADER
             Spacer(modifier = Modifier.height(16.dp))
             Row(
@@ -422,7 +438,6 @@ fun PlayerScreen(
                         }
                         
                         // Like Button
-                        val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
                         val isLiked = track?.let { t -> favoriteTracks.any { it.id == t.id } } == true
                         
                         IconButton(onClick = { track?.let { viewModel.toggleFavorite(it) } }) {
@@ -648,7 +663,298 @@ fun PlayerScreen(
                     Icon(Icons.Default.Subject, null, tint = lyricsAccent, modifier = Modifier.size(24.dp))
                 }
             }
+                    } // end of height(screenHeight) Column
+
+                    // --- Extra content cards (scrollable below the player) ---
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 32.dp)
+                            .navigationBarsPadding()
+            ) {
+                // 1. Lyrics Preview Card
+                val previewLines = remember(lyrics) {
+                    val synced = lyrics?.syncedLyrics
+                    val plain = lyrics?.plainLyrics
+                    when {
+                        !synced.isNullOrEmpty() -> {
+                            synced.lines().mapNotNull { line ->
+                                val match = Regex("\\[(\\d+):(\\d+\\.\\d+)\\](.*)").find(line)
+                                val text = match?.groupValues?.get(3)?.trim().orEmpty()
+                                if (text.isBlank()) null else text
+                            }.take(4)
+                        }
+                        !plain.isNullOrEmpty() -> {
+                            plain.lines().map { it.trim() }.filter { it.isNotBlank() }.take(4)
+                        }
+                        else -> emptyList()
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLyricsVisibilityChange(true) },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Color(0xFF0D4232), Color(0xFF07261D))
+                                )
+                            )
+                            .padding(24.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "LYRICS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    letterSpacing = 1.sp
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Subject,
+                                    contentDescription = "Expand Lyrics",
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            if (isLyricsLoading) {
+                                Text(
+                                    text = "Loading lyrics...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            } else if (previewLines.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    previewLines.forEach { line ->
+                                        Text(
+                                            text = line,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "No lyrics found for this track. Tap to search.",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. About the Artist Card
+                val artistId = currentTrack?.artistId?.ifBlank { null } ?: currentTrack?.artist.orEmpty()
+                val artistName = currentTrack?.artist ?: "Unknown Artist"
+                val normalizedArtistId = remember(artistId, artistName) {
+                    artistId.ifBlank { artistName }
+                }
+                val savedArtistId = remember(normalizedArtistId) {
+                    savedCollectionId(MusicContentType.ARTIST, normalizedArtistId)
+                }
+                val isSavedArtist = savedArtistId in savedCollectionIds
+
+                val artistThumbnail = currentArtistSongs.firstOrNull()?.thumbnailUrl
+                    ?: currentTrack?.thumbnailUrl
+                    ?: ""
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onCollapse()
+                            navController.navigate("artist/${Uri.encode(normalizedArtistId)}?name=${Uri.encode(artistName)}")
+                        },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Zinc900)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "ABOUT THE ARTIST",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.6f),
+                            letterSpacing = 1.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            AsyncImage(
+                                model = ThumbnailUtils.getHighQualityThumbnail(artistThumbnail),
+                                contentDescription = artistName,
+                                modifier = Modifier
+                                    .size(70.dp)
+                                    .clip(CircleShape)
+                                    .background(Zinc800),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = artistName,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isSavedArtist) "Saved to Library" else "Tap to view profile",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.5f)
+                                )
+                            }
+
+                            // Follow / Bookmark Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .then(
+                                        if (isSavedArtist) {
+                                            Modifier
+                                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
+                                                .clickable {
+                                                    viewModel.toggleSavedArtist(
+                                                        artistId = normalizedArtistId,
+                                                        artistName = artistName,
+                                                        thumbnailUrl = artistThumbnail
+                                                    )
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        } else {
+                                            Modifier
+                                                .background(Color.White)
+                                                .clickable {
+                                                    viewModel.toggleSavedArtist(
+                                                        artistId = normalizedArtistId,
+                                                        artistName = artistName,
+                                                        thumbnailUrl = artistThumbnail
+                                                    )
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isSavedArtist) "Following" else "Follow",
+                                    color = if (isSavedArtist) Color.White else Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 3. More Songs Like This
+                if (currentTrackRelated.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "More Songs Like This",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    currentTrackRelated.take(5).forEachIndexed { index, song ->
+                        val isLiked = favoriteTracks.any { it.id == song.id }
+                        com.israrxy.raazi.ui.components.SongListItem(
+                            song = song,
+                            isLiked = isLiked,
+                            onClick = {
+                                viewModel.playPlaylist(currentTrackRelated, index)
+                            },
+                            onLike = { viewModel.toggleFavorite(song) },
+                            onAddToQueue = {
+                                viewModel.addToQueue(listOf(song))
+                                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                            },
+                            onDownload = { viewModel.downloadTrack(song) },
+                            onAddToPlaylist = {
+                                playlistTargetTrack = song
+                                showPlaylistDialog = true
+                            },
+                            onGoToArtist = {
+                                val targetId = song.artistId?.ifBlank { null } ?: song.artist
+                                onCollapse()
+                                navController.navigate("artist/${Uri.encode(targetId)}?name=${Uri.encode(song.artist)}")
+                            },
+                            showRingtone = false
+                        )
+                    }
+                }
+
+                // 4. More From Artist
+                if (currentArtistSongs.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "More From $artistName",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    currentArtistSongs.take(5).forEachIndexed { index, song ->
+                        val isLiked = favoriteTracks.any { it.id == song.id }
+                        com.israrxy.raazi.ui.components.SongListItem(
+                            song = song,
+                            isLiked = isLiked,
+                            onClick = {
+                                viewModel.playPlaylist(currentArtistSongs, index)
+                            },
+                            onLike = { viewModel.toggleFavorite(song) },
+                            onAddToQueue = {
+                                viewModel.addToQueue(listOf(song))
+                                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                            },
+                            onDownload = { viewModel.downloadTrack(song) },
+                            onAddToPlaylist = {
+                                playlistTargetTrack = song
+                                showPlaylistDialog = true
+                            },
+                            onGoToArtist = {
+                                val targetId = song.artistId?.ifBlank { null } ?: song.artist
+                                onCollapse()
+                                navController.navigate("artist/${Uri.encode(targetId)}?name=${Uri.encode(song.artist)}")
+                            },
+                            showRingtone = false
+                        )
+                    }
+                }
+            }
         }
+    }
         
         // LYRICS OVERLAY
         AnimatedVisibility(
@@ -1556,7 +1862,10 @@ fun PlayerScreen(
         // ADD TO PLAYLIST DIALOG
         if (showPlaylistDialog) {
             AlertDialog(
-                onDismissRequest = { showPlaylistDialog = false },
+                onDismissRequest = { 
+                    showPlaylistDialog = false
+                    playlistTargetTrack = null
+                },
                 title = { Text("Add to Playlist", color = MaterialTheme.colorScheme.onSurface) },
                 text = {
                     if (userPlaylists.isEmpty()) {
@@ -1589,9 +1898,11 @@ fun PlayerScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            if (currentTrack != null) {
-                                                viewModel.addToPlaylist(playlist.id, currentTrack)
+                                            val targetTrack = playlistTargetTrack ?: currentTrack
+                                            if (targetTrack != null) {
+                                                viewModel.addToPlaylist(playlist.id, targetTrack)
                                                 showPlaylistDialog = false
+                                                playlistTargetTrack = null
                                                 Toast.makeText(context, "Added to ${playlist.title}", Toast.LENGTH_SHORT).show()
                                             }
                                         }
@@ -1609,6 +1920,7 @@ fun PlayerScreen(
                 confirmButton = {
                     TextButton(onClick = { 
                         showPlaylistDialog = false
+                        playlistTargetTrack = null
                     }) {
                         Text("Dismiss", color = MaterialTheme.colorScheme.primary)
                     }
@@ -1642,15 +1954,12 @@ fun PlayerScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (newPlaylistName.isNotBlank() && currentTrack != null) {
+                            val targetTrack = playlistTargetTrack ?: currentTrack
+                            if (newPlaylistName.isNotBlank() && targetTrack != null) {
                                 viewModel.createPlaylist(newPlaylistName)
-                                // We need to wait a bit or observe the new playlist to add the track
-                                // For simplicity/speed, we'll assume the user might want a separate step,
-                                // but ideally we create AND add.
-                                // The ViewModel.createPlaylist likely doesn't return the ID easily here.
-                                // Let's just create it and notify.
                                 showCreateDialog = false
                                 newPlaylistName = ""
+                                playlistTargetTrack = null
                                 Toast.makeText(context, "Playlist created! Add the song from the menu.", Toast.LENGTH_LONG).show()
                             }
                         },

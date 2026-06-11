@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 5,
-    "latestVersionName": "4.5.1",
+    "latestVersionCode": 6,
+    "latestVersionName": "4.8.1",
     "downloadUrl": "https://raazi.pages.dev",
     "forceUpdate": true,
-    "releaseNotes": "v4.5.1 — Home UI/UX Redesign & Performance:\n• Redesigned Home screen with section-based feed layout\n• New greeting header with time-based display\n• Improved Keep Listening with resume action and compact recent items\n• Improved Quick Picks with featured card and two-column grid\n• Faster search suggestions with in-memory cache and reduced latency\n• Local Home interaction metrics for smarter content ranking\n• Better empty and loading states across Home sections\n• General stability and performance improvements"
+    "releaseNotes": "v4.8.1 — Spotify-Style Player Upgrades & Real-Time Search Suggester:\n• Reworked the music player UI into an elegant scrollable panel\n• Added interactive Lyrics Preview card with beautiful gradients and quick zoom\n• Added About the Artist profiles card with Follower stats, quick Follow/Unfollow toggle, and artist page navigation\n• Added Spotify-style related recommendation lists ('More Songs Like This' and 'More From Artist') right below the player\n• Upgraded search suggestions with real-time matching 'Top Results' displayed directly under suggestions while typing\n• Offloaded PoToken generation process on startup to IO thread to prevent UI lockups"
 }

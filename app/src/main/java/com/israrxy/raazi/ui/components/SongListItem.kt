@@ -42,10 +42,14 @@ fun SongListItem(
     onGoToArtist: () -> Unit = {},
     onDownload: () -> Unit = {},
     onDownloadForRingtone: () -> Unit = {},
+    onAddToQueue: () -> Unit = {},
+    onShowMoreOptions: () -> Unit = {},
     showAddToPlaylist: Boolean = true,
     showGoToArtist: Boolean = true,
     showDownload: Boolean = true,
     showRingtone: Boolean = false,
+    showAddToQueue: Boolean = true,
+    showMoreOptions: Boolean = true,
     showLike: Boolean = true,
     showSave: Boolean = false,
     isSaved: Boolean = false,
@@ -54,7 +58,7 @@ fun SongListItem(
     onPreviewToggle: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showRingtone || showLike || showSave || selectionEnabled
+    val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showRingtone || showAddToQueue || showMoreOptions || showLike || showSave || selectionEnabled
 
     Row(
         modifier = modifier
@@ -202,6 +206,28 @@ fun SongListItem(
                                 onDownloadForRingtone()
                             },
                             leadingIcon = { Icon(Icons.Default.Phone, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+                    }
+
+                    if (showAddToQueue) {
+                        DropdownMenuItem(
+                            text = { Text("Add to Queue", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                showMenu = false
+                                onAddToQueue()
+                            },
+                            leadingIcon = { Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+                    }
+
+                    if (showMoreOptions) {
+                        DropdownMenuItem(
+                            text = { Text("More Options", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                showMenu = false
+                                onShowMoreOptions()
+                            },
+                            leadingIcon = { Icon(Icons.Default.MoreHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
                     }
 

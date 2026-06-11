@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -42,6 +43,7 @@ fun ArtistScreen(
     onNavigateBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var songs by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     // Add To Playlist Dialog State
@@ -201,6 +203,13 @@ fun ArtistScreen(
                         onGoToArtist = { /* Already on artist screen, maybe do nothing or navigate */ },
                         onDownload = { viewModel.downloadTrack(musicItem) },
                         onDownloadForRingtone = { viewModel.downloadForRingtone(musicItem) },
+                        onAddToQueue = {
+                            viewModel.addToQueue(listOf(musicItem))
+                            android.widget.Toast.makeText(context, "Added to queue", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onShowMoreOptions = {
+                            android.widget.Toast.makeText(context, "More options for ${musicItem.title}", android.widget.Toast.LENGTH_SHORT).show()
+                        },
                         showRingtone = true,
                         onLike = { viewModel.toggleFavorite(musicItem) }
                     )

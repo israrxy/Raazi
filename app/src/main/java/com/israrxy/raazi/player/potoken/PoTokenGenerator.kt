@@ -20,8 +20,24 @@ class PoTokenGenerator {
     private var webPoTokenStreamingPot: String? = null
     private var webPoTokenGenerator: PoTokenWebView? = null
 
+    companion object {
+        @Volatile
+        private var INSTANCE: PoTokenGenerator? = null
+
+        fun getInstance(): PoTokenGenerator {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: PoTokenGenerator().also { INSTANCE = it }
+            }
+        }
+    }
+
     fun getWebClientPoToken(videoId: String, sessionId: String): PoTokenResult? {
         if (!webViewSupported || webViewBadImpl) {
+            return null
+        }
+
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            Log.e(TAG, "getWebClientPoToken called on the Main thread! This causes a deadlock. Ignoring call.")
             return null
         }
 

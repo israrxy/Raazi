@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -210,7 +213,7 @@ fun OnboardingScreen(
                     )
                     if (pagerState.currentPage < 3) {
                         Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.ArrowForward, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
                     }
                 }
             }
@@ -534,7 +537,7 @@ private fun YouTubeConnectPage(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { showWebView = false }) {
-                    Icon(Icons.Default.ArrowBack, "Back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
                 Spacer(Modifier.width(8.dp))
                 Text("Sign in with Google", fontWeight = FontWeight.Bold)
@@ -652,6 +655,18 @@ private fun YouTubeConnectPage(
                         )
                     }
                 }
+                
+                Spacer(Modifier.height(12.dp))
+                
+                Button(
+                    onClick = onConnected,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Continue", fontWeight = FontWeight.Bold)
+                }
             } else {
                 Button(
                     onClick = { showWebView = true },
@@ -660,7 +675,7 @@ private fun YouTubeConnectPage(
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.Login, null)
+                    Icon(Icons.AutoMirrored.Filled.Login, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Sign In with Google Account", fontWeight = FontWeight.Bold)
                 }
@@ -764,7 +779,7 @@ private fun GeminiSetupPage(
                 }
                 
                 if (useGemini) {
-                    Divider()
+                    HorizontalDivider()
                     
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(

@@ -642,6 +642,12 @@ class MusicRepository(
         }
     }
 
+    fun getRelatedTracks(trackId: String): Flow<List<MusicItem>> {
+        return db.musicDao().getRelatedTracks(trackId).map { entities ->
+            entities.map { mapToDomain(it) }
+        }
+    }
+
     suspend fun recordHomeInteraction(
         itemId: String,
         sectionId: String,

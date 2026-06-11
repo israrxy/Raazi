@@ -21,6 +21,7 @@ import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackState
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.model.SavedCollectionItem
 import com.israrxy.raazi.model.SearchResult
@@ -244,6 +245,21 @@ class MusicPlayerViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val currentTrackRelated: StateFlow<List<MusicItem>> = playbackState
+        .map { it.currentTrack?.id }
+        .flatMapLatest { trackId ->
+            if (trackId != null) {
+                repository.getRelatedTracks(trackId)
+            } else {
+                kotlinx.coroutines.flow.flowOf(emptyList())
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val _currentArtistSongs = MutableStateFlow<List<MusicItem>>(emptyList())
+    val currentArtistSongs: StateFlow<List<MusicItem>> = _currentArtistSongs.asStateFlow()
+
     data class EqualizerState(
         val bands: Short = 0,
         val minLevel: Short = 0,
@@ -337,6 +353,40 @@ class MusicPlayerViewModel(
                         } catch (e: Exception) {
                             Log.w("MusicVM", "Failed to fetch related for ${track.title}", e)
                         }
+
+                        // Fetch artist songs
+                        try {
+                            val artistQuery = track.artist.split(",").first().trim()
+                            if (artistQuery.isNotBlank() && artistQuery != "Unknown Artist") {
+                                val result = com.zionhuang.innertube.YouTube.search(
+                                    artistQuery,
+                                    filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
+                                ).getOrNull()
+                                val songs = result?.items?.mapNotNull { item ->
+                                    when (item) {
+                                        is com.zionhuang.innertube.models.SongItem -> MusicItem(
+                                            id = item.id ?: return@mapNotNull null,
+                                            title = item.title ?: "Unknown",
+                                            artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                                            duration = (item.duration?.toLong() ?: 0) * 1000L,
+                                            thumbnailUrl = item.thumbnail ?: "",
+                                            audioUrl = "",
+                                            videoUrl = item.id ?: return@mapNotNull null,
+                                            isLive = false,
+                                            contentType = MusicContentType.SONG,
+                                            setVideoId = item.setVideoId
+                                        )
+                                        else -> null
+                                    }
+                                }?.take(5) ?: emptyList()
+                                _currentArtistSongs.value = songs
+                            } else {
+                                _currentArtistSongs.value = emptyList()
+                            }
+                        } catch (e: Exception) {
+                            Log.w("MusicVM", "Failed to fetch artist songs for ${track.artist}", e)
+                            _currentArtistSongs.value = emptyList()
+                        }
                     }
                 }
                 trackChangedListener = trackListener
@@ -344,7 +394,41 @@ class MusicPlayerViewModel(
                 
                 // Update initial state
                 _playbackState.value = playbackService?.getPlaybackState() ?: PlaybackState()
-                _playbackState.value.currentTrack?.let { fetchLyrics(it) }
+                _playbackState.value.currentTrack?.let { initialTrack ->
+                    fetchLyrics(initialTrack)
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            repository.fetchAndSaveRelated(initialTrack)
+                        } catch (_: Exception) {}
+                        try {
+                            val artistQuery = initialTrack.artist.split(",").first().trim()
+                            if (artistQuery.isNotBlank() && artistQuery != "Unknown Artist") {
+                                val result = com.zionhuang.innertube.YouTube.search(
+                                    artistQuery,
+                                    filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
+                                ).getOrNull()
+                                val songs = result?.items?.mapNotNull { item ->
+                                    when (item) {
+                                        is com.zionhuang.innertube.models.SongItem -> MusicItem(
+                                            id = item.id ?: return@mapNotNull null,
+                                            title = item.title ?: "Unknown",
+                                            artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                                            duration = (item.duration?.toLong() ?: 0) * 1000L,
+                                            thumbnailUrl = item.thumbnail ?: "",
+                                            audioUrl = "",
+                                            videoUrl = item.id ?: return@mapNotNull null,
+                                            isLive = false,
+                                            contentType = MusicContentType.SONG,
+                                            setVideoId = item.setVideoId
+                                        )
+                                        else -> null
+                                    }
+                                }?.take(5) ?: emptyList()
+                                _currentArtistSongs.value = songs
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
                 
                 // Load Equalizer State
                 loadEqualizerState()
@@ -1942,6 +2026,7 @@ class MusicPlayerViewModel(
         object Setting : RingtoneState()
         data class Done(val message: String) : RingtoneState()
         data class Error(val message: String) : RingtoneState()
+        object NeedsPermission : RingtoneState()
     }
 
     private val _ringtoneState = MutableStateFlow<RingtoneState>(RingtoneState.Idle)

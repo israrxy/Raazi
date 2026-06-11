@@ -139,7 +139,15 @@ fun DownloadsScreen(
                             viewModel.playMusic(track)
                             onNavigateToPlayer()
                         },
-                        onDelete = { viewModel.deleteDownloadedFile(download.trackId) }
+                        onDelete = { viewModel.deleteDownloadedFile(download.trackId) },
+                        onSetAsRingtone = { viewModel.downloadForRingtone(download.toMusicItem()) },
+                        onShowMoreOptions = {
+                            android.widget.Toast.makeText(
+                                context,
+                                "More options for ${download.title}",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     )
                 }
             }
@@ -451,7 +459,13 @@ private fun FailedDownloadItem(download: DownloadEntity, onRetry: () -> Unit, on
 }
 
 @Composable
-private fun CompletedDownloadItem(download: DownloadEntity, onPlay: () -> Unit, onDelete: () -> Unit) {
+private fun CompletedDownloadItem(
+    download: DownloadEntity,
+    onPlay: () -> Unit,
+    onDelete: () -> Unit,
+    onSetAsRingtone: () -> Unit = {},
+    onShowMoreOptions: () -> Unit = {}
+) {
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -538,11 +552,28 @@ private fun CompletedDownloadItem(download: DownloadEntity, onPlay: () -> Unit, 
                     onDismissRequest = { showMenu = false }
                 ) {
                     DropdownMenuItem(
+                        text = { Text("Set as Ringtone") },
+                        onClick = {
+                            showMenu = false
+                            onSetAsRingtone()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Phone, null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("More Options") },
+                        onClick = {
+                            showMenu = false
+                            onShowMoreOptions()
+                        },
+                        leadingIcon = { Icon(Icons.Default.MoreHoriz, null) }
+                    )
+                    DropdownMenuItem(
                         text = { Text("Delete Download") },
                         onClick = {
                             showMenu = false
                             showDeleteDialog = true
-                        }
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, null) }
                     )
                 }
             }

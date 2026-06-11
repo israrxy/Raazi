@@ -130,5 +130,6 @@ data class PlaybackState(
     val isBuffering: Boolean = false,
     val mediaMode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
     val isVideoAvailable: Boolean = false,
-    val videoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO
+    val videoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
+    val playbackSpeed: Float = 1.0f
 )
