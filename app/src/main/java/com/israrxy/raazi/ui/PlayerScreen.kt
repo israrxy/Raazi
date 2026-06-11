@@ -674,21 +674,45 @@ fun PlayerScreen(
                             .navigationBarsPadding()
             ) {
                 // 1. Lyrics Preview Card
-                val previewLines = remember(lyrics) {
+                val parsedSyncedLines = remember(lyrics) {
                     val synced = lyrics?.syncedLyrics
-                    val plain = lyrics?.plainLyrics
-                    when {
-                        !synced.isNullOrEmpty() -> {
-                            synced.lines().mapNotNull { line ->
-                                val match = Regex("\\[(\\d+):(\\d+\\.\\d+)\\](.*)").find(line)
-                                val text = match?.groupValues?.get(3)?.trim().orEmpty()
-                                if (text.isBlank()) null else text
-                            }.take(4)
+                    if (!synced.isNullOrEmpty()) {
+                        synced.lines().mapNotNull { line ->
+                            val regex = Regex("\\[(\\d+):(\\d+\\.\\d+)\\](.*)")
+                            val match = regex.find(line)
+                            if (match != null) {
+                                val min = match.groupValues[1].toLong()
+                                val sec = match.groupValues[2].toDouble()
+                                val timeMs = (min * 60 * 1000 + sec * 1000).toLong()
+                                val text = match.groupValues[3].trim()
+                                if (text.isBlank()) null else timeMs to text
+                            } else null
                         }
-                        !plain.isNullOrEmpty() -> {
-                            plain.lines().map { it.trim() }.filter { it.isNotBlank() }.take(4)
+                    } else {
+                        val plain = lyrics?.plainLyrics
+                        if (!plain.isNullOrEmpty()) {
+                            plain.lines()
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                                .map { 0L to it }
+                        } else {
+                            emptyList()
                         }
-                        else -> emptyList()
+                    }
+                }
+
+                val isSynced = remember(lyrics) { !lyrics?.syncedLyrics.isNullOrEmpty() }
+
+                val activeLineIndex = remember(progress, parsedSyncedLines, isSynced) {
+                    if (!isSynced || parsedSyncedLines.isEmpty()) 0
+                    else parsedSyncedLines.indexOfLast { it.first <= progress }.coerceAtLeast(0)
+                }
+
+                val displayLines = remember(activeLineIndex, parsedSyncedLines) {
+                    val count = parsedSyncedLines.size
+                    if (count == 0) emptyList()
+                    else {
+                        parsedSyncedLines.subList(activeLineIndex, (activeLineIndex + 4).coerceAtMost(count))
                     }
                 }
 
@@ -739,14 +763,21 @@ fun PlayerScreen(
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontWeight = FontWeight.Medium
                                 )
-                            } else if (previewLines.isNotEmpty()) {
+                            } else if (displayLines.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    previewLines.forEach { line ->
+                                    displayLines.forEachIndexed { index, linePair ->
+                                        val isCurrentLine = index == 0 && isSynced
+                                        val alpha = if (isCurrentLine) 1.0f else when (index) {
+                                            1 -> 0.7f
+                                            2 -> 0.45f
+                                            3 -> 0.25f
+                                            else -> 0.2f
+                                        }
                                         Text(
-                                            text = line,
+                                            text = linePair.second,
                                             style = MaterialTheme.typography.titleLarge,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White,
+                                            color = Color.White.copy(alpha = alpha),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
