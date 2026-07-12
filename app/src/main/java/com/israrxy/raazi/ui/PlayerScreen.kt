@@ -60,6 +60,7 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.ui.components.shimmerEffect
 import android.net.Uri
 import com.israrxy.raazi.model.MusicContentType
+import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.savedCollectionId
 
 import androidx.compose.material.icons.filled.Download // Import
@@ -120,6 +121,7 @@ fun PlayerScreen(
     var showLyricsBrowser by remember { mutableStateOf(false) }
     var showLyricsMenu by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showPlayNextSheet by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
@@ -134,6 +136,12 @@ fun PlayerScreen(
     var selectedLyricsVariant by remember(currentTrack?.id) { mutableStateOf(LyricsViewVariant.ORIGINAL) }
     val density = LocalDensity.current
     var lyricsDismissDrag by remember { mutableFloatStateOf(0f) }
+    val playNextItems = remember(currentTrack?.id, currentTrackRelated, currentArtistSongs) {
+        (currentTrackRelated + currentArtistSongs)
+            .filter { it.id != currentTrack?.id }
+            .distinctBy { it.id }
+            .take(30)
+    }
 
     LaunchedEffect(isLyricsVisible) {
         if (!isLyricsVisible) {
@@ -262,17 +270,35 @@ fun PlayerScreen(
             exit = fadeOut(tween(300))
         ) {
             // Main Scrollable Content
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val screenHeight = maxHeight
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
+                        .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                 ) {
+                    // Drag handle to collapse the player
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 4.dp)
+                            .clickable { onCollapse() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.35f))
+                        )
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(screenHeight)
+                            .heightIn(min = 0.dp, max = screenHeight)
                             .statusBarsPadding()
                             .padding(horizontal = 24.dp)
                     ) {
@@ -650,6 +676,25 @@ fun PlayerScreen(
 
                 Spacer(modifier = Modifier.width(24.dp))
 
+                val playNextAccent = if (playNextItems.isNotEmpty()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.35f)
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            if (playNextItems.isNotEmpty()) {
+                                showPlayNextSheet = true
+                            } else {
+                                Toast.makeText(context, "No play next songs yet", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.QueueMusic, null, tint = playNextAccent, modifier = Modifier.size(24.dp))
+                }
+
+                Spacer(modifier = Modifier.width(24.dp))
+
                 // Lyrics Button
                 val lyricsAccent = if (isLyricsVisible) Emerald500 else Color.White.copy(alpha = 0.9f)
 
@@ -908,81 +953,6 @@ fun PlayerScreen(
                     }
                 }
 
-                // 3. More Songs Like This
-                if (currentTrackRelated.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "More Songs Like This",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    currentTrackRelated.take(5).forEachIndexed { index, song ->
-                        val isLiked = favoriteTracks.any { it.id == song.id }
-                        com.israrxy.raazi.ui.components.SongListItem(
-                            song = song,
-                            isLiked = isLiked,
-                            onClick = {
-                                viewModel.playPlaylist(currentTrackRelated, index)
-                            },
-                            onLike = { viewModel.toggleFavorite(song) },
-                            onAddToQueue = {
-                                viewModel.addToQueue(listOf(song))
-                                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
-                            },
-                            onDownload = { viewModel.downloadTrack(song) },
-                            onAddToPlaylist = {
-                                playlistTargetTrack = song
-                                showPlaylistDialog = true
-                            },
-                            onGoToArtist = {
-                                val targetId = song.artistId?.ifBlank { null } ?: song.artist
-                                onCollapse()
-                                navController.navigate("artist/${Uri.encode(targetId)}?name=${Uri.encode(song.artist)}")
-                            },
-                            showRingtone = false
-                        )
-                    }
-                }
-
-                // 4. More From Artist
-                if (currentArtistSongs.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "More From $artistName",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    currentArtistSongs.take(5).forEachIndexed { index, song ->
-                        val isLiked = favoriteTracks.any { it.id == song.id }
-                        com.israrxy.raazi.ui.components.SongListItem(
-                            song = song,
-                            isLiked = isLiked,
-                            onClick = {
-                                viewModel.playPlaylist(currentArtistSongs, index)
-                            },
-                            onLike = { viewModel.toggleFavorite(song) },
-                            onAddToQueue = {
-                                viewModel.addToQueue(listOf(song))
-                                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
-                            },
-                            onDownload = { viewModel.downloadTrack(song) },
-                            onAddToPlaylist = {
-                                playlistTargetTrack = song
-                                showPlaylistDialog = true
-                            },
-                            onGoToArtist = {
-                                val targetId = song.artistId?.ifBlank { null } ?: song.artist
-                                onCollapse()
-                                navController.navigate("artist/${Uri.encode(targetId)}?name=${Uri.encode(song.artist)}")
-                            },
-                            showRingtone = false
-                        )
-                    }
-                }
             }
         }
     }

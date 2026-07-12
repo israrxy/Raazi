@@ -53,11 +53,16 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         emptyList()
     )
     
-    val searchHistory: StateFlow<List<SearchHistoryEntity>> = viewState.map { it.history }.stateIn(
-        viewModelScope,
-        SharingStarted.Lazily,
-        emptyList()
-    )
+    val searchHistory: StateFlow<List<SearchHistoryEntity>> = query
+        .debounce(150L)
+        .flatMapLatest { currentQuery ->
+            musicDao.searchHistory(currentQuery.trim())
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Lazily,
+            emptyList()
+        )
 
     val topResults: StateFlow<List<com.israrxy.raazi.model.MusicItem>> = viewState.map { state ->
         state.items.mapNotNull { ytItem ->
@@ -183,27 +188,53 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun performSearch(query: String) {
-        if (query.isBlank()) return
-        submittedQuery = query
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) return
+        submittedQuery = normalizedQuery
         _isSearching.value = true
         
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val result = repository.searchMusic(query, _selectedService.value)
+                val result = repository.searchMusic(normalizedQuery, _selectedService.value)
                 _searchResults.value = result
-                saveSearchHistory(query)
+                val top = result.items.firstOrNull { item ->
+                    item.contentType == com.israrxy.raazi.model.MusicContentType.SONG ||
+                        item.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO ||
+                        (item.contentType == com.israrxy.raazi.model.MusicContentType.UNKNOWN && !item.isPlaylist)
+                }
+                saveSearchHistory(
+                    query = normalizedQuery,
+                    thumbnailUrl = top?.thumbnailUrl,
+                    resultTitle = top?.title,
+                    resultArtist = top?.artist
+                )
             } catch (e: Exception) {
                 android.util.Log.e("SearchViewModel", "Search error", e)
-                _searchResults.value = com.israrxy.raazi.model.SearchResult(query, emptyList())
+                _searchResults.value = com.israrxy.raazi.model.SearchResult(normalizedQuery, emptyList())
+                saveSearchHistory(normalizedQuery)
             } finally {
                 _isSearching.value = false
             }
         }
     }
 
-    fun saveSearchHistory(query: String) {
+    fun saveSearchHistory(
+        query: String,
+        thumbnailUrl: String? = null,
+        resultTitle: String? = null,
+        resultArtist: String? = null
+    ) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            musicDao.insertSearchHistory(SearchHistoryEntity(query = query))
+            musicDao.upsertSearchHistory(
+                query = normalizedQuery,
+                thumbnailUrl = thumbnailUrl?.takeIf { it.isNotBlank() },
+                resultTitle = resultTitle?.takeIf { it.isNotBlank() },
+                resultArtist = resultArtist?.takeIf { it.isNotBlank() },
+                timestamp = System.currentTimeMillis()
+            )
+            musicDao.trimSearchHistory(MAX_SEARCH_HISTORY_ITEMS)
         }
     }
 
@@ -227,6 +258,8 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         suggestionCache.clear()
     }
 }
+
+private const val MAX_SEARCH_HISTORY_ITEMS = 20
 
 data class SearchSuggestionViewState(
     val history: List<SearchHistoryEntity> = emptyList(),

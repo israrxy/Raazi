@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FormatEntity::class,
         HomeInteractionEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -80,6 +80,14 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_home_interactions_itemId ON home_interactions(itemId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_home_interactions_sectionId ON home_interactions(sectionId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_home_interactions_timestamp ON home_interactions(timestamp)")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE search_history ADD COLUMN thumbnailUrl TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE search_history ADD COLUMN resultTitle TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE search_history ADD COLUMN resultArtist TEXT DEFAULT NULL")
             }
         }
     }

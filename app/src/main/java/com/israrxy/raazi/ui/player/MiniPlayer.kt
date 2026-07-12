@@ -1,6 +1,5 @@
 package com.israrxy.raazi.ui.player
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -95,55 +94,35 @@ fun MiniPlayer(
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val compactLayout = maxWidth < 360.dp
-        val cardHeight = if (compactLayout) 70.dp else 78.dp
-        val artworkSize = if (compactLayout) 46.dp else 54.dp
-        val playButtonSize = if (compactLayout) 42.dp else 46.dp
+        val cardHeight = if (compactLayout) 64.dp else 68.dp
+        val artworkSize = if (compactLayout) 44.dp else 48.dp
+        val playButtonSize = if (compactLayout) 38.dp else 40.dp
         val statusText = when {
             miniPlayerUiState.isBuffering -> "Buffering"
             miniPlayerUiState.isLoading -> "Loading track"
             track.isLive -> "Live"
-            isPlaying -> "Playing now"
+            isPlaying -> ""
             else -> "Paused"
         }
-        val supportingText = when {
-            compactLayout && isBusy -> statusText
-            compactLayout -> track.artist.ifBlank { statusText }
-            track.artist.isBlank() -> statusText
-            statusText == "Playing now" -> track.artist
-            else -> "${track.artist} | $statusText"
-        }
+        val supportingText = track.artist.ifBlank { statusText }.ifBlank { "Playing now" }
 
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(18.dp))
                 .clickable { onNavigateToPlayer() }
                 .animateContentSize(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
             ),
-            tonalElevation = 10.dp,
-            shadowElevation = 16.dp
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f),
-                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.18f),
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
-                                )
-                            )
-                        )
-                )
-
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -152,9 +131,8 @@ fun MiniPlayer(
                 ) {
                     Surface(
                         modifier = Modifier.size(artworkSize),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shadowElevation = 4.dp
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         AsyncImage(
                             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
@@ -183,27 +161,13 @@ fun MiniPlayer(
 
                         Spacer(modifier = Modifier.height(3.dp))
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = supportingText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-
-                            AnimatedVisibility(visible = isPlaying && !isBusy) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    MiniVisualizer(
-                                        modifier = Modifier
-                                            .height(12.dp)
-                                            .width(24.dp)
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = supportingText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     if (!compactLayout && miniPlayerUiState.canSkipNext) {
@@ -227,7 +191,7 @@ fun MiniPlayer(
                         modifier = Modifier
                             .size(playButtonSize)
                             .background(
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                color = MaterialTheme.colorScheme.primary,
                                 shape = CircleShape
                             )
                     ) {
@@ -235,14 +199,14 @@ fun MiniPlayer(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -287,21 +251,14 @@ private fun MiniPlayerProgress(
 
     Box(
         modifier = modifier
-            .height(4.dp)
-            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f))
+            .height(2.dp)
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(progressFraction)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.primary)
         )
     }
 }

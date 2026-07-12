@@ -148,8 +148,63 @@ interface MusicDao {
     @Query("SELECT * FROM search_history WHERE query LIKE :query || '%' ORDER BY timestamp DESC")
     fun searchHistory(query: String = ""): Flow<List<SearchHistoryEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Transaction
+    fun upsertSearchHistory(
+        query: String,
+        thumbnailUrl: String?,
+        resultTitle: String?,
+        resultArtist: String?,
+        timestamp: Long
+    ) {
+        val insertedId = insertSearchHistory(
+            SearchHistoryEntity(
+                query = query,
+                thumbnailUrl = thumbnailUrl,
+                resultTitle = resultTitle,
+                resultArtist = resultArtist,
+                timestamp = timestamp
+            )
+        )
+        if (insertedId == -1L) {
+            updateSearchHistory(
+                query = query,
+                thumbnailUrl = thumbnailUrl,
+                resultTitle = resultTitle,
+                resultArtist = resultArtist,
+                timestamp = timestamp
+            )
+        }
+    }
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertSearchHistory(searchHistory: SearchHistoryEntity): Long
+
+    @Query("""
+        UPDATE search_history
+        SET
+            thumbnailUrl = COALESCE(:thumbnailUrl, thumbnailUrl),
+            resultTitle = COALESCE(:resultTitle, resultTitle),
+            resultArtist = COALESCE(:resultArtist, resultArtist),
+            timestamp = :timestamp
+        WHERE query = :query
+    """)
+    fun updateSearchHistory(
+        query: String,
+        thumbnailUrl: String?,
+        resultTitle: String?,
+        resultArtist: String?,
+        timestamp: Long
+    ): Int
+
+    @Query("""
+        DELETE FROM search_history
+        WHERE id NOT IN (
+            SELECT id FROM search_history
+            ORDER BY timestamp DESC
+            LIMIT :limit
+        )
+    """)
+    fun trimSearchHistory(limit: Int): Int
 
     @Delete
     fun deleteSearchHistory(searchHistory: SearchHistoryEntity): Int
