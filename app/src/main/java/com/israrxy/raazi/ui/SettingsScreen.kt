@@ -1,6 +1,7 @@
 package com.israrxy.raazi.ui
 
 import android.widget.Toast
+import androidx.biometric.BiometricManager
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -75,19 +76,35 @@ fun SettingsScreen(
     val audioQuality by settingsDataStore.audioQuality.collectAsState(initial = "Very High")
     val crossfadeDuration by settingsDataStore.crossfadeDuration.collectAsState(initial = "Off")
     val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = true)
+    val pureBlack by settingsDataStore.pureBlack.collectAsState(initial = false)
+    val hapticFeedback by settingsDataStore.hapticFeedback.collectAsState(initial = true)
+    val allowLandscape by settingsDataStore.allowLandscape.collectAsState(initial = false)
     val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
     val downloadWifiOnly by settingsDataStore.downloadWifiOnly.collectAsState(initial = false)
     val downloadQuality by settingsDataStore.downloadQuality.collectAsState(initial = "Very High")
     val maxConcurrentDownloads by settingsDataStore.maxConcurrentDownloads.collectAsState(initial = "2")
+    val biometricLock by settingsDataStore.biometricLock.collectAsState(initial = false)
     
     // Custom configurations
     val blurPlayerBackground by settingsDataStore.blurPlayerBackground.collectAsState(initial = true)
     val pastelAccent by settingsDataStore.pastelAccent.collectAsState(initial = "Emerald")
     val useGeminiImport by settingsDataStore.useGeminiImport.collectAsState(initial = false)
     val geminiApiKey by settingsDataStore.geminiApiKey.collectAsState(initial = "")
+    val lyricsTranslateEnabled by settingsDataStore.lyricsTranslateEnabled.collectAsState(initial = false)
+    val lyricsTranslateLang by settingsDataStore.lyricsTranslateLang.collectAsState(initial = "en")
+    var showTranslateLangDialog by remember { mutableStateOf(false) }
+
+    // Last.fm scrobbling
+    val lastfmScrobbleEnabled by settingsDataStore.lastfmScrobbleEnabled.collectAsState(initial = false)
+    val lastfmUsername by settingsDataStore.lastfmUsername.collectAsState(initial = null)
+    val lastfmStatus by viewModel.lastfmStatus.collectAsState()
 
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var tempApiKey by remember { mutableStateOf("") }
+
+    var showLastFmDialog by remember { mutableStateOf(false) }
+    var lfmUser by remember { mutableStateOf("") }
+    var lfmPass by remember { mutableStateOf("") }
 
     val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsState()
     val youTubeAccountName by viewModel.youTubeAccountName.collectAsState()
@@ -102,6 +119,13 @@ fun SettingsScreen(
         val status = youTubeSyncStatus ?: return@LaunchedEffect
         Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
         viewModel.clearYouTubeSyncStatus()
+    }
+
+    val lastfmMessage by viewModel.lastfmMessage.collectAsState()
+    LaunchedEffect(lastfmMessage) {
+        val msg = lastfmMessage ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        viewModel.clearLastFmMessage()
     }
 
     Column(
@@ -216,6 +240,39 @@ fun SettingsScreen(
                 onCheckedChange = { enabled ->
                     scope.launch {
                         settingsDataStore.setDynamicColor(enabled)
+                    }
+                }
+            )
+
+            SettingsToggle(
+                title = "Pure Black (AMOLED)",
+                subtitle = "Use true-black backgrounds to save power on OLED screens",
+                checked = pureBlack,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setPureBlack(enabled)
+                    }
+                }
+            )
+
+            SettingsToggle(
+                title = "Haptic Feedback",
+                subtitle = "Vibrate on taps, toggles, and seeking",
+                checked = hapticFeedback,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setHapticFeedback(enabled)
+                    }
+                }
+            )
+
+            SettingsToggle(
+                title = "Allow Rotation",
+                subtitle = "Permit landscape and tablet orientations",
+                checked = allowLandscape,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setAllowLandscape(enabled)
                     }
                 }
             )
@@ -373,6 +430,156 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        SettingsSection(title = "LYRICS") {
+            SettingsToggle(
+                title = "Translate Lyrics",
+                subtitle = "Use Gemini to translate lyric lines inline",
+                checked = lyricsTranslateEnabled,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setLyricsTranslateEnabled(enabled)
+                    }
+                }
+            )
+
+            if (lyricsTranslateEnabled) {
+                SettingsItem(
+                    title = "Translate To",
+                    subtitle = "Target language for inline translation",
+                    value = lyricsTranslateLang.uppercase(),
+                    valueColor = Emerald500,
+                    onClick = { showTranslateLangDialog = true }
+                )
+            }
+        }
+
+        if (showTranslateLangDialog) {
+            val langs = listOf("en", "es", "fr", "de", "hi", "ja", "ko", "pt", "ru", "ar", "zh", "it", "tr")
+            AlertDialog(
+                onDismissRequest = { showTranslateLangDialog = false },
+                title = { Text("Translate To") },
+                text = {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        langs.forEach { lang ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch { settingsDataStore.setLyricsTranslateLang(lang) }
+                                        showTranslateLangDialog = false
+                                    },
+                                color = if (lang == lyricsTranslateLang) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    Color.Transparent
+                                }
+                            ) {
+                                Text(
+                                    text = lang.uppercase(),
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (lang == lyricsTranslateLang) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showTranslateLangDialog = false }) { Text("Done") }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsSection(title = "SECURITY") {
+            SettingsToggle(
+                title = "App Lock",
+                subtitle = "Require biometrics to open the app",
+                checked = biometricLock,
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        val canAuthenticate = BiometricManager.from(context).canAuthenticate(
+                            BiometricManager.Authenticators.BIOMETRIC_STRONG
+                                or BiometricManager.Authenticators.BIOMETRIC_WEAK
+                        ) == BiometricManager.BIOMETRIC_SUCCESS
+                        if (!canAuthenticate) {
+                            Toast.makeText(
+                                context,
+                                "Biometrics not available on this device",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                    scope.launch {
+                        settingsDataStore.setBiometricLock(enabled)
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsSection(title = "LAST.FM SCROBBLING") {
+            SettingsToggle(
+                title = "Enable Scrobbling",
+                subtitle = "Send now-playing and scrobbles to your Last.fm profile",
+                checked = lastfmScrobbleEnabled,
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        settingsDataStore.setLastfmScrobbleEnabled(enabled)
+                    }
+                }
+            )
+
+            if (lastfmScrobbleEnabled) {
+                if (lastfmUsername != null) {
+                    SettingsItem(
+                        title = "Connected as",
+                        subtitle = "Scrobbles are being sent to your account",
+                        value = lastfmUsername,
+                        valueColor = Emerald500
+                    )
+
+                    if (lastfmStatus != null) {
+                        SettingsItem(
+                            title = lastfmStatus!!,
+                            subtitle = "Current Last.fm status"
+                        )
+                    }
+
+                    SettingsActionButton(
+                        title = "Disconnect",
+                        onClick = {
+                            scope.launch {
+                                settingsDataStore.setLastfmSession(null, null)
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                } else {
+                    SettingsItem(
+                        title = "Not connected",
+                        subtitle = "Sign in with your Last.fm account to start scrobbling",
+                        value = "Connect",
+                        valueColor = ErrorRed,
+                        onClick = {
+                            lfmUser = ""
+                            lfmPass = ""
+                            showLastFmDialog = true
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         SettingsSection(title = "APP") {
             SettingsItem(
                 title = "Clear Cache",
@@ -448,6 +655,53 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showApiKeyDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showLastFmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLastFmDialog = false },
+            title = { Text("Connect Last.fm") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Enter your Last.fm username and password. Credentials are used only to obtain a session key and are not stored.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = lfmUser,
+                        onValueChange = { lfmUser = it },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = lfmPass,
+                        onValueChange = { lfmPass = it },
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val ok = viewModel.connectLastFm(lfmUser.trim(), lfmPass)
+                        if (ok) showLastFmDialog = false
+                    }
+                }) {
+                    Text("Connect")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLastFmDialog = false }) {
                     Text("Cancel")
                 }
             }

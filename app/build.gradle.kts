@@ -95,6 +95,9 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
+    // Biometric authentication (app lock)
+    implementation("androidx.biometric:biometric:1.1.0")
+
     // Extended Icons
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 

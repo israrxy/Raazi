@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
@@ -58,6 +60,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.ui.components.shimmerEffect
+import com.israrxy.raazi.ui.components.SongListItem
+import com.israrxy.raazi.data.local.SettingsDataStore
+import com.israrxy.raazi.service.LyricsTranslator
 import android.net.Uri
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
@@ -69,6 +74,7 @@ import androidx.compose.material.icons.filled.Person // Import
 import androidx.compose.ui.draw.blur // Import for blur effect
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import android.widget.Toast
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -121,6 +127,53 @@ fun PlayerScreen(
     var showLyricsBrowser by remember { mutableStateOf(false) }
     var showLyricsMenu by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showSleepTimer by remember { mutableStateOf(false) }
+    val sleepTimerActive by com.israrxy.raazi.service.SleepTimer.getInstance().isActive.collectAsStateWithLifecycle()
+
+    // Lyrics translation state
+    val geminiApiKey by SettingsDataStore(context).geminiApiKey.collectAsStateWithLifecycle(initialValue = "")
+    val lyricsTranslateEnabled by SettingsDataStore(context).lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val lyricsTranslateLang by SettingsDataStore(context).lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
+    var showTranslate by remember { mutableStateOf(false) }
+    var isTranslating by remember { mutableStateOf(false) }
+    var translateError by remember { mutableStateOf<String?>(null) }
+    val translatedSyncedLines = remember { mutableStateListOf<Pair<Long, String>>() }
+    var translatedPlain by remember { mutableStateOf<String?>(null) }
+
+    val parsedSyncedLines = remember(lyrics?.syncedLyrics) {
+        lyrics?.syncedLyrics?.lines()?.mapNotNull { line ->
+            val regex = Regex("\\[(\\d+):(\\d+\\.\\d+)\\](.*)")
+            val m = regex.find(line) ?: return@mapNotNull null
+            val timeMs = (m.groupValues[1].toLong() * 60 * 1000 + m.groupValues[2].toDouble() * 1000).toLong()
+            timeMs to m.groupValues[3].trim()
+        }.orEmpty()
+    }
+
+    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, lyricsTranslateEnabled, showTranslate, geminiApiKey) {
+        translatedSyncedLines.clear()
+        translatedPlain = null
+        translateError = null
+        if (!showTranslate || !lyricsTranslateEnabled || geminiApiKey.isNullOrBlank()) return@LaunchedEffect
+        val source = lyrics?.syncedLyrics ?: lyrics?.plainLyrics
+        if (source.isNullOrBlank()) return@LaunchedEffect
+        isTranslating = true
+        try {
+            if (parsedSyncedLines.isNotEmpty()) {
+                val trans = LyricsTranslator.translateLines(geminiApiKey!!, parsedSyncedLines.map { it.second }, lyricsTranslateLang)
+                parsedSyncedLines.forEachIndexed { i, (t, _) ->
+                    translatedSyncedLines.add(t to trans.getOrElse(i) { "" })
+                }
+            } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
+                val trans = LyricsTranslator.translateLines(geminiApiKey!!, listOf(lyrics!!.plainLyrics!!), lyricsTranslateLang)
+                translatedPlain = trans.firstOrNull()
+            }
+        } catch (e: Exception) {
+            translateError = "Translation failed"
+        } finally {
+            isTranslating = false
+        }
+    }
+
     var showPlayNextSheet by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -332,11 +385,11 @@ fun PlayerScreen(
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "Options",
-                            tint = Color.White,
+                            tint = if (sleepTimerActive) Emerald500 else Color.White,
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                    
+
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
@@ -344,20 +397,46 @@ fun PlayerScreen(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Add to Playlist", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = { 
+                            onClick = {
                                 showMenu = false
                                 showPlaylistDialog = true
                             },
                             leadingIcon = { Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
-                        
+
                         DropdownMenuItem(
                             text = { Text("Download", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = { 
+                            onClick = {
                                 showMenu = false
                                 currentTrack?.let { viewModel.downloadTrack(it) }
                             },
                             leadingIcon = { Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Sleep Timer", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                showMenu = false
+                                showSleepTimer = true
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Bedtime,
+                                    null,
+                                    tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Share", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                showMenu = false
+                                currentTrack?.let {
+                                    com.israrxy.raazi.utils.ShareUtils.shareTrack(context, it)
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
                     }
                 }
@@ -865,7 +944,7 @@ fun PlayerScreen(
                             navController.navigate("artist/${Uri.encode(normalizedArtistId)}?name=${Uri.encode(artistName)}")
                         },
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Zinc900)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -1207,6 +1286,53 @@ fun PlayerScreen(
                                         }
                                     }
 
+                                    if (geminiApiKey?.isNotBlank() == true) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    showLyricsMenu = false
+                                                    showTranslate = !showTranslate
+                                                },
+                                            shape = RoundedCornerShape(22.dp),
+                                            color = Color.White.copy(alpha = if (showTranslate) 0.14f else 0.06f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    if (showTranslate) Icons.Filled.Translate else Icons.Outlined.Translate,
+                                                    null,
+                                                    tint = if (showTranslate) Emerald400 else Color.White
+                                                )
+                                                Spacer(modifier = Modifier.width(14.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = if (showTranslate) "Hide translation" else "Translate lyrics",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color.White
+                                                    )
+                                                    Text(
+                                                        text = "Use Gemini to translate lines into ${lyricsTranslateLang.uppercase()}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = Color.White.copy(alpha = 0.68f)
+                                                    )
+                                                }
+                                                if (isTranslating) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(18.dp),
+                                                        strokeWidth = 2.dp,
+                                                        color = Emerald400
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     if (lyrics?.source?.startsWith("Saved") == true) {
                                         Surface(
                                             modifier = Modifier
@@ -1309,139 +1435,6 @@ fun PlayerScreen(
                         }
                     }
 
-                    if (false) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Lyrics",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = listOfNotNull(
-                                        currentTrack?.title?.takeIf { it.isNotBlank() },
-                                        currentTrack?.artist?.takeIf { it.isNotBlank() }
-                                    ).joinToString("  •  "),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Zinc400,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = Color.White.copy(alpha = 0.08f)
-                            ) {
-                                Text(
-                                    text = lyricsMode,
-                                    color = Color.White.copy(alpha = 0.92f),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            IconButton(onClick = { onLyricsVisibilityChange(false) }) {
-                                Icon(Icons.Default.Close, null, tint = Color.White)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            LyricsScriptFilter.visibleFilters.forEach { filter ->
-                                FilterChip(
-                                    selected = lyricsScriptFilter == filter,
-                                    onClick = { viewModel.setLyricsScriptFilter(filter) },
-                                    label = { Text(filter.label) },
-                                    border = null,
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Emerald500.copy(alpha = 0.24f),
-                                        selectedLabelColor = Color.White,
-                                        selectedLeadingIconColor = Color.White,
-                                        containerColor = Color.White.copy(alpha = 0.06f),
-                                        labelColor = Color.White.copy(alpha = 0.88f)
-                                    )
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (availableLyricsVariants.size > 1) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                availableLyricsVariants.forEach { variant ->
-                                    FilterChip(
-                                        selected = selectedLyricsVariant == variant,
-                                        onClick = { selectedLyricsVariant = variant },
-                                        label = { Text(variant.label) },
-                                        border = null,
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Emerald500.copy(alpha = 0.24f),
-                                            selectedLabelColor = Color.White,
-                                            selectedLeadingIconColor = Color.White,
-                                            containerColor = Color.White.copy(alpha = 0.06f),
-                                            labelColor = Color.White.copy(alpha = 0.88f)
-                                        )
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    showLyricsBrowser = true
-                                    viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
-                                }
-                            ) {
-                                Text("Search & Filter")
-                            }
-                            FilledTonalButton(
-                                onClick = { viewModel.retryLyricsFetch() },
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color.White.copy(alpha = 0.08f),
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Text("Retry Auto")
-                            }
-                            if (lyrics?.source?.startsWith("Saved") == true) {
-                                FilledTonalButton(
-                                    onClick = { viewModel.clearSavedLyricsSelection() },
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = Color.White.copy(alpha = 0.08f),
-                                        contentColor = Color.White
-                                    )
-                                ) {
-                                    Text("Use Auto")
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                    }
 
                     Box(
                         modifier = Modifier
@@ -1511,6 +1504,9 @@ fun PlayerScreen(
                                     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                                     val activeIndex = remember(progress, lines) {
                                         lines.indexOfLast { it.first <= progress }.coerceAtLeast(0)
+                                    }
+                                    val translationMap = remember(translatedSyncedLines) {
+                                        translatedSyncedLines.associate { it.first to it.second }
                                     }
 
                                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -1583,6 +1579,17 @@ fun PlayerScreen(
                                                         .clickable(enabled = text.isNotBlank()) { viewModel.seekTo(time) },
                                                     lineHeight = if (isCurrent) 40.sp else 36.sp
                                                 )
+                                                val trans = translationMap[time]
+                                                if (!trans.isNullOrBlank()) {
+                                                    Text(
+                                                        text = trans,
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = Color.White.copy(alpha = animatedAlpha * 0.6f),
+                                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        lineHeight = 22.sp
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1608,6 +1615,18 @@ fun PlayerScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                             lineHeight = 40.sp
                                         )
+                                        if (!translatedPlain.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(18.dp))
+                                            Text(
+                                                text = translatedPlain!!,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                fontWeight = FontWeight.Medium,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                lineHeight = 30.sp
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.height(100.dp))
                                     }
                                 }
@@ -1861,9 +1880,21 @@ fun PlayerScreen(
         }
         
         // ADD TO PLAYLIST DIALOG
+        if (showSleepTimer) {
+            com.israrxy.raazi.ui.components.SleepTimerDialog(
+                onDismiss = { showSleepTimer = false },
+                onTimerSet = { minutes ->
+                    com.israrxy.raazi.service.SleepTimer.getInstance().start(minutes) {
+                        viewModel.pause()
+                    }
+                    showSleepTimer = false
+                }
+            )
+        }
+
         if (showPlaylistDialog) {
             AlertDialog(
-                onDismissRequest = { 
+                onDismissRequest = {
                     showPlaylistDialog = false
                     playlistTargetTrack = null
                 },
@@ -1976,6 +2007,58 @@ fun PlayerScreen(
                 },
                 containerColor = MaterialTheme.colorScheme.surface
             )
+        }
+
+        // UP NEXT / MUSIC MIX SHEET
+        if (showPlayNextSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showPlayNextSheet = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+                dragHandle = { BottomSheetDefaults.DragHandle() }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "Up Next",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                    )
+                    if (playNextItems.isEmpty()) {
+                        Text(
+                            text = "Nothing lined up yet.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxHeight(0.7f),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            itemsIndexed(playNextItems) { index, item ->
+                                SongListItem(
+                                    song = item,
+                                    onClick = {
+                                        viewModel.playPlaylist(playNextItems, index)
+                                        showPlayNextSheet = false
+                                    },
+                                    showAddToPlaylist = false,
+                                    showGoToArtist = false,
+                                    showDownload = false,
+                                    showAddToQueue = false,
+                                    showMoreOptions = false,
+                                    showLike = false,
+                                    showRingtone = false
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
         }
     }

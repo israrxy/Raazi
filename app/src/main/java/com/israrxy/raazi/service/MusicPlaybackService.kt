@@ -280,7 +280,6 @@ class MusicPlaybackService : Service() {
                     shouldPlay = shouldKeepPlaying
                 )
             }
-            sendFeedbackBroadcast(if (isShuffleEnabled) "Shuffle on" else "Shuffle off")
             notifyPlaybackState(refreshNotification = true)
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Error toggling shuffle", e)
@@ -293,13 +292,18 @@ class MusicPlaybackService : Service() {
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        val label = when (repeatMode) {
-            RepeatMode.OFF -> "Repeat off"
-            RepeatMode.ALL -> "Repeat all"
-            RepeatMode.ONE -> "Repeat one"
-        }
-        sendFeedbackBroadcast(label)
+        applyRepeatModeToPlayer()
         notifyPlaybackState(refreshNotification = true)
+    }
+
+    /** Push the current [repeatMode] down to ExoPlayer so it actually repeats one / all. */
+    private fun applyRepeatModeToPlayer() {
+        if (!::exoPlayer.isInitialized) return
+        exoPlayer.repeatMode = when (repeatMode) {
+            RepeatMode.ONE -> androidx.media3.common.Player.REPEAT_MODE_ONE
+            RepeatMode.ALL -> androidx.media3.common.Player.REPEAT_MODE_ALL
+            else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -338,7 +342,6 @@ class MusicPlaybackService : Service() {
         val current = getPlaybackSpeed()
         val next = SPEED_CYCLE_PRESETS.firstOrNull { it > current + 0.01f } ?: SPEED_CYCLE_PRESETS.first()
         setPlaybackSpeed(next)
-        sendFeedbackBroadcast("Speed: ${formatSpeedText(next)}")
         return next
     }
 
@@ -358,7 +361,6 @@ class MusicPlaybackService : Service() {
         val nowFavorite = !favoriteTrackIds.contains(trackId)
         if (nowFavorite) favoriteTrackIds.add(trackId) else favoriteTrackIds.remove(trackId)
         sendLikeEventBroadcast(trackId, nowFavorite)
-        sendFeedbackBroadcast(if (nowFavorite) "Added to Liked Songs" else "Removed from Liked Songs")
         notifyPlaybackState(refreshNotification = true)
     }
 
@@ -369,19 +371,6 @@ class MusicPlaybackService : Service() {
             setPackage(packageName)
         }
         sendBroadcast(intent)
-    }
-
-    private fun sendFeedbackBroadcast(message: String) {
-        if (isDestroyed || message.isBlank()) return
-        try {
-            val intent = Intent(NOTIFICATION_FEEDBACK_CHANNEL).apply {
-                putExtra(EXTRA_FEEDBACK_MESSAGE, message)
-                setPackage(packageName)
-            }
-            sendBroadcast(intent)
-        } catch (e: Exception) {
-            android.util.Log.w(TAG, "Failed to send feedback broadcast", e)
-        }
     }
 
     private fun createNotificationChannel() {
@@ -614,7 +603,7 @@ class MusicPlaybackService : Service() {
                 PlaybackStateCompat.CustomAction.Builder(
                     ACTION_TOGGLE_SHUFFLE,
                     if (isShuffleEnabled) "Shuffle On" else "Shuffle Off",
-                    android.R.drawable.ic_menu_sort_by_size
+                    if (isShuffleEnabled) R.drawable.ic_shuffle_active else R.drawable.ic_shuffle
                 ).build()
             )
             .addCustomAction(
@@ -626,9 +615,9 @@ class MusicPlaybackService : Service() {
                         RepeatMode.ONE -> "Repeat One"
                     },
                     when (repeatMode) {
-                        RepeatMode.ONE -> android.R.drawable.ic_menu_revert
-                        RepeatMode.ALL -> android.R.drawable.ic_menu_rotate
-                        RepeatMode.OFF -> android.R.drawable.ic_menu_rotate
+                        RepeatMode.ONE -> R.drawable.ic_repeat_one_active
+                        RepeatMode.ALL -> R.drawable.ic_repeat_active
+                        RepeatMode.OFF -> R.drawable.ic_repeat
                     }
                 ).build()
             )
@@ -636,14 +625,14 @@ class MusicPlaybackService : Service() {
                 PlaybackStateCompat.CustomAction.Builder(
                     ACTION_TOGGLE_FAVORITE,
                     if (isTrackFavorite(getCurrentTrack()?.id)) "Unlike" else "Like",
-                    R.drawable.ic_heart_outline
+                    if (isTrackFavorite(getCurrentTrack()?.id)) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
                 ).build()
             )
             .addCustomAction(
                 PlaybackStateCompat.CustomAction.Builder(
                     ACTION_CYCLE_SPEED,
                     "Speed · ${formatSpeedText(getPlaybackSpeed())}",
-                    R.drawable.ic_speed
+                    if (getPlaybackSpeed() != 1.0f) R.drawable.ic_speed_active else R.drawable.ic_speed
                 ).build()
             )
             
@@ -765,6 +754,7 @@ class MusicPlaybackService : Service() {
             exoPlayer.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
             
             exoPlayer.prepare()
+            applyRepeatModeToPlayer()
             exoPlayer.playWhenReady = true
             requestAudioFocus()
             preloadAdjacentTracks(startIndex)
@@ -975,6 +965,7 @@ class MusicPlaybackService : Service() {
         playbackStateListeners.forEach { it(state) }
 
         if (refreshNotification && state.currentTrack != null) {
+            if (::exoPlayer.isInitialized) updateMediaSessionState()
             updateNotification()
         }
     }
@@ -1005,6 +996,7 @@ class MusicPlaybackService : Service() {
         val mediaItems = currentPlaylist.map { createMediaItem(it) }
         exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
         exoPlayer.prepare()
+        applyRepeatModeToPlayer()
         exoPlayer.playWhenReady = shouldPlay
         if (shouldPlay) {
             requestAudioFocus()
@@ -1459,9 +1451,7 @@ class MusicPlaybackService : Service() {
         const val ACTION_CYCLE_SPEED = "com.israrxy.raazi.ACTION_CYCLE_SPEED"
 
         const val NOTIFICATION_LIKE_CHANNEL = "com.israrxy.raazi.LIKE_EVENT"
-        const val NOTIFICATION_FEEDBACK_CHANNEL = "com.israrxy.raazi.NOTIFICATION_FEEDBACK"
         const val EXTRA_TRACK_ID = "track_id"
-        const val EXTRA_FEEDBACK_MESSAGE = "feedback_message"
 
         val SPEED_CYCLE_PRESETS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 

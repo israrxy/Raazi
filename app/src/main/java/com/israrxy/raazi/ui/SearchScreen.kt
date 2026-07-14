@@ -64,6 +64,7 @@ fun SearchScreen(
     val topResults by searchViewModel.topResults.collectAsStateWithLifecycle()
     val favoriteTracks by playerViewModel.favoriteTracks.collectAsStateWithLifecycle()
     val savedCollectionIds by playerViewModel.savedCollectionIds.collectAsStateWithLifecycle()
+    val searchError by searchViewModel.searchError.collectAsState()
     
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -244,6 +245,17 @@ fun SearchScreen(
             when {
                 isSearching -> {
                     SearchLoadingState(query = searchQuery)
+                }
+
+                searchError != null -> {
+                    SearchErrorState(
+                        message = searchError ?: "Something went wrong",
+                        onRetry = {
+                            if (searchViewModel.submittedQuery.isNotBlank()) {
+                                searchViewModel.performSearch(searchViewModel.submittedQuery)
+                            }
+                        }
+                    )
                 }
 
                 visibleSections.isEmpty() -> {
@@ -792,6 +804,51 @@ private fun SearchEmptyState(query: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun SearchErrorState(
+    message: String,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                modifier = Modifier.size(44.dp)
+            )
+            Text(
+                text = "Couldn't load results",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Button(
+                onClick = onRetry,
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Refresh, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Retry", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

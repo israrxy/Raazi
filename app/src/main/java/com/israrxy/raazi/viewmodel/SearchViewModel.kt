@@ -44,6 +44,9 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
 
+    private val _searchError = MutableStateFlow<String?>(null)
+    val searchError = _searchError.asStateFlow()
+
     var submittedQuery by androidx.compose.runtime.mutableStateOf("")
         private set
     
@@ -192,10 +195,12 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         if (normalizedQuery.isBlank()) return
         submittedQuery = normalizedQuery
         _isSearching.value = true
-        
+        _searchError.value = null
+
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val result = repository.searchMusic(normalizedQuery, _selectedService.value)
+                _searchError.value = null
                 _searchResults.value = result
                 val top = result.items.firstOrNull { item ->
                     item.contentType == com.israrxy.raazi.model.MusicContentType.SONG ||
@@ -210,6 +215,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 )
             } catch (e: Exception) {
                 android.util.Log.e("SearchViewModel", "Search error", e)
+                _searchError.value = e.message ?: "Search failed. Check your connection and try again."
                 _searchResults.value = com.israrxy.raazi.model.SearchResult(normalizedQuery, emptyList())
                 saveSearchHistory(normalizedQuery)
             } finally {

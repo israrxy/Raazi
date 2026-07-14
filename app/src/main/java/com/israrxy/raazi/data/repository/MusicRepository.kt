@@ -181,7 +181,11 @@ class MusicRepository(
         val localPlaylist = db.musicDao().getPlaylistWithTracks(playlistId)
 
         if (localPlaylist != null && !localPlaylist.playlist.isYouTubeSyncedPlaylist()) {
-            return@withContext mapToDomain(localPlaylist)
+            val orderedIds = db.musicDao().getPlaylistTrackIds(playlistId)
+            val byId = localPlaylist.tracks.associateBy { it.id }
+            val orderedTracks = orderedIds.mapNotNull { byId[it] } + localPlaylist.tracks.filter { it.id !in orderedIds }
+            val ordered = localPlaylist.copy(tracks = orderedTracks)
+            return@withContext mapToDomain(ordered)
         }
 
         try {

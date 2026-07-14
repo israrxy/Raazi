@@ -29,6 +29,7 @@ import com.israrxy.raazi.model.toSavedCollectionItem
 import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.service.MusicPlaybackService
 import com.israrxy.raazi.service.AdvancedDownloadManager
+import com.israrxy.raazi.service.LastFmScrobbler
 import com.israrxy.raazi.data.db.DownloadEntity
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import com.israrxy.raazi.data.local.SettingsDataStore
@@ -217,6 +218,14 @@ class MusicPlayerViewModel(
     val isSyncingYouTubeLibrary: StateFlow<Boolean> = _isSyncingYouTubeLibrary.asStateFlow()
     private val _youTubeSyncStatus = MutableStateFlow<String?>(null)
     val youTubeSyncStatus: StateFlow<String?> = _youTubeSyncStatus.asStateFlow()
+
+    // Last.fm scrobbling
+    private val _lastfmStatus = MutableStateFlow<String?>(null)
+    val lastfmStatus: StateFlow<String?> = _lastfmStatus.asStateFlow()
+
+    // Transient message (e.g. connect/disconnect result) mirrored for Toast display
+    private val _lastfmMessage = MutableStateFlow<String?>(null)
+    val lastfmMessage: StateFlow<String?> = _lastfmMessage.asStateFlow()
 
     // Download state from DB (reactive)
     val dbActiveDownloads: StateFlow<List<DownloadEntity>> = advancedDownloadManager.activeDownloads
@@ -753,11 +762,18 @@ class MusicPlayerViewModel(
         playbackService?.enableVisualizer(enable)
     }
 
+    // Set of track ids already scrobbled for the current app session (avoids double scrobble).
+    private val scrobbledTrackIds = mutableSetOf<String>()
+    private var lastFmEnabled = false
+    private var lastFmTrackId: String? = null
+    private var lastFmNowPlayingSent = false
+
     init {
         bindPlaybackService()
         loadHomeContent()
         observeDownloadEvents()
         syncDownloadSettings()
+        initLastFmScrobbling()
         // Observe flows continuously for real-time updates (separate from loading)
         observeHistoryUpdates()
     }
@@ -1686,6 +1702,10 @@ class MusicPlayerViewModel(
         try { playbackService?.addToQueue(items) } catch (e: Exception) { Log.w("MusicVM", "addToQueue failed", e) }
     }
 
+    fun addToQueue(item: MusicItem) {
+        addToQueue(listOf(item))
+    }
+
     fun playNext(items: List<MusicItem>) {
         try { playbackService?.playNext(items) } catch (e: Exception) { Log.w("MusicVM", "playNext failed", e) }
     }
@@ -1740,6 +1760,141 @@ class MusicPlayerViewModel(
         }
     }
 
+    // --- Last.fm Scrobbling ---
+
+    private fun initLastFmScrobbling() {
+        viewModelScope.launch {
+            settingsDataStore.lastfmScrobbleEnabled.collect { enabled ->
+                lastFmEnabled = enabled
+                if (!enabled) {
+                    LastFmScrobbler.sessionKey = null
+                    lastFmTrackId = null
+                    lastFmNowPlayingSent = false
+                    scrobbledTrackIds.clear()
+                    _lastfmStatus.value = null
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            settingsDataStore.lastfmSessionKey.collect { key ->
+                LastFmScrobbler.sessionKey = key
+                if (key.isNullOrBlank()) {
+                    scrobbledTrackIds.clear()
+                    lastFmTrackId = null
+                    lastFmNowPlayingSent = false
+                    _lastfmStatus.value = null
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            playbackState.collect { state ->
+                handleLastFmPlayback(state)
+            }
+        }
+    }
+
+    private fun handleLastFmPlayback(state: PlaybackState) {
+        if (!lastFmEnabled) return
+        val key = LastFmScrobbler.sessionKey
+        if (key.isNullOrBlank()) return
+        val track = state.currentTrack ?: return
+
+        // Track changed -> reset per-track scrobble/now-playing state for a fresh attempt.
+        if (track.id != lastFmTrackId) {
+            lastFmTrackId = track.id
+            lastFmNowPlayingSent = false
+            scrobbledTrackIds.remove(track.id)
+        }
+
+        if (!state.isPlaying) return
+
+        if (!lastFmNowPlayingSent) {
+            lastFmNowPlayingSent = true
+            sendLastFmNowPlaying(track)
+        }
+
+        if (!scrobbledTrackIds.contains(track.id)) {
+            val durationMs = if (state.duration > 0) state.duration else track.duration
+            if (durationMs > 0 && state.currentPosition >= scrobbleThresholdMs(durationMs)) {
+                scrobbleLastFm(track)
+            }
+        }
+    }
+
+    private fun scrobbleThresholdMs(durationMs: Long): Long {
+        val half = durationMs / 2
+        val fourMinutes = 4 * 60 * 1000L
+        return minOf(half, fourMinutes)
+    }
+
+    private fun sendLastFmNowPlaying(track: MusicItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ok = LastFmScrobbler.updateNowPlaying(track)
+                _lastfmStatus.value = if (ok) {
+                    "Now playing: ${track.title}"
+                } else {
+                    "Last.fm error: now playing failed"
+                }
+            } catch (e: Exception) {
+                Log.w("MusicVM", "Last.fm now playing failed", e)
+                _lastfmStatus.value = "Last.fm error: ${e.message ?: "unknown"}"
+            }
+        }
+    }
+
+    private fun scrobbleLastFm(track: MusicItem) {
+        // Mark immediately so progress updates cannot trigger a double scrobble.
+        scrobbledTrackIds.add(track.id)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ok = LastFmScrobbler.scrobble(track)
+                if (ok) {
+                    _lastfmStatus.value = "Scrobbled: ${track.title}"
+                } else {
+                    scrobbledTrackIds.remove(track.id) // allow a later retry
+                    _lastfmStatus.value = "Last.fm error: scrobble failed"
+                }
+            } catch (e: Exception) {
+                Log.w("MusicVM", "Last.fm scrobble failed", e)
+                scrobbledTrackIds.remove(track.id) // allow a later retry
+                _lastfmStatus.value = "Last.fm error: ${e.message ?: "unknown"}"
+            }
+        }
+    }
+
+    /**
+     * Connect to Last.fm by authenticating with username + password, then persist
+     * the session. Returns true on success. Failures are surfaced via a transient message.
+     */
+    suspend fun connectLastFm(username: String, password: String): Boolean {
+        return try {
+            val result = LastFmScrobbler.getMobileSession(username, password)
+            result.fold(
+                onSuccess = { (key, name) ->
+                    settingsDataStore.setLastfmSession(key, name)
+                    LastFmScrobbler.sessionKey = key
+                    _lastfmMessage.value = "Connected to Last.fm as $name"
+                    true
+                },
+                onFailure = { e ->
+                    _lastfmMessage.value = "Last.fm: ${e.message ?: "connection failed"}"
+                    false
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("MusicVM", "Last.fm connect failed", e)
+            _lastfmMessage.value = "Last.fm: ${e.message ?: "connection failed"}"
+            false
+        }
+    }
+
+    fun clearLastFmMessage() {
+        _lastfmMessage.value = null
+    }
+
     // Playlist functionality
     private val _currentPlaylist = MutableStateFlow<Playlist?>(null)
     val currentPlaylist: StateFlow<Playlist?> = _currentPlaylist.asStateFlow()
@@ -1780,6 +1935,16 @@ class MusicPlayerViewModel(
                         _currentPlaylist.value = playlist
                         android.util.Log.d("MusicVM", "Loaded favorites playlist with ${favorites.size} songs")
                     }
+                } else if (playlistId == "history") {
+                    val historyItems = repository.playbackHistory.first()
+                    _currentPlaylist.value = Playlist(
+                        id = "history",
+                        title = "History",
+                        description = "${historyItems.size} recently played",
+                        thumbnailUrl = historyItems.firstOrNull()?.thumbnailUrl ?: "",
+                        items = historyItems
+                    )
+                    android.util.Log.d("MusicVM", "Loaded history playlist with ${historyItems.size} items")
                 } else {
                     val playlist = repository.getPlaylist(playlistId)
                     _currentPlaylist.value = playlist
@@ -1956,10 +2121,17 @@ class MusicPlayerViewModel(
     fun reorderPlaylistTracks(playlistId: String, trackIds: List<String>) {
         viewModelScope.launch {
             try {
+                val current = _currentPlaylist.value
+                if (current != null) {
+                    val byId = current.items.associateBy { it.id }
+                    val reordered = trackIds.mapNotNull { byId[it] } + current.items.filter { it.id !in trackIds }
+                    _currentPlaylist.value = current.copy(items = reordered)
+                }
                 repository.reorderPlaylistTracks(playlistId, trackIds)
             } catch (e: Exception) {
                 android.util.Log.e("MusicVM", "Error reordering playlist", e)
                 _error.value = e.message ?: "Failed to reorder playlist."
+                loadPlaylist(playlistId)
             }
         }
     }

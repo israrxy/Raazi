@@ -51,6 +51,93 @@ class SettingsDataStore(private val context: Context) {
         val ACCOUNT_CHANNEL_HANDLE_KEY = stringPreferencesKey("account_channel_handle")
         val USE_LOGIN_FOR_BROWSE_KEY = booleanPreferencesKey("use_login_for_browse")
         val LAST_TOP_LEVEL_ROUTE_KEY = stringPreferencesKey("last_top_level_route")
+        // New feature settings
+        val PURE_BLACK_KEY = booleanPreferencesKey("pure_black_theme")
+        val HAPTIC_FEEDBACK_KEY = booleanPreferencesKey("haptic_feedback")
+        val BIOMETRIC_LOCK_KEY = booleanPreferencesKey("biometric_lock")
+        val ALLOW_LANDSCAPE_KEY = booleanPreferencesKey("allow_landscape")
+        val LYRICS_TRANSLATE_ENABLED_KEY = booleanPreferencesKey("lyrics_translate_enabled")
+        val LYRICS_TRANSLATE_LANG_KEY = stringPreferencesKey("lyrics_translate_lang")
+        val LASTFM_SCROBBLE_ENABLED_KEY = booleanPreferencesKey("lastfm_scrobble_enabled")
+        val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
+        val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
+    }
+
+    // Pure Black (AMOLED) theme
+    val pureBlack: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[PURE_BLACK_KEY] ?: false
+    }
+
+    suspend fun setPureBlack(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[PURE_BLACK_KEY] = enabled }
+    }
+
+    // Haptic feedback
+    val hapticFeedback: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[HAPTIC_FEEDBACK_KEY] ?: true
+    }
+
+    suspend fun setHapticFeedback(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[HAPTIC_FEEDBACK_KEY] = enabled }
+    }
+
+    // Biometric app lock
+    val biometricLock: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[BIOMETRIC_LOCK_KEY] ?: false
+    }
+
+    suspend fun setBiometricLock(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[BIOMETRIC_LOCK_KEY] = enabled }
+    }
+
+    // Landscape / tablet rotation
+    val allowLandscape: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[ALLOW_LANDSCAPE_KEY] ?: false
+    }
+
+    suspend fun setAllowLandscape(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[ALLOW_LANDSCAPE_KEY] = enabled }
+    }
+
+    // Lyrics translation
+    val lyricsTranslateEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[LYRICS_TRANSLATE_ENABLED_KEY] ?: false
+    }
+
+    suspend fun setLyricsTranslateEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[LYRICS_TRANSLATE_ENABLED_KEY] = enabled }
+    }
+
+    val lyricsTranslateLang: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[LYRICS_TRANSLATE_LANG_KEY] ?: "en"
+    }
+
+    suspend fun setLyricsTranslateLang(lang: String) {
+        context.dataStore.edit { prefs -> prefs[LYRICS_TRANSLATE_LANG_KEY] = lang }
+    }
+
+    // Last.fm scrobbling
+    val lastfmScrobbleEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[LASTFM_SCROBBLE_ENABLED_KEY] ?: false
+    }
+
+    suspend fun setLastfmScrobbleEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[LASTFM_SCROBBLE_ENABLED_KEY] = enabled }
+    }
+
+    val lastfmSessionKey: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[LASTFM_SESSION_KEY]
+    }
+
+    val lastfmUsername: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[LASTFM_USERNAME_KEY]
+    }
+
+    suspend fun setLastfmSession(sessionKey: String?, username: String?) {
+        context.dataStore.edit { prefs ->
+            if (sessionKey.isNullOrBlank()) prefs.remove(LASTFM_SESSION_KEY) else prefs[LASTFM_SESSION_KEY] = sessionKey
+            if (username.isNullOrBlank()) prefs.remove(LASTFM_USERNAME_KEY) else prefs[LASTFM_USERNAME_KEY] = username
+        }
     }
 
     // Onboarding
@@ -118,9 +205,9 @@ class SettingsDataStore(private val context: Context) {
         }
     }
     
-    // Dynamic Color (Material You)
+    // Dynamic Color (Material You) — opt-in; brand "Sonic" palette is the default
     val useDynamicColor: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[DYNAMIC_COLOR_KEY] ?: true
+        prefs[DYNAMIC_COLOR_KEY] ?: false
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {

@@ -10,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,10 +25,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,12 +112,16 @@ fun MiniPlayer(
         }
         val supportingText = track.artist.ifBlank { statusText }.ifBlank { "Playing now" }
 
+        val cardInteractionSource = remember { MutableInteractionSource() }
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
                 .clip(RoundedCornerShape(18.dp))
-                .clickable { onNavigateToPlayer() }
+                .clickable(
+                    interactionSource = cardInteractionSource,
+                    indication = LocalIndication.current
+                ) { onNavigateToPlayer() }
                 .animateContentSize(),
             shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -172,12 +182,34 @@ fun MiniPlayer(
 
                     if (!compactLayout && miniPlayerUiState.canSkipNext) {
                         IconButton(
+                            onClick = { viewModel.addToQueue(track) },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = "Add to queue",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
                             onClick = { viewModel.next() },
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
                                 contentDescription = "Next",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (!compactLayout) {
+                        IconButton(
+                            onClick = { viewModel.addToQueue(track) },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = "Add to queue",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -253,6 +285,21 @@ private fun MiniPlayerProgress(
         modifier = modifier
             .height(2.dp)
             .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+            .pointerInput(duration) {
+                if (duration <= 0L) return@pointerInput
+                detectTapGestures { offset ->
+                    val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                    viewModel.seekTo((fraction * duration).toLong())
+                }
+            }
+            .pointerInput(duration) {
+                if (duration <= 0L) return@pointerInput
+                detectHorizontalDragGestures { change, _ ->
+                    change.consume()
+                    val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                    viewModel.seekTo((fraction * duration).toLong())
+                }
+            }
     ) {
         Box(
             modifier = Modifier

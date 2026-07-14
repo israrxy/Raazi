@@ -43,6 +43,7 @@ fun SongListItem(
     onDownload: () -> Unit = {},
     onDownloadForRingtone: () -> Unit = {},
     onAddToQueue: () -> Unit = {},
+    onShare: () -> Unit = {},
     onShowMoreOptions: () -> Unit = {},
     showAddToPlaylist: Boolean = true,
     showGoToArtist: Boolean = true,
@@ -219,6 +220,15 @@ fun SongListItem(
                             leadingIcon = { Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
                     }
+
+                    DropdownMenuItem(
+                        text = { Text("Share", color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = {
+                            showMenu = false
+                            onShare()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    )
 
                     if (showMoreOptions) {
                         DropdownMenuItem(

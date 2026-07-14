@@ -16,6 +16,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -71,6 +72,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
+import androidx.compose.material.icons.filled.CloudOff
+import com.israrxy.raazi.utils.ConnectivityObserver
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -85,6 +88,7 @@ import com.israrxy.raazi.ui.library.LibraryScreen
 import com.israrxy.raazi.ui.player.MiniPlayer
 import com.israrxy.raazi.ui.ringtone.RingtoneTrimmerScreen
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import com.israrxy.raazi.utils.rememberHapticController
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -204,6 +208,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     val ringtoneState by viewModel.ringtoneState.collectAsStateWithLifecycle()
+    val connectivityObserver = remember { ConnectivityObserver(context) }
+    val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(initialValue = true)
 
     LaunchedEffect(ringtoneState) {
         val isIdle = ringtoneState is MusicPlayerViewModel.RingtoneState.Idle
@@ -442,13 +448,50 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                 )
             }
         }
+
+        if (!isOnline) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "You're offline — downloads still work",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun SimpleBottomNavBar(
     navController: NavHostController,
-    currentDestination: NavDestination?
+    currentDestination: NavDestination?,
+    haptic: com.israrxy.raazi.utils.HapticController = com.israrxy.raazi.utils.rememberHapticController()
 ) {
     Box(
         modifier = Modifier
@@ -494,15 +537,17 @@ private fun SimpleBottomNavBar(
                         label = "bottom_nav_content"
                     )
 
+                    val interactionSource = remember { MutableInteractionSource() }
                     Row(
                         modifier = Modifier
                             .weight(itemWeight, fill = true)
                             .clip(RoundedCornerShape(20.dp))
                             .background(containerColor)
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
+                                interactionSource = interactionSource,
+                                indication = LocalIndication.current
                             ) {
+                                haptic.lightTap()
                                 navController.navigate(item.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true

@@ -11,9 +11,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
@@ -69,6 +72,10 @@ fun PlaylistDetailScreen(
     }
     var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
     var showBulkDeleteConfirmation by remember { mutableStateOf(false) }
+
+    // Reorder mode
+    var isReorderMode by remember { mutableStateOf(false) }
+    var orderedItems by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
     
     // Auto-exit selection mode if empty
     LaunchedEffect(selectedTracks) {
@@ -134,6 +141,11 @@ fun PlaylistDetailScreen(
                         }) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = "Play Playlist", tint = MaterialTheme.colorScheme.onBackground)
                         }
+                        if (isReorderMode) {
+                            IconButton(onClick = { isReorderMode = false }) {
+                                Icon(Icons.Filled.Check, contentDescription = "Done reordering", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                         Box {
                             IconButton(onClick = { showPlaylistMenu = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = MaterialTheme.colorScheme.onBackground)
@@ -169,6 +181,16 @@ fun PlaylistDetailScreen(
                                         onClick = {
                                             showPlaylistMenu = false
                                             viewModel.syncLocalPlaylistToYouTube(playlistId)
+                                        }
+                                    )
+                                }
+                                if (isLocalPlaylist && isEditable && !isSelectionMode && currentPlaylist != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("Reorder songs") },
+                                        onClick = {
+                                            showPlaylistMenu = false
+                                            orderedItems = currentPlaylist!!.items.toList()
+                                            isReorderMode = true
                                         }
                                     )
                                 }
@@ -421,12 +443,36 @@ fun PlaylistDetailScreen(
                                 }
                             }
 
-                            itemsIndexed(items = playlist.items) { index, item ->
+                            val displayItems = if (isReorderMode) orderedItems else playlist.items
+                            itemsIndexed(items = displayItems) { index, item ->
+                                val canMoveUp = index > 0
+                                val canMoveDown = index < displayItems.size - 1
                                 PremiumPlaylistItemCard(
                                     index = index + 1,
                                     item = item,
                                     isSelected = selectedTracks.contains(item),
                                     isSelectionMode = isSelectionMode,
+                                    reorderMode = isReorderMode,
+                                    canMoveUp = canMoveUp,
+                                    canMoveDown = canMoveDown,
+                                    onMoveUp = {
+                                        if (canMoveUp) {
+                                            val newOrder = orderedItems.toMutableList()
+                                            val moved = newOrder.removeAt(index)
+                                            newOrder.add(index - 1, moved)
+                                            orderedItems = newOrder
+                                            viewModel.reorderPlaylistTracks(playlist.id, newOrder.map { it.id })
+                                        }
+                                    },
+                                    onMoveDown = {
+                                        if (canMoveDown) {
+                                            val newOrder = orderedItems.toMutableList()
+                                            val moved = newOrder.removeAt(index)
+                                            newOrder.add(index + 1, moved)
+                                            orderedItems = newOrder
+                                            viewModel.reorderPlaylistTracks(playlist.id, newOrder.map { it.id })
+                                        }
+                                    },
                                     onRemoveFromPlaylist = {
                                         viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
                                     },
@@ -576,6 +622,11 @@ fun PremiumPlaylistItemCard(
     item: MusicItem,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
+    reorderMode: Boolean = false,
+    canMoveUp: Boolean = true,
+    canMoveDown: Boolean = true,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
     onSelectionChange: (Boolean) -> Unit = {},
     onLongClick: () -> Unit = {},
     onRemoveFromPlaylist: () -> Unit = {},
@@ -588,8 +639,8 @@ fun PremiumPlaylistItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
+                onClick = if (reorderMode) ({}) else onClick,
+                onLongClick = if (reorderMode) ({}) else onLongClick
             )
             .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -609,7 +660,7 @@ fun PremiumPlaylistItemCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(32.dp)
         )
-        
+
         AsyncImage(
             model = item.thumbnailUrl,
             contentDescription = null,
@@ -619,9 +670,9 @@ fun PremiumPlaylistItemCard(
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
+
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -643,40 +694,65 @@ fun PremiumPlaylistItemCard(
             )
         }
 
-        if (item.duration > 0) {
-            val totalSeconds = item.duration / 1000
-            val minutes = totalSeconds / 60
-            val seconds = totalSeconds % 60
-            Text(
-                text = String.format("%d:%02d", minutes, seconds),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
-
-        Box {
-            IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Options")
-            }
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false }
+        if (reorderMode) {
+            IconButton(
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+                modifier = Modifier.size(40.dp)
             ) {
-                DropdownMenuItem(
-                    text = { Text("Remove from Playlist") },
-                    onClick = {
-                        showMenu = false
-                        onRemoveFromPlaylist()
-                    }
+                Icon(
+                    Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Move up",
+                    tint = if (canMoveUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
-                DropdownMenuItem(
-                    text = { Text("Set as Ringtone") },
-                    onClick = {
-                        showMenu = false
-                        onDownloadForRingtone()
-                    }
+            }
+            IconButton(
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Move down",
+                    tint = if (canMoveDown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
+            }
+        } else {
+            if (item.duration > 0) {
+                val totalSeconds = item.duration / 1000
+                val minutes = totalSeconds / 60
+                val seconds = totalSeconds % 60
+                Text(
+                    text = String.format("%d:%02d", minutes, seconds),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Remove from Playlist") },
+                        onClick = {
+                            showMenu = false
+                            onRemoveFromPlaylist()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Set as Ringtone") },
+                        onClick = {
+                            showMenu = false
+                            onDownloadForRingtone()
+                        }
+                    )
+                }
             }
         }
     }

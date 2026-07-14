@@ -1,17 +1,16 @@
 package com.israrxy.raazi
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,12 +30,12 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.israrxy.raazi.data.local.SettingsDataStore
+import com.israrxy.raazi.ui.LockScreen
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
-    private var feedbackReceiver: BroadcastReceiver? = null
 
     // Permission launcher for Android 13+ notifications
     private val requestPermissionLauncher = registerForActivityResult(
@@ -55,37 +54,22 @@ class MainActivity : ComponentActivity() {
 
         bootstrapPoToken()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            feedbackReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    val message = intent.getStringExtra(MusicPlaybackService.EXTRA_FEEDBACK_MESSAGE)
-                    if (!message.isNullOrBlank()) {
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            val filter = IntentFilter(MusicPlaybackService.NOTIFICATION_FEEDBACK_CHANNEL)
-            registerReceiver(feedbackReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            feedbackReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    val message = intent.getStringExtra(MusicPlaybackService.EXTRA_FEEDBACK_MESSAGE)
-                    if (!message.isNullOrBlank()) {
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            val filter = IntentFilter(MusicPlaybackService.NOTIFICATION_FEEDBACK_CHANNEL)
-            registerReceiver(feedbackReceiver, filter)
-        }
-
         setContent {
             val context = LocalContext.current
             val settingsDataStore = remember { SettingsDataStore(context) }
             val useDynamicColor by settingsDataStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = true)
             val themeMode by settingsDataStore.themeMode.collectAsStateWithLifecycle(initialValue = "System")
             val pastelAccent by settingsDataStore.pastelAccent.collectAsStateWithLifecycle(initialValue = "Emerald")
+            val pureBlack by settingsDataStore.pureBlack.collectAsStateWithLifecycle(initialValue = false)
+            val allowLandscape by settingsDataStore.allowLandscape.collectAsStateWithLifecycle(initialValue = false)
+
+            LaunchedEffect(allowLandscape) {
+                this@MainActivity.requestedOrientation = if (allowLandscape) {
+                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                }
+            }
             
             // Update Check Logic
             val updateManager = remember { com.israrxy.raazi.data.UpdateManager() }
@@ -116,34 +100,61 @@ class MainActivity : ComponentActivity() {
             val onboardingCompleted by settingsDataStore.isOnboardingCompleted.collectAsStateWithLifecycle(initialValue = null)
             val scope = rememberCoroutineScope()
 
+            // --- Biometric App Lock ---
+            val biometricLock by settingsDataStore.biometricLock.collectAsStateWithLifecycle(initialValue = false)
+            // Tracks whether the user has unlocked the app this session/foreground visit.
+            var unlocked by remember { mutableStateOf(false) }
+
+            // Re-lock (require authentication again) whenever the setting is turned on.
+            LaunchedEffect(biometricLock) {
+                unlocked = !biometricLock
+            }
+
+            // Re-lock whenever the app returns to the foreground.
+            DisposableEffect(Unit) {
+                val observer = object : DefaultLifecycleObserver {
+                    override fun onResume(owner: LifecycleOwner) {
+                        if (biometricLock) unlocked = false
+                    }
+                }
+                this@MainActivity.lifecycle.addObserver(observer)
+                onDispose { this@MainActivity.lifecycle.removeObserver(observer) }
+            }
+            // --- End Biometric App Lock ---
+
             RaaziTheme(
                 darkTheme = darkTheme,
                 dynamicColor = useDynamicColor,
-                pastelAccent = pastelAccent
+                pastelAccent = pastelAccent,
+                pureBlack = pureBlack
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: MusicPlayerViewModel = viewModel(
-                        factory = MusicPlayerViewModel.provideFactory(this.application)
-                    )
-                    
-                    var showSplash by remember { mutableStateOf(true) }
-
-                    if (showSplash || onboardingCompleted == null) {
-                        com.israrxy.raazi.ui.SplashScreen {
-                            showSplash = false
-                        }
+                    if (biometricLock && !unlocked) {
+                        LockScreen(onUnlocked = { unlocked = true })
                     } else {
-                        if (onboardingCompleted == false) {
-                            com.israrxy.raazi.ui.OnboardingScreen(viewModel = viewModel) {
-                                scope.launch {
-                                    settingsDataStore.setOnboardingCompleted(true)
-                                }
+                        val viewModel: MusicPlayerViewModel = viewModel(
+                            factory = MusicPlayerViewModel.provideFactory(this.application)
+                        )
+
+                        var showSplash by remember { mutableStateOf(true) }
+
+                        if (showSplash || onboardingCompleted == null) {
+                            com.israrxy.raazi.ui.SplashScreen {
+                                showSplash = false
                             }
                         } else {
-                            MainScreen(viewModel = viewModel)
+                            if (onboardingCompleted == false) {
+                                com.israrxy.raazi.ui.OnboardingScreen(viewModel = viewModel) {
+                                    scope.launch {
+                                        settingsDataStore.setOnboardingCompleted(true)
+                                    }
+                                }
+                            } else {
+                                MainScreen(viewModel = viewModel)
+                            }
                         }
                     }
                 }
@@ -199,10 +210,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        try {
-            feedbackReceiver?.let { unregisterReceiver(it) }
-        } catch (_: Exception) {}
-        feedbackReceiver = null
         super.onDestroy()
     }
 }

@@ -2,6 +2,8 @@ package com.israrxy.raazi.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -9,9 +11,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,12 +63,104 @@ fun HomeScreen(
     val homePage by viewModel.homePage.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
 
+    // Home batch-selection state
+    var isHomeSelectionMode by remember { mutableStateOf(false) }
+    var selectedHomeTracks by remember { mutableStateOf(setOf<MusicItem>()) }
+    var bulkAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
+
+    val onHomeToggleSelection: (MusicItem) -> Unit = { item ->
+        selectedHomeTracks = if (selectedHomeTracks.contains(item)) {
+            selectedHomeTracks - item
+        } else {
+            selectedHomeTracks + item
+        }
+    }
+    val onHomeEnterSelection: (MusicItem) -> Unit = { item ->
+        isHomeSelectionMode = true
+        selectedHomeTracks = selectedHomeTracks + item
+    }
+    val exitHomeSelection: () -> Unit = {
+        isHomeSelectionMode = false
+        selectedHomeTracks = emptySet()
+    }
+
+    LaunchedEffect(selectedHomeTracks) {
+        if (selectedHomeTracks.isEmpty() && isHomeSelectionMode) {
+            isHomeSelectionMode = false
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            AnimatedVisibility(
+                visible = isHomeSelectionMode,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                    tonalElevation = 6.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${selectedHomeTracks.size} selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                viewModel.playPlaylist(selectedHomeTracks.toList(), 0)
+                                exitHomeSelection()
+                                onNavigateToPlayer()
+                            }
+                        }) {
+                            Icon(Icons.Filled.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                viewModel.addToQueue(selectedHomeTracks.toList())
+                                exitHomeSelection()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                bulkAddToPlaylist = selectedHomeTracks.toList()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        IconButton(onClick = {
+                            selectedHomeTracks.forEach { viewModel.downloadTrack(it) }
+                            exitHomeSelection()
+                        }) {
+                            Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        IconButton(onClick = exitHomeSelection) {
+                            Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+            }
+
         if (homeFeedState.isLoading) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -67,12 +169,58 @@ fun HomeScreen(
                 item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
                 items(3) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
             }
+        } else if (homeFeedState.errorMessage != null && homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
+            // Error state — failed to load home content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                HomeStatusHeader(
+                    isRefreshing = homeFeedState.isRefreshing,
+                    onRefresh = { viewModel.refreshHomeSection("home_status") }
+                )
+                Spacer(modifier = Modifier.height(56.dp))
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Something went wrong",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = homeFeedState.errorMessage ?: "Failed to load your feed. Check your connection and try again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.loadHomeContent() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 48.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Retry", fontWeight = FontWeight.Bold)
+                }
+            }
         } else if (homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
             // Empty state — new user with no history or content
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 HomeStatusHeader(
@@ -117,8 +265,7 @@ fun HomeScreen(
         } else {
             LazyColumn(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
@@ -138,7 +285,11 @@ fun HomeScreen(
                                 viewModel = viewModel,
                                 onNavigateToPlayer = onNavigateToPlayer,
                                 sectionId = section.id,
-                                sourceType = section.sourceType
+                                sourceType = section.sourceType,
+                                isSelectionMode = isHomeSelectionMode,
+                                selectedTracks = selectedHomeTracks,
+                                onToggleSelection = onHomeToggleSelection,
+                                onEnterSelection = onHomeEnterSelection
                             )
                         }
 
@@ -149,7 +300,11 @@ fun HomeScreen(
                                 viewModel = viewModel,
                                 onNavigateToPlayer = onNavigateToPlayer,
                                 sectionId = section.id,
-                                sourceType = section.sourceType
+                                sourceType = section.sourceType,
+                                isSelectionMode = isHomeSelectionMode,
+                                selectedTracks = selectedHomeTracks,
+                                onToggleSelection = onHomeToggleSelection,
+                                onEnterSelection = onHomeEnterSelection
                             )
                         }
 
@@ -158,7 +313,11 @@ fun HomeScreen(
                             HomeMusicRail(
                                 section = section,
                                 viewModel = viewModel,
-                                onNavigateToPlayer = onNavigateToPlayer
+                                onNavigateToPlayer = onNavigateToPlayer,
+                                isSelectionMode = isHomeSelectionMode,
+                                selectedTracks = selectedHomeTracks,
+                                onToggleSelection = onHomeToggleSelection,
+                                onEnterSelection = onHomeEnterSelection
                             )
                         }
 
@@ -184,7 +343,11 @@ fun HomeScreen(
                                 viewModel = viewModel,
                                 onNavigateToPlayer = onNavigateToPlayer,
                                 onNavigateToPlaylist = onNavigateToPlaylist,
-                                onNavigateToArtist = onNavigateToArtist
+                                onNavigateToArtist = onNavigateToArtist,
+                                isSelectionMode = isHomeSelectionMode,
+                                selectedTracks = selectedHomeTracks,
+                                onToggleSelection = onHomeToggleSelection,
+                                onEnterSelection = onHomeEnterSelection
                             )
                         }
                     }
@@ -210,8 +373,9 @@ fun HomeScreen(
                 }
             }
         }
+        }
     }
-    
+
     // Add To Playlist Dialog
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
 
@@ -222,6 +386,18 @@ fun HomeScreen(
             onPlaylistSelected = { playlist ->
                 viewModel.addToPlaylist(playlist.id, showAddToPlaylistItem!!)
                 showAddToPlaylistItem = null
+            }
+        )
+    }
+
+    if (bulkAddToPlaylist != null) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = viewModel,
+            onDismiss = { bulkAddToPlaylist = null },
+            onPlaylistSelected = { playlist ->
+                viewModel.addToPlaylist(bulkAddToPlaylist!!, playlist)
+                bulkAddToPlaylist = null
+                exitHomeSelection()
             }
         )
     }
@@ -349,7 +525,11 @@ private fun HomeFeedItem.stableId(): String = when (this) {
 fun HomeMusicRail(
     section: HomeSection,
     viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit
+    onNavigateToPlayer: () -> Unit,
+    isSelectionMode: Boolean = false,
+    selectedTracks: Set<MusicItem> = emptySet(),
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -360,6 +540,10 @@ fun HomeMusicRail(
                 musicItem = musicItem,
                 viewModel = viewModel,
                 onNavigateToPlayer = onNavigateToPlayer,
+                isSelected = selectedTracks.contains(musicItem),
+                isSelectionMode = isSelectionMode,
+                onToggleSelection = onToggleSelection,
+                onEnterSelection = onEnterSelection,
                 onClick = {
                     viewModel.recordHomeInteraction(
                         itemId = musicItem.id,
@@ -380,7 +564,11 @@ fun HomeFeedRail(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToArtist: (String, String) -> Unit
+    onNavigateToArtist: (String, String) -> Unit,
+    isSelectionMode: Boolean = false,
+    selectedTracks: Set<MusicItem> = emptySet(),
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -393,7 +581,11 @@ fun HomeFeedRail(
                 viewModel = viewModel,
                 onNavigateToPlayer = onNavigateToPlayer,
                 onNavigateToPlaylist = onNavigateToPlaylist,
-                onNavigateToArtist = onNavigateToArtist
+                onNavigateToArtist = onNavigateToArtist,
+                isSelectionMode = isSelectionMode,
+                selectedTracks = selectedTracks,
+                onToggleSelection = onToggleSelection,
+                onEnterSelection = onEnterSelection
             )
         }
     }
@@ -406,13 +598,21 @@ fun HomeFeedItemCard(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToArtist: (String, String) -> Unit
+    onNavigateToArtist: (String, String) -> Unit,
+    isSelectionMode: Boolean = false,
+    selectedTracks: Set<MusicItem> = emptySet(),
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     when (item) {
         is HomeFeedItem.Music -> MusicCard(
             musicItem = item.item,
             viewModel = viewModel,
             onNavigateToPlayer = onNavigateToPlayer,
+            isSelected = selectedTracks.contains(item.item),
+            isSelectionMode = isSelectionMode,
+            onToggleSelection = onToggleSelection,
+            onEnterSelection = onEnterSelection,
             onClick = {
                 viewModel.recordHomeInteraction(
                     itemId = item.item.id,
@@ -628,7 +828,11 @@ fun KeepListeningPanel(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     sectionId: String = "keep_listening",
-    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL
+    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL,
+    isSelectionMode: Boolean = false,
+    selectedTracks: Set<MusicItem> = emptySet(),
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     if (items.isEmpty()) return
 
@@ -638,6 +842,10 @@ fun KeepListeningPanel(
     ) {
         KeepListeningResumeItem(
             musicItem = items.first(),
+            isSelected = selectedTracks.contains(items.first()),
+            isSelectionMode = isSelectionMode,
+            onToggleSelection = onToggleSelection,
+            onEnterSelection = onEnterSelection,
             onClick = {
                 viewModel.recordHomeInteraction(
                     itemId = items.first().id,
@@ -657,6 +865,10 @@ fun KeepListeningPanel(
                 itemsIndexed(items.drop(1)) { index, track ->
                     KeepListeningRecentItem(
                         musicItem = track,
+                        isSelected = selectedTracks.contains(track),
+                        isSelectionMode = isSelectionMode,
+                        onToggleSelection = onToggleSelection,
+                        onEnterSelection = onEnterSelection,
                         onClick = {
                             viewModel.recordHomeInteraction(
                                 itemId = track.id,
@@ -674,19 +886,27 @@ fun KeepListeningPanel(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun KeepListeningResumeItem(
     musicItem: MusicItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(104.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
+                onLongClick = { onEnterSelection(musicItem) }
+            ),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
         tonalElevation = 1.dp
     ) {
         Row(
@@ -696,15 +916,23 @@ fun KeepListeningResumeItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AsyncImage(
-                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(84.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection(musicItem) },
+                    modifier = Modifier.size(28.dp)
+                )
+            } else {
+                AsyncImage(
+                    model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -721,7 +949,7 @@ fun KeepListeningResumeItem(
                     text = musicItem.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -737,38 +965,48 @@ fun KeepListeningResumeItem(
                 )
             }
 
-            Surface(
-                modifier = Modifier.size(42.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 2.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Play",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(27.dp)
-                    )
+            if (!isSelectionMode) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 2.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(27.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun KeepListeningRecentItem(
     musicItem: MusicItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
             .width(244.dp)
             .height(70.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
+                onLongClick = { onEnterSelection(musicItem) }
+            ),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
         tonalElevation = 1.dp
     ) {
         Row(
@@ -778,15 +1016,23 @@ fun KeepListeningRecentItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            AsyncImage(
-                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection(musicItem) },
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                AsyncImage(
+                    model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -796,7 +1042,7 @@ fun KeepListeningRecentItem(
                     text = musicItem.title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -809,12 +1055,14 @@ fun KeepListeningRecentItem(
                 )
             }
 
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = "Play",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            if (!isSelectionMode) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Play",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
@@ -851,7 +1099,11 @@ fun QuickPicksPanel(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     sectionId: String = "quick_picks",
-    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL
+    sourceType: String = com.israrxy.raazi.data.db.HomeInteractionEntity.SOURCE_LOCAL,
+    isSelectionMode: Boolean = false,
+    selectedTracks: Set<MusicItem> = emptySet(),
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     if (items.isEmpty()) return
 
@@ -864,6 +1116,10 @@ fun QuickPicksPanel(
     ) {
         QuickPickFeaturedItem(
             musicItem = featuredTrack,
+            isSelected = selectedTracks.contains(featuredTrack),
+            isSelectionMode = isSelectionMode,
+            onToggleSelection = onToggleSelection,
+            onEnterSelection = onEnterSelection,
             onClick = {
                 viewModel.recordHomeInteraction(
                     itemId = featuredTrack.id,
@@ -887,6 +1143,10 @@ fun QuickPicksPanel(
                         number = quickPickIndex + 1,
                         musicItem = track,
                         modifier = Modifier.weight(1f),
+                        isSelected = selectedTracks.contains(track),
+                        isSelectionMode = isSelectionMode,
+                        onToggleSelection = onToggleSelection,
+                        onEnterSelection = onEnterSelection,
                         onClick = {
                             viewModel.recordHomeInteraction(
                                 itemId = track.id,
@@ -908,19 +1168,27 @@ fun QuickPicksPanel(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QuickPickFeaturedItem(
     musicItem: MusicItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(112.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
+                onLongClick = { onEnterSelection(musicItem) }
+            ),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
         tonalElevation = 2.dp
     ) {
         Row(
@@ -930,15 +1198,23 @@ fun QuickPickFeaturedItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AsyncImage(
-                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(92.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection(musicItem) },
+                    modifier = Modifier.size(30.dp)
+                )
+            } else {
+                AsyncImage(
+                    model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(92.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -948,7 +1224,7 @@ fun QuickPickFeaturedItem(
                     text = musicItem.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimaryContainer,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -962,39 +1238,49 @@ fun QuickPickFeaturedItem(
                 )
             }
 
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 2.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Play",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(28.dp)
-                    )
+            if (!isSelectionMode) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 2.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QuickPickTile(
     number: Int,
     musicItem: MusicItem,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     Surface(
         modifier = modifier
             .height(72.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
+                onLongClick = { onEnterSelection(musicItem) }
+            ),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
     ) {
         Row(
             modifier = Modifier
@@ -1003,15 +1289,23 @@ fun QuickPickTile(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AsyncImage(
-                model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection(musicItem) },
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                AsyncImage(
+                    model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -1021,7 +1315,7 @@ fun QuickPickTile(
                     text = musicItem.title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1034,52 +1328,89 @@ fun QuickPickTile(
                 )
             }
 
-            Text(
-                text = number.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-                modifier = Modifier.width(18.dp)
-            )
+            if (!isSelectionMode) {
+                Text(
+                    text = number.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+                    modifier = Modifier.width(18.dp)
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MusicCard(
     musicItem: MusicItem,
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: (MusicItem) -> Unit = {},
+    onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
             .width(160.dp)
-            .clickable {
-                if (onClick != null) {
-                    onClick()
-                } else {
-                    viewModel.playMusic(musicItem)
-                }
-                onNavigateToPlayer()
-            }
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelection(musicItem)
+                    } else {
+                        if (onClick != null) {
+                            onClick()
+                        } else {
+                            viewModel.playMusic(musicItem)
+                        }
+                        onNavigateToPlayer()
+                    }
+                },
+                onLongClick = { onEnterSelection(musicItem) }
+            )
     ) {
-        AsyncImage(
-            model = musicItem.thumbnailUrl?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
-            modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
+        Box {
+            AsyncImage(
+                model = musicItem.thumbnailUrl?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(160.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+            if (isSelectionMode) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(28.dp),
+                    shape = CircleShape,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = musicItem.title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
