@@ -57,6 +57,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.withPermit
 import android.util.Log
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class HomeFeedUiState(
     val isLoading: Boolean = false,
@@ -117,6 +120,11 @@ class MusicPlayerViewModel(
         .stateIn(viewModelScope, SharingStarted.Lazily, true)
     val blurPlayerBackground: StateFlow<Boolean> = settingsDataStore.blurPlayerBackground
         .stateIn(viewModelScope, SharingStarted.Lazily, true)
+
+    val videoQuality: StateFlow<com.israrxy.raazi.model.PlaybackVideoQuality> =
+        settingsDataStore.videoQuality
+            .map { wire -> com.israrxy.raazi.model.PlaybackVideoQuality.values().firstOrNull { it.wireName == wire } ?: com.israrxy.raazi.model.PlaybackVideoQuality.AUTO }
+            .stateIn(viewModelScope, SharingStarted.Lazily, com.israrxy.raazi.model.PlaybackVideoQuality.AUTO)
 
     // Stored listener references for proper cleanup
     private var playbackStateListener: ((PlaybackState) -> Unit)? = null
@@ -269,6 +277,10 @@ class MusicPlayerViewModel(
     private val _currentArtistSongs = MutableStateFlow<List<MusicItem>>(emptyList())
     val currentArtistSongs: StateFlow<List<MusicItem>> = _currentArtistSongs.asStateFlow()
 
+    // Real YouTube Music "Up next" autoplay queue for the current song (InnerTube).
+    private val _autoPlayQueue = MutableStateFlow<List<MusicItem>>(emptyList())
+    val autoPlayQueue: StateFlow<List<MusicItem>> = _autoPlayQueue.asStateFlow()
+
     data class EqualizerState(
         val bands: Short = 0,
         val minLevel: Short = 0,
@@ -304,6 +316,10 @@ class MusicPlayerViewModel(
     private val _visualizerData = MutableStateFlow<ByteArray?>(null)
     val visualizerData: StateFlow<ByteArray?> = _visualizerData.asStateFlow()
 
+    // Connected audio output device (Bluetooth earbuds, headphones, speaker, etc.)
+    val connectedAudioDevice: StateFlow<com.israrxy.raazi.data.local.BluetoothDeviceManager.AudioDevice?> =
+        com.israrxy.raazi.RaaziApplication.instance.bluetoothDeviceManager.connectedDevice
+
     // Genre-based presets with optimized frequency curves
     private val genrePresets = mapOf(
         "Rock" to listOf(300, 500, 800, 1200, 2000, 3000, 4000, 6000, 8000, 12000),
@@ -331,12 +347,21 @@ class MusicPlayerViewModel(
     private var lyricsFetchJob: Job? = null
     private var lastLyricsTrack: MusicItem? = null
 
+    private val _songCredits = MutableStateFlow<String?>(null)
+    val songCredits: StateFlow<String?> = _songCredits.asStateFlow()
+    private val _isSongCreditsLoading = MutableStateFlow(false)
+    val isSongCreditsLoading: StateFlow<Boolean> = _isSongCreditsLoading.asStateFlow()
+    private var songCreditsFetchJob: Job? = null
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
             try {
                 val binder = service as MusicPlaybackService.MusicBinder
                 playbackService = binder.getService()
                 isServiceBound = true
+
+                // Apply persisted video quality preference
+                playbackService?.setPlaybackVideoQuality(videoQuality.value)
                 
                 // Create and store listener reference for proper cleanup
                 val stateListener: (PlaybackState) -> Unit = { state ->
@@ -608,6 +633,25 @@ class MusicPlayerViewModel(
             settingsDataStore.setBassBoostStrength(current.bassBoostStrength)
             settingsDataStore.setVirtualizerStrength(current.virtualizerStrength)
             settingsDataStore.setReverbPreset(current.reverbPreset)
+            // Remember this preset for the currently connected device
+            connectedAudioDevice.value?.address?.takeIf { it.isNotBlank() }?.let { addr ->
+                settingsDataStore.setDeviceEqProfile(addr, current.currentPreset)
+            }
+        }
+    }
+
+    /**
+     * If a preset was previously saved for the connected device, apply it automatically.
+     * Call this after [loadEqualizerState] (e.g. when the equalizer screen opens).
+     */
+    fun applyDeviceEqProfileIfAny() {
+        val device = connectedAudioDevice.value ?: return
+        if (device.address.isBlank()) return
+        viewModelScope.launch {
+            val preset = settingsDataStore.getDeviceEqProfile(device.address) ?: return@launch
+            if (preset != _equalizerState.value.currentPreset) {
+                withContext(Dispatchers.Main) { usePreset(preset) }
+            }
         }
     }
 
@@ -1561,6 +1605,26 @@ class MusicPlayerViewModel(
         }
     }
 
+    fun fetchSongCredits(track: MusicItem) {
+        songCreditsFetchJob?.cancel()
+        songCreditsFetchJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _isSongCreditsLoading.value = true
+                _songCredits.value = null
+                val endpoint = com.zionhuang.innertube.models.WatchEndpoint(videoId = track.id)
+                val nextResult = com.zionhuang.innertube.YouTube.next(endpoint).getOrNull()
+                val desc = nextResult?.description
+                if (!desc.isNullOrBlank()) {
+                    _songCredits.value = desc
+                }
+            } catch (e: Exception) {
+                Log.w("MusicVM", "fetchSongCredits failed", e)
+            } finally {
+                _isSongCreditsLoading.value = false
+            }
+        }
+    }
+
     fun toggleSavedCollection(item: MusicItem) {
         viewModelScope.launch {
             repository.toggleSavedCollection(item)
@@ -1709,7 +1773,101 @@ class MusicPlayerViewModel(
     fun playNext(items: List<MusicItem>) {
         try { playbackService?.playNext(items) } catch (e: Exception) { Log.w("MusicVM", "playNext failed", e) }
     }
-    
+
+    // ---- Queue management (YouTube Music style) ----
+
+    fun playFromQueue(upcomingIndex: Int) {
+        val abs = _playbackState.value.currentIndex + 1 + upcomingIndex
+        try { playbackService?.jumpToIndex(abs) } catch (e: Exception) { Log.w("MusicVM", "playFromQueue failed", e) }
+    }
+
+    fun removeFromUpcoming(upcomingIndex: Int) {
+        val abs = _playbackState.value.currentIndex + 1 + upcomingIndex
+        try { playbackService?.removeFromQueue(abs) } catch (e: Exception) { Log.w("MusicVM", "removeFromUpcoming failed", e) }
+    }
+
+    fun moveUpcoming(fromUpcoming: Int, toUpcoming: Int) {
+        val base = _playbackState.value.currentIndex + 1
+        try { playbackService?.moveQueueItem(base + fromUpcoming, base + toUpcoming) } catch (e: Exception) { Log.w("MusicVM", "moveUpcoming failed", e) }
+    }
+
+    fun dismissQueue() {
+        try { playbackService?.clearUpcoming() } catch (e: Exception) { Log.w("MusicVM", "dismissQueue failed", e) }
+    }
+
+    fun setQueueOrder(newOrder: List<MusicItem>) {
+        try { playbackService?.setQueueOrder(newOrder) } catch (e: Exception) { Log.w("MusicVM", "setQueueOrder failed", e) }
+    }
+
+    /** Fetch the real YouTube Music "Up next" autoplay queue (radio) for a song via InnerTube. */
+    fun fetchAutoPlayQueue(track: MusicItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val endpoint = com.zionhuang.innertube.models.WatchEndpoint(
+                    videoId = track.id,
+                    playlistId = "RDAMVM" + track.id
+                )
+                val result = com.zionhuang.innertube.YouTube.next(endpoint).getOrNull()
+                val items = result?.items?.map { song ->
+                    val id = song.id
+                    MusicItem(
+                        id = id,
+                        title = song.title,
+                        artist = song.artists?.joinToString(", ") { it.name ?: "" }
+                            .orEmpty().ifBlank { "Unknown Artist" },
+                        duration = (song.duration?.toLong() ?: 0L) * 1000L,
+                        thumbnailUrl = song.thumbnail,
+                        audioUrl = "",
+                        videoUrl = id,
+                        isLive = false,
+                        isFavorite = false,
+                        contentType = MusicContentType.SONG,
+                        setVideoId = null
+                    )
+                }.orEmpty()
+                _autoPlayQueue.value = items
+            } catch (e: Exception) {
+                Log.w("MusicVM", "fetchAutoPlayQueue failed", e)
+                _autoPlayQueue.value = emptyList()
+            }
+        }
+    }
+
+    /** Launch an endless radio/mix based on the current song (related + artist tracks). */
+    fun startRadio(track: MusicItem) {
+        viewModelScope.launch {
+            try {
+                val related = currentTrackRelated.value.ifEmpty {
+                    repository.getRelatedTracks(track.id).first()
+                }
+                val mix = (listOf(track) + related).distinctBy { it.id }
+                if (mix.isNotEmpty()) playPlaylist(mix, 0)
+            } catch (e: Exception) {
+                Log.w("MusicVM", "startRadio failed", e)
+            }
+        }
+    }
+
+    /** Persist the current playing context (current track + upcoming) as a permanent playlist. */
+    fun saveCurrentQueueAsPlaylist(name: String? = null, tracks: List<MusicItem>? = null) {
+        viewModelScope.launch {
+            try {
+                val finalTracks = tracks ?: run {
+                    val state = _playbackState.value
+                    state.playlist.drop(state.currentIndex)
+                }.distinctBy { it.id }
+                if (finalTracks.isEmpty()) return@launch
+                val playlistName = name ?: "My Queue " + java.text.SimpleDateFormat(
+                    "MMM d, HH:mm", java.util.Locale.getDefault()
+                ).format(java.util.Date())
+                val entity = repository.createPlaylist(playlistName)
+                repository.addToPlaylist(finalTracks, entity)
+            } catch (e: Exception) {
+                Log.w("MusicVM", "saveCurrentQueueAsPlaylist failed", e)
+            }
+        }
+    }
+
 
 
     fun clearError() {
@@ -2185,7 +2343,18 @@ class MusicPlayerViewModel(
     }
 
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
+        viewModelScope.launch {
+            settingsDataStore.setVideoQuality(quality.wireName)
+        }
         return playbackService?.setPlaybackVideoQuality(quality) ?: false
+    }
+
+    fun setVideoSurface(surface: android.view.Surface?) {
+        playbackService?.setVideoSurface(surface)
+    }
+
+    fun clearVideoSurface() {
+        playbackService?.clearVideoSurface()
     }
 
     // --- Ringtone Support ---
@@ -2223,6 +2392,8 @@ class MusicPlayerViewModel(
     fun downloadForRingtone(track: MusicItem) {
         _ringtoneTrack.value = track
         _ringtoneState.value = RingtoneState.Downloading()
+        // Pause playback so the ringtone flow is clearly active and doesn't play over the trimmer
+        try { playbackService?.pause() } catch (e: Exception) { Log.w("MusicVM", "pause before ringtone failed", e) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val ringtoneHelper = com.israrxy.raazi.service.RingtoneHelper(app)

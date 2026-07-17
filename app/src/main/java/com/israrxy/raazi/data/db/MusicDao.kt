@@ -107,16 +107,19 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertTracks(tracks: List<TrackEntity>): List<Long>
 
-    // Smart Quick Picks: Recommendations based on last 20 played songs
+    // Smart Quick Picks: prefer actual SONGS (tracks with an audio stream) by artists the
+    // user recently played. Related "up next" items are stored without audioUrl (they are
+    // music videos), so we rank audio tracks first and only fall back to videos if no
+    // songs are available. This keeps Quick Picks showing music, not just videos.
     @Query("""
         SELECT t.* FROM tracks t
-        JOIN (
-            SELECT relatedTrackId, COUNT(sourceTrackId) as weight 
-            FROM related_songs 
-            WHERE sourceTrackId IN (SELECT id FROM playback_history ORDER BY timestamp DESC LIMIT 20)
-            GROUP BY relatedTrackId
-        ) r ON t.id = r.relatedTrackId
-        ORDER BY r.weight DESC, t.timestamp DESC 
+        LEFT JOIN (
+            SELECT DISTINCT artist FROM playback_history ORDER BY timestamp DESC LIMIT 15
+        ) ra ON t.artist = ra.artist
+        ORDER BY
+            CASE WHEN t.audioUrl IS NOT NULL AND t.audioUrl != '' THEN 0 ELSE 1 END,
+            CASE WHEN ra.artist IS NOT NULL THEN 0 ELSE 1 END,
+            t.timestamp DESC
         LIMIT 20
     """)
     fun getSmartRecommendations(): Flow<List<TrackEntity>>

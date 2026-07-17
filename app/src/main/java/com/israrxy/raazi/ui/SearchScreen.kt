@@ -6,7 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -114,10 +116,17 @@ fun SearchScreen(
         }
     }
     var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
-    
+
+    val suggestionsListState = rememberLazyListState()
+
     // Update query for suggestions
     LaunchedEffect(searchQuery) {
         searchViewModel.query.value = searchQuery
+    }
+
+    // Keep suggestions scrolled to top so "Top results" stays below the search box
+    LaunchedEffect(searchQuery, topResults, searchSuggestions, searchHistory) {
+        suggestionsListState.scrollToItem(0)
     }
     
     // Auto-exit selection mode if empty
@@ -241,32 +250,33 @@ fun SearchScreen(
             }
         )
         // Content: Results OR Suggestions
-        if (showingResults) {
-            when {
-                isSearching -> {
-                    SearchLoadingState(query = searchQuery)
-                }
+        Box(modifier = Modifier.weight(1f)) {
+            if (showingResults) {
+                when {
+                    isSearching -> {
+                        SearchLoadingState(query = searchQuery)
+                    }
 
-                searchError != null -> {
-                    SearchErrorState(
-                        message = searchError ?: "Something went wrong",
-                        onRetry = {
-                            if (searchViewModel.submittedQuery.isNotBlank()) {
-                                searchViewModel.performSearch(searchViewModel.submittedQuery)
+                    searchError != null -> {
+                        SearchErrorState(
+                            message = searchError ?: "Something went wrong",
+                            onRetry = {
+                                if (searchViewModel.submittedQuery.isNotBlank()) {
+                                    searchViewModel.performSearch(searchViewModel.submittedQuery)
+                                }
                             }
-                        }
-                    )
-                }
+                        )
+                    }
 
-                visibleSections.isEmpty() -> {
-                    SearchEmptyState(query = searchQuery)
-                }
+                    visibleSections.isEmpty() -> {
+                        SearchEmptyState(query = searchQuery)
+                    }
 
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 80.dp)
-                    ) {
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 80.dp)
+                        ) {
                         item {
                             SearchResultsHeader(
                                 query = searchQuery,
@@ -409,6 +419,7 @@ fun SearchScreen(
         } else {
             // SHOW SUGGESTIONS & HISTORY
             LazyColumn(
+                state = suggestionsListState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
@@ -456,6 +467,12 @@ fun SearchScreen(
                                         musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
                                         musicItem.isArtistResult() && musicItem.artistId != null -> onNavigateToArtist(musicItem.artistId!!, musicItem.title)
                                         else -> {
+                                            searchViewModel.saveSearchHistory(
+                                                query = musicItem.title,
+                                                thumbnailUrl = musicItem.thumbnailUrl,
+                                                resultTitle = musicItem.title,
+                                                resultArtist = musicItem.artist
+                                            )
                                             val playableIndex = playableTopItems.indexOf(musicItem)
                                             if (playableIndex != -1) {
                                                 playerViewModel.playPlaylist(playableTopItems, playableIndex)
@@ -521,7 +538,8 @@ fun SearchScreen(
             }
         }
     }
-    
+    }
+
     // Add Playlist Dialog
     if (showAddToPlaylistItem != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
@@ -751,9 +769,9 @@ private fun SearchSectionHeader(
 }
 
 @Composable
-private fun SearchLoadingState(query: String) {
+private fun SearchLoadingState(query: String, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -776,9 +794,9 @@ private fun SearchLoadingState(query: String) {
 }
 
 @Composable
-private fun SearchEmptyState(query: String) {
+private fun SearchEmptyState(query: String, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 28.dp),
         contentAlignment = Alignment.Center
@@ -811,10 +829,11 @@ private fun SearchEmptyState(query: String) {
 @Composable
 private fun SearchErrorState(
     message: String,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 28.dp),
         contentAlignment = Alignment.Center

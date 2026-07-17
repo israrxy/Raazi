@@ -11,15 +11,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -30,6 +35,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.Bookmark
@@ -42,11 +48,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -110,6 +118,13 @@ fun LibraryScreen(
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    // Library browsing: search, filter and sort
+    var libraryQuery by remember { mutableStateOf("") }
+    var libraryFilter by remember { mutableStateOf("All") } // All, Playlists, Albums, Artists
+    var librarySortAsc by remember { mutableStateOf(true) }
+
+    val normalizedLibraryQuery = libraryQuery.trim().lowercase()
+
     LaunchedEffect(syncStatus) {
         val message = syncStatus ?: return@LaunchedEffect
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -120,6 +135,20 @@ fun LibraryScreen(
     val albums = saved.filter { it.contentType == MusicContentType.ALBUM }
     val artists = saved.filter { it.contentType == MusicContentType.ARTIST }
 
+    fun List<SavedCollectionItem>.applyLibraryQuery(): List<SavedCollectionItem> =
+        if (normalizedLibraryQuery.isBlank()) this
+        else filter { it.title.lowercase().contains(normalizedLibraryQuery) || it.subtitle.lowercase().contains(normalizedLibraryQuery) }
+
+    fun List<SavedCollectionItem>.applyLibrarySort(): List<SavedCollectionItem> =
+        if (librarySortAsc) sortedBy { it.title.lowercase() } else sortedByDescending { it.title.lowercase() }
+
+    val filteredPlaylists = savedPlaylists.applyLibraryQuery().applyLibrarySort()
+    val filteredAlbums = albums.applyLibraryQuery().applyLibrarySort()
+    val filteredArtists = artists.applyLibraryQuery().applyLibrarySort()
+    val filteredUserPlaylists = playlists.filter {
+        normalizedLibraryQuery.isBlank() || it.playlist.displayTitle.lowercase().contains(normalizedLibraryQuery)
+    }.let { if (librarySortAsc) it else it.reversed() }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -129,6 +158,50 @@ fun LibraryScreen(
     ) {
         item {
             Header(onNavigateToSettings)
+        }
+
+        item {
+            // Search + filter + sort controls
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                OutlinedTextField(
+                    value = libraryQuery,
+                    onValueChange = { libraryQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search your library") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (libraryQuery.isNotEmpty()) {
+                            IconButton(onClick = { libraryQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("All", "Playlists", "Albums", "Artists").forEach { filter ->
+                        FilterChip(
+                            selected = libraryFilter == filter,
+                            onClick = { libraryFilter = filter },
+                            label = { Text(filter) }
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = { librarySortAsc = !librarySortAsc }) {
+                        Icon(
+                            if (librarySortAsc) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            contentDescription = "Sort order"
+                        )
+                    }
+                }
+            }
         }
 
         item {
@@ -191,9 +264,9 @@ fun LibraryScreen(
             )
         }
 
-        if (playlists.isNotEmpty()) {
+        if ((libraryFilter == "All" || libraryFilter == "Playlists") && filteredUserPlaylists.isNotEmpty()) {
             item { Section("Playlists") }
-            items(playlists, key = { it.playlist.id }) { playlist ->
+            items(filteredUserPlaylists, key = { it.playlist.id }) { playlist ->
                 PlaylistRow(
                     playlist = playlist,
                     onClick = { onNavigateToPlaylist(playlist.playlist.id) },
@@ -210,9 +283,9 @@ fun LibraryScreen(
             }
         }
 
-        if (savedPlaylists.isNotEmpty()) {
+        if ((libraryFilter == "All" || libraryFilter == "Playlists") && filteredPlaylists.isNotEmpty()) {
             item { Section("Saved Playlists") }
-            items(savedPlaylists, key = { it.id }) { item ->
+            items(filteredPlaylists, key = { it.id }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToPlaylist(item.sourceId) },
@@ -235,9 +308,9 @@ fun LibraryScreen(
             }
         }
 
-        if (albums.isNotEmpty()) {
+        if ((libraryFilter == "All" || libraryFilter == "Albums") && filteredAlbums.isNotEmpty()) {
             item { Section("Albums") }
-            items(albums, key = { it.id }) { item ->
+            items(filteredAlbums, key = { it.id }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToPlaylist(item.sourceId) },
@@ -259,9 +332,9 @@ fun LibraryScreen(
             }
         }
 
-        if (artists.isNotEmpty()) {
+        if ((libraryFilter == "All" || libraryFilter == "Artists") && filteredArtists.isNotEmpty()) {
             item { Section("Artists") }
-            items(artists, key = { it.id }) { item ->
+            items(filteredArtists, key = { it.id }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToArtist(item.sourceId, item.title) },
@@ -276,7 +349,7 @@ fun LibraryScreen(
             }
         }
 
-        if (playlists.isEmpty() && saved.isEmpty()) {
+        if (filteredUserPlaylists.isEmpty() && filteredPlaylists.isEmpty() && filteredAlbums.isEmpty() && filteredArtists.isEmpty()) {
             item {
                 EmptyLibrary()
             }

@@ -2,9 +2,19 @@
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="#10B981">
+    android:viewportHeight="24">
+    <!-- Active state shown by SHAPE (indicator dot under the glyph), not color, since
+         notification action icons are tinted to a single system color. -->
+    <group
+        android:scaleX="0.82"
+        android:scaleY="0.82"
+        android:translateX="2.16"
+        android:translateY="0.2">
+        <path
+            android:fillColor="@android:color/white"
+            android:pathData="M7,7h10v3l4,-4 -4,-4v3H5v6h2V7zM17,17H7v-3l-4,4 4,4v-3h12v-6h-2v4z"/>
+    </group>
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M7,7h10v3l4,-4 -4,-4v3H5v6h2V7zM17,17H7v-3l-4,4 4,4v-3h12v-6h-2v4z"/>
+        android:pathData="M12,22.2m-1.5,0a1.5,1.5 0 1,0 3,0a1.5,1.5 0 1,0 -3,0"/>
 </vector>

@@ -78,6 +78,7 @@ class MusicPlaybackService : Service() {
     private var repeatMode = RepeatMode.OFF
     private var mediaMode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
     private var videoQuality = com.israrxy.raazi.model.PlaybackVideoQuality.AUTO
+    private var videoSurface: android.view.Surface? = null
     private var isVideoAvailable = false
     
     // Position update job for continuous timeline updates
@@ -274,7 +275,11 @@ class MusicPlaybackService : Service() {
                     currentPlaylist = originalPlaylist
                     currentIndex = currentPlaylist.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
                 }
-                syncPlaylistQueue(
+                // Reorder the ExoPlayer timeline in place. We keep the currently playing
+                // item where it is and only swap the *upcoming* items, so playback is never
+                // interrupted (the old code called setMediaItems, which re-resolved the stream
+                // and caused the ~1s pause/glitch when toggling shuffle).
+                reorderQueueInPlace(
                     targetIndex = currentIndex,
                     targetPositionMs = currentPosition,
                     shouldPlay = shouldKeepPlaying
@@ -284,6 +289,46 @@ class MusicPlaybackService : Service() {
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Error toggling shuffle", e)
         }
+    }
+
+    /**
+     * Reorders the ExoPlayer playlist to match [currentPlaylist] without tearing down the
+     * renderer pipeline. The item currently playing (at [targetIndex]) is left untouched and
+     * only the remaining items are moved into place via [androidx.media3.common.Player.moveMediaItem],
+     * so playback continues seamlessly. If the player isn't prepared yet (or the timeline size
+     * doesn't match), falls back to a full [syncPlaylistQueue].
+     */
+    private fun reorderQueueInPlace(targetIndex: Int, targetPositionMs: Long, shouldPlay: Boolean) {
+        if (!::exoPlayer.isInitialized
+            || exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE
+            || exoPlayer.mediaItemCount != currentPlaylist.size
+        ) {
+            syncPlaylistQueue(targetIndex, targetPositionMs, shouldPlay)
+            return
+        }
+        // Current order of track ids in the ExoPlayer timeline.
+        val working = (0 until exoPlayer.mediaItemCount).mapNotNull { i ->
+            (exoPlayer.getMediaItemAt(i).localConfiguration?.tag as? MusicItem)?.id
+        }.toMutableList()
+        if (working.size != currentPlaylist.size) {
+            syncPlaylistQueue(targetIndex, targetPositionMs, shouldPlay)
+            return
+        }
+        // Selection-sort the timeline into [currentPlaylist]'s order using moveMediaItem.
+        // The playing item is already at [targetIndex] (== desired[targetIndex]), so it is
+        // never moved; only the upcoming items shift, keeping playback seamless.
+        val desired = currentPlaylist.map { it.id }
+        for (dest in desired.indices) {
+            val at = working.indexOf(desired[dest])
+            if (at != dest && at in 0 until exoPlayer.mediaItemCount) {
+                exoPlayer.moveMediaItem(at, dest)
+                working.removeAt(at)
+                working.add(dest, desired[dest])
+            }
+        }
+        exoPlayer.playWhenReady = shouldPlay
+        if (shouldPlay) requestAudioFocus()
+        preloadAdjacentTracks(targetIndex)
     }
 
     fun toggleRepeat() {
@@ -491,7 +536,11 @@ class MusicPlaybackService : Service() {
             .setSilent(true)
             .setShowWhen(false)
             .setColor(android.graphics.Color.parseColor("#10B981"))
-            .setColorized(currentAlbumArt != null)
+            // Do NOT colorize: a colorized notification tints every action icon with the
+            // notification color, so active (green) and inactive icons become indistinguishable
+            // for same-shape controls (Shuffle, Repeat All). Keeping it uncolorized lets the
+            // action icons render with their own tints — green when active, white when not.
+            .setColorized(false)
             .setUsesChronometer(true)
             .setWhen(System.currentTimeMillis() - (try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition else 0L } catch (_: Exception) { 0L }))
 
@@ -876,8 +925,30 @@ class MusicPlaybackService : Service() {
             val isPlaying = exoPlayer.playWhenReady
             syncPlaylistQueue(currentIndex, currentPos, isPlaying)
         }
+        // Re-attach the video surface if we just switched into video mode and the UI
+        // already handed us a SurfaceView (the player keeps rendering to it).
+        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
+            && videoSurface != null && ::exoPlayer.isInitialized) {
+            exoPlayer.setVideoSurface(videoSurface)
+        }
         notifyPlaybackState()
         return true
+    }
+
+    fun setVideoSurface(surface: android.view.Surface?) {
+        videoSurface = surface
+        if (::exoPlayer.isInitialized) {
+            if (surface != null && mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO) {
+                exoPlayer.setVideoSurface(surface)
+            } else {
+                exoPlayer.clearVideoSurface()
+            }
+        }
+    }
+
+    fun clearVideoSurface() {
+        videoSurface = null
+        if (::exoPlayer.isInitialized) exoPlayer.clearVideoSurface()
     }
 
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
@@ -994,8 +1065,12 @@ class MusicPlaybackService : Service() {
         if (targetIndex !in currentPlaylist.indices) return
 
         val mediaItems = currentPlaylist.map { createMediaItem(it) }
+        val alreadyPrepared = exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE
         exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
-        exoPlayer.prepare()
+        // Only (re)prepare when the player isn't already prepared. Calling prepare() on an
+        // already-playing player tears down and rebuilds the renderer pipeline, which is what
+        // caused the ~1s pause/glitch when toggling shuffle.
+        if (!alreadyPrepared) exoPlayer.prepare()
         applyRepeatModeToPlayer()
         exoPlayer.playWhenReady = shouldPlay
         if (shouldPlay) {
@@ -1435,6 +1510,61 @@ class MusicPlaybackService : Service() {
         exoPlayer.addMediaItems(insertIndex, exoItems)
 
         notifyPlaybackState(refreshNotification = false)
+    }
+
+    /** Jump to an absolute position in the current playlist (used by the queue screen). */
+    fun jumpToIndex(absoluteIndex: Int) {
+        if (isDestroyed) return
+        skipToPlaylistIndex(absoluteIndex)
+    }
+
+    /** Remove a track from the queue by its absolute index (the currently playing item is protected). */
+    fun removeFromQueue(absoluteIndex: Int) {
+        if (isDestroyed) return
+        if (absoluteIndex <= currentIndex || absoluteIndex !in currentPlaylist.indices) return
+        val removed = currentPlaylist.getOrNull(absoluteIndex) ?: return
+        currentPlaylist = currentPlaylist - removed
+        originalPlaylist = originalPlaylist - removed
+        try { exoPlayer.removeMediaItem(absoluteIndex) } catch (_: Exception) { }
+        notifyPlaybackState(refreshNotification = true)
+    }
+
+    /** Move a track within the queue by absolute indices (the currently playing item is protected). */
+    fun moveQueueItem(fromAbsolute: Int, toAbsolute: Int) {
+        if (isDestroyed) return
+        val f = fromAbsolute.coerceIn(0, currentPlaylist.lastIndex)
+        val t = toAbsolute.coerceIn(0, currentPlaylist.lastIndex)
+        if (f == t || f == currentIndex || t == currentIndex) return
+        val moved = currentPlaylist[f]
+        currentPlaylist = currentPlaylist.toMutableList().apply {
+            add(t, removeAt(f))
+        }
+        originalPlaylist = currentPlaylist
+        try { exoPlayer.moveMediaItem(f, t) } catch (_: Exception) { }
+        notifyPlaybackState(refreshNotification = true)
+    }
+
+    /** Remove everything lined up after the currently playing track. */
+    fun clearUpcoming() {
+        if (isDestroyed) return
+        val keep = (currentIndex + 1).coerceAtLeast(0)
+        if (keep >= currentPlaylist.size) return
+        repeat(currentPlaylist.size - keep) {
+            try { exoPlayer.removeMediaItem(keep) } catch (_: Exception) { }
+        }
+        currentPlaylist = currentPlaylist.take(keep)
+        originalPlaylist = currentPlaylist
+        notifyPlaybackState(refreshNotification = true)
+    }
+
+    /** Replace the whole playlist order (current item + reordered upcoming) and keep playback seamless. */
+    fun setQueueOrder(newPlaylist: List<MusicItem>) {
+        if (isDestroyed || newPlaylist.isEmpty()) return
+        currentPlaylist = newPlaylist
+        originalPlaylist = newPlaylist
+        val isPlaying = try { exoPlayer.isPlaying } catch (_: Exception) { false }
+        val pos = try { exoPlayer.currentPosition } catch (_: Exception) { 0L }
+        syncPlaylistQueue(currentIndex.coerceIn(0, newPlaylist.lastIndex), pos, isPlaying)
     }
 
     companion object {

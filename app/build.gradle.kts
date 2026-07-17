@@ -15,8 +15,8 @@ android {
         applicationId = "com.israrxy.raazi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "4.8.1"
+        versionCode = 7
+        versionName = "5.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

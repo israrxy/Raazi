@@ -45,6 +45,9 @@ class RaaziApplication : Application() {
         }
         container = AppContainer(database, applicationContext)
 
+        bluetoothDeviceManager = com.israrxy.raazi.data.local.BluetoothDeviceManager(applicationContext)
+        bluetoothDeviceManager.start()
+
         MainScope().launch(Dispatchers.IO) {
             try {
                 YouTubeAccountSession.bootstrap(SettingsDataStore(applicationContext))
@@ -58,6 +61,9 @@ class RaaziApplication : Application() {
         lateinit var instance: RaaziApplication
             private set
     }
+
+    lateinit var bluetoothDeviceManager: com.israrxy.raazi.data.local.BluetoothDeviceManager
+        private set
 }
 
 // Simple manual DI container

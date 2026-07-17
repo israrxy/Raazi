@@ -3,6 +3,7 @@ package com.israrxy.raazi.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -61,17 +63,22 @@ import androidx.compose.animation.core.tween
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.israrxy.raazi.ui.components.shimmerEffect
 import com.israrxy.raazi.ui.components.SongListItem
+import com.israrxy.raazi.ui.components.QueueBottomSheet
+import com.israrxy.raazi.ui.components.PlayerOptionsSheet
+import com.israrxy.raazi.ui.components.SongCreditsBottomSheet
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.service.LyricsTranslator
 import android.net.Uri
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.model.savedCollectionId
 
 import androidx.compose.material.icons.filled.Download // Import
 import androidx.compose.material.icons.filled.PlaylistAdd // Import
 import androidx.compose.material.icons.filled.Person // Import
 import androidx.compose.ui.draw.blur // Import for blur effect
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -124,9 +131,12 @@ fun PlayerScreen(
     val lyricsSearchResults by viewModel.lyricsSearchResults.collectAsStateWithLifecycle()
     val isLyricsSearchLoading by viewModel.isLyricsSearchLoading.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val videoQuality by viewModel.videoQuality.collectAsStateWithLifecycle()
     var showLyricsBrowser by remember { mutableStateOf(false) }
     var showLyricsMenu by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
+    var showOptionsSheet by remember { mutableStateOf(false) }
+    var showCreditsSheet by remember { mutableStateOf(false) }
+    val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSleepTimer by remember { mutableStateOf(false) }
     val sleepTimerActive by com.israrxy.raazi.service.SleepTimer.getInstance().isActive.collectAsStateWithLifecycle()
 
@@ -331,23 +341,6 @@ fun PlayerScreen(
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Drag handle to collapse the player
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 4.dp)
-                            .clickable { onCollapse() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(40.dp)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.35f))
-                        )
-                    }
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -370,75 +363,79 @@ fun PlayerScreen(
                         modifier = Modifier.size(28.dp)
                     )
                 }
-                
-                Text(
-                    text = "NOW PLAYING",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = Color.White.copy(alpha = 0.5f)
+
+                // AUDIO / VIDEO — animated pill toggle
+                val isVideoMode = playbackState.mediaMode == PlaybackMediaMode.VIDEO
+                val pillOffset by animateDpAsState(
+                    targetValue = if (isVideoMode) 50.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 250),
+                    label = "pill_offset"
                 )
-                
-                // Menu Button
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Options",
-                            tint = if (sleepTimerActive) Emerald500 else Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                Box(
+                    modifier = Modifier
+                        .height(36.dp)
+                        .width(100.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color.White.copy(alpha = 0.12f))
+                ) {
+                    // Sliding background
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(50.dp)
+                            .offset(x = pillOffset)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Add to Playlist", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                showMenu = false
-                                showPlaylistDialog = true
-                            },
-                            leadingIcon = { Icon(Icons.Default.PlaylistAdd, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Download", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                showMenu = false
-                                currentTrack?.let { viewModel.downloadTrack(it) }
-                            },
-                            leadingIcon = { Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Sleep Timer", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                showMenu = false
-                                showSleepTimer = true
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Bedtime,
-                                    null,
-                                    tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Share", color = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                showMenu = false
-                                currentTrack?.let {
-                                    com.israrxy.raazi.utils.ShareUtils.shareTrack(context, it)
-                                }
-                            },
-                            leadingIcon = { Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { if (isVideoMode) viewModel.togglePlaybackMode() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Headphones,
+                                contentDescription = "Audio",
+                                tint = if (isVideoMode) Color.White.copy(alpha = 0.7f) else Color.Black,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { if (!isVideoMode) viewModel.togglePlaybackMode() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Videocam,
+                                contentDescription = "Video",
+                                tint = if (isVideoMode) Color.Black else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
+                }
+
+                // Menu Button -> opens the YouTube Music style action sheet
+                IconButton(onClick = { showOptionsSheet = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = if (sleepTimerActive) Emerald500 else Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
             
@@ -478,7 +475,31 @@ fun PlayerScreen(
                      },
                      label = "AlbumArtTransition"
                  ) { track ->
-                     if (!playbackState.isLoading && track != null) {
+                     if (playbackState.mediaMode == PlaybackMediaMode.VIDEO && track != null && !playbackState.isLoading) {
+                        // Real video playback (YT Music style): render the ExoPlayer output
+                        // onto a SurfaceView, replacing the album art.
+                        AndroidView(
+                            factory = { ctx ->
+                                android.view.SurfaceView(ctx).apply {
+                                    holder.addCallback(object : android.view.SurfaceHolder.Callback {
+                                        override fun surfaceCreated(h: android.view.SurfaceHolder) {
+                                            viewModel.setVideoSurface(h.surface)
+                                        }
+                                        override fun surfaceChanged(h: android.view.SurfaceHolder, f: Int, w: Int, ht: Int) {}
+                                        override fun surfaceDestroyed(h: android.view.SurfaceHolder) {
+                                            viewModel.clearVideoSurface()
+                                        }
+                                    })
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                                .shadow(24.dp, RoundedCornerShape(24.dp))
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color.Black)
+                        )
+                     } else if (!playbackState.isLoading && track != null) {
                         AsyncImage(
                             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
                             contentDescription = "Album Art",
@@ -502,9 +523,9 @@ fun PlayerScreen(
                     }
                  }
             }
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             // SONG INFO
             Column(modifier = Modifier.fillMaxWidth()) {
                 AnimatedContent(
@@ -1566,9 +1587,9 @@ fun PlayerScreen(
                                                         .transform(text, selectedLyricsVariant)
                                                         .ifBlank { " " },
                                                     style = if (isCurrent) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
-                                                    color = animatedColor.copy(alpha = animatedAlpha),
+                                                    color = if (isCurrent) MaterialTheme.colorScheme.primary else animatedColor.copy(alpha = animatedAlpha),
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .graphicsLayer(
@@ -2010,54 +2031,64 @@ fun PlayerScreen(
         }
 
         // UP NEXT / MUSIC MIX SHEET
+        // QUEUE SHEET (YouTube Music style: smart filters + drag reorder + Save)
         if (showPlayNextSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showPlayNextSheet = false },
                 containerColor = MaterialTheme.colorScheme.surface,
                 dragHandle = { BottomSheetDefaults.DragHandle() }
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp)
-                ) {
-                    Text(
-                        text = "Up Next",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-                    )
-                    if (playNextItems.isEmpty()) {
-                        Text(
-                            text = "Nothing lined up yet.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxHeight(0.7f),
-                            contentPadding = PaddingValues(vertical = 4.dp)
-                        ) {
-                            itemsIndexed(playNextItems) { index, item ->
-                                SongListItem(
-                                    song = item,
-                                    onClick = {
-                                        viewModel.playPlaylist(playNextItems, index)
-                                        showPlayNextSheet = false
-                                    },
-                                    showAddToPlaylist = false,
-                                    showGoToArtist = false,
-                                    showDownload = false,
-                                    showAddToQueue = false,
-                                    showMoreOptions = false,
-                                    showLike = false,
-                                    showRingtone = false
-                                )
-                            }
+                QueueBottomSheet(
+                    viewModel = viewModel,
+                    onDismiss = { showPlayNextSheet = false }
+                )
+            }
+        }
+
+        // THREE-DOT ACTION SHEET
+        if (showOptionsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showOptionsSheet = false },
+                sheetState = optionsSheetState,
+                containerColor = MaterialTheme.colorScheme.surface,
+                dragHandle = { BottomSheetDefaults.DragHandle() }
+            ) {
+                PlayerOptionsSheet(
+                    track = currentTrack,
+                    viewModel = viewModel,
+                    onDismiss = { showOptionsSheet = false },
+                    onSaveToPlaylist = {
+                        playlistTargetTrack = currentTrack
+                        showPlaylistDialog = true
+                        showOptionsSheet = false
+                    },
+                    onViewCredits = {
+                        showOptionsSheet = false
+                        currentTrack?.let { track ->
+                            viewModel.fetchSongCredits(track)
                         }
-                    }
-                }
+                        showCreditsSheet = true
+                    },
+                    onSetRingtone = {
+                        currentTrack?.let { track -> viewModel.downloadForRingtone(track) }
+                    },
+                    currentVideoQuality = videoQuality,
+                    onSelectVideoQuality = { viewModel.setPlaybackVideoQuality(it) }
+                )
+            }
+        }
+
+        // SONG CREDITS SHEET
+        if (showCreditsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showCreditsSheet = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+                dragHandle = { BottomSheetDefaults.DragHandle() }
+            ) {
+                SongCreditsBottomSheet(
+                    viewModel = viewModel,
+                    onDismiss = { showCreditsSheet = false }
+                )
             }
         }
         }

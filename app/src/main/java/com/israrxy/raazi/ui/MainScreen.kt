@@ -139,10 +139,11 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
 
+    val onRingtoneScreen = currentDestination?.route == "ringtone_trimmer"
     val showBottomBar = currentDestination.isTopLevelDestination() &&
-        sheetState.currentValue != SheetValue.Expanded
+        sheetState.currentValue != SheetValue.Expanded && !onRingtoneScreen
     val showMiniPlayer = currentTrack != null &&
-        sheetState.currentValue != SheetValue.Expanded
+        sheetState.currentValue != SheetValue.Expanded && !onRingtoneScreen
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val collapsedMiniPlayerBottomPadding =
         if (showBottomBar) {
@@ -219,6 +220,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             navController.navigate("ringtone_trimmer") {
                 launchSingleTop = true
             }
+            // Collapse the player sheet so the ringtone screen is fully visible
+            scope.launch { sheetState.partialExpand() }
         } else if (isIdle && currentRoute == "ringtone_trimmer") {
             navController.popBackStack()
         }

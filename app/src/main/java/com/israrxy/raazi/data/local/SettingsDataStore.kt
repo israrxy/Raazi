@@ -61,6 +61,8 @@ class SettingsDataStore(private val context: Context) {
         val LASTFM_SCROBBLE_ENABLED_KEY = booleanPreferencesKey("lastfm_scrobble_enabled")
         val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
         val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
+        val VIDEO_QUALITY_KEY = stringPreferencesKey("video_quality") // PlaybackVideoQuality wireName
+        val DEVICE_EQ_PROFILES_KEY = stringPreferencesKey("device_eq_profiles") // JSON: deviceAddress -> presetName
     }
 
     // Pure Black (AMOLED) theme
@@ -493,6 +495,31 @@ class SettingsDataStore(private val context: Context) {
     suspend fun clearAll() {
         context.dataStore.edit { prefs ->
             prefs.clear()
+        }
+    }
+
+    // Video playback quality (PlaybackVideoQuality wireName)
+    val videoQuality: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[VIDEO_QUALITY_KEY] ?: "AUTO"
+    }
+
+    suspend fun setVideoQuality(wireName: String) {
+        context.dataStore.edit { prefs -> prefs[VIDEO_QUALITY_KEY] = wireName }
+    }
+
+    // Per-device equalizer profiles (deviceAddress -> presetName)
+    suspend fun getDeviceEqProfile(deviceAddress: String): String? {
+        val raw = context.dataStore.data.first()[DEVICE_EQ_PROFILES_KEY] ?: return null
+        return runCatching { Json.decodeFromString<Map<String, String>>(raw) }.getOrNull()?.get(deviceAddress)
+    }
+
+    suspend fun setDeviceEqProfile(deviceAddress: String, presetName: String) {
+        context.dataStore.edit { prefs ->
+            val current = runCatching {
+                prefs[DEVICE_EQ_PROFILES_KEY]?.let { Json.decodeFromString<Map<String, String>>(it) } ?: emptyMap()
+            }.getOrDefault(emptyMap())
+            val updated = current.toMutableMap().apply { this[deviceAddress] = presetName }
+            prefs[DEVICE_EQ_PROFILES_KEY] = Json.encodeToString(updated)
         }
     }
 }

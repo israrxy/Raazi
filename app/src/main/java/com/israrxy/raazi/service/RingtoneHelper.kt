@@ -72,7 +72,17 @@ class RingtoneHelper(private val context: Context) {
         val audioUrl = if (track.audioUrl.isNotEmpty() && !track.audioUrl.contains("youtube.com") && !track.audioUrl.contains("googlevideo.com")) {
             track.audioUrl
         } else {
-            extractor.getAudioStreamUrl(track.videoUrl)
+            try {
+                com.israrxy.raazi.player.StreamResolver.resolveStreamUrl(
+                    videoIdInput = track.videoUrl,
+                    title = track.title,
+                    artist = track.artist,
+                    mode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
+                ).url
+            } catch (e: Exception) {
+                Log.w("RingtoneHelper", "StreamResolver failed for ringtone, falling back to extractor", e)
+                extractor.getAudioStreamUrl(track.videoUrl)
+            }
         }
         if (audioUrl.isEmpty()) {
             throw Exception("Could not resolve audio stream")
