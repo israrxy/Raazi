@@ -23,7 +23,8 @@ data class MusicItem(
     val isPlaylist: Boolean = false,
     val artistId: String? = null,
     val contentType: MusicContentType = MusicContentType.SONG,
-    val setVideoId: String? = null
+    val setVideoId: String? = null,
+    val isrc: String? = null
 )
 
 data class Playlist(

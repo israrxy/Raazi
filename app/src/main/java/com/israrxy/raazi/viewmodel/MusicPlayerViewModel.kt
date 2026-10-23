@@ -140,6 +140,23 @@ class MusicPlayerViewModel(
     private var playbackService: MusicPlaybackService? = null
     private var isServiceBound = false
 
+    // Pending playback requests for when service is not yet bound
+    private sealed class PendingPlayback {
+        data class Single(val item: MusicItem) : PendingPlayback()
+        data class Playlist(val items: List<MusicItem>, val startIndex: Int) : PendingPlayback()
+    }
+    private val pendingPlaybackQueue = java.util.concurrent.ConcurrentLinkedQueue<PendingPlayback>()
+
+    private fun processPendingPlayback() {
+        while (true) {
+            when (val pending = pendingPlaybackQueue.poll()) {
+                is PendingPlayback.Single -> playMusic(pending.item)
+                is PendingPlayback.Playlist -> playPlaylist(pending.items, pending.startIndex)
+                null -> return
+            }
+        }
+    }
+
     private val _searchResults = MutableStateFlow<SearchResult?>(null)
     val searchResults: StateFlow<SearchResult?> = _searchResults.asStateFlow()
 
@@ -478,6 +495,9 @@ class MusicPlayerViewModel(
                         musicService.addVisualizerListener(vizListener)
                     }
                 }
+
+                // Process any pending playback requests
+                processPendingPlayback()
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error in onServiceConnected", e)
             }
@@ -1541,9 +1561,13 @@ class MusicPlayerViewModel(
     }
 
     fun playFromSearch(index: Int) {
+        // Playing from search starts a fresh single-track session: the search
+        // result list must NOT become the queue, otherwise the "Up next" sheet
+        // shows every other search hit. Explicitly queued items come from
+        // "Play next" instead.
         val items = _searchResults.value?.items ?: return
-        if (items.isNotEmpty()) {
-            playPlaylist(items, index)
+        if (index in items.indices) {
+            playMusic(items[index])
         }
     }
     
@@ -2349,6 +2373,52 @@ class MusicPlayerViewModel(
         return playbackService?.setPlaybackVideoQuality(quality) ?: false
     }
 
+    fun toggleAudioSource() {
+        val current = com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled
+        val next = when (current) {
+            null -> false  // settings-based -> force YouTube
+            false -> true  // YouTube -> force FLAC
+            true -> null   // FLAC -> settings-based
+        }
+        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = next
+        _audioSourceLabel.value = when (next) {
+            null -> "Auto"
+            false -> "YouTube"
+            true -> "Hi-Res FLAC"
+        }
+        // Clear cache for current track and re-play with new source
+        val track = playbackService?.getCurrentTrack()
+        if (track != null) {
+            com.israrxy.raazi.player.StreamResolver.clearCacheForVideoId(track.videoUrl)
+            playbackService?.playMusic(track)
+        }
+    }
+
+    fun setAudioSource(mode: String) {
+        val next: Boolean? = when (mode) {
+            "Auto" -> null
+            "YouTube" -> false
+            "Hi-Res" -> true
+            else -> null
+        }
+        val current = com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled
+        if (current == next) return
+        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = next
+        _audioSourceLabel.value = when (next) {
+            null -> "Auto"
+            false -> "YouTube"
+            true -> "Hi-Res FLAC"
+        }
+        val track = playbackService?.getCurrentTrack()
+        if (track != null) {
+            com.israrxy.raazi.player.StreamResolver.clearCacheForVideoId(track.videoUrl)
+            playbackService?.playMusic(track)
+        }
+    }
+
+    private val _audioSourceLabel = MutableStateFlow("Auto")
+    val audioSourceLabel: StateFlow<String> = _audioSourceLabel.asStateFlow()
+
     fun setVideoSurface(surface: android.view.Surface?) {
         playbackService?.setVideoSurface(surface)
     }
@@ -2410,6 +2480,13 @@ class MusicPlayerViewModel(
     }
 
     fun setAsRingtone(filePath: String, startMs: Long, endMs: Long) {
+        // WRITE_SETTINGS is a special app-op, not a runtime permission. Without it
+        // writing to MediaStore throws SecurityException, which previously surfaced
+        // as an opaque "Failed to set ringtone" with no way to grant it.
+        if (!android.provider.Settings.System.canWrite(app)) {
+            _ringtoneState.value = RingtoneState.NeedsPermission
+            return
+        }
         _ringtoneState.value = RingtoneState.Trimming
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -2631,6 +2708,40 @@ class MusicPlayerViewModel(
         }
     }
 
+    fun getShareLink(): String? {
+        val track = playbackState.value.currentTrack ?: return null
+        return "https://raazi.app/play?id=${track.id}"
+    }
+
+    fun handleDeepLink(uri: android.net.Uri) {
+        val videoId = uri.getQueryParameter("id") ?: return
+        viewModelScope.launch {
+            try {
+                val songs = com.zionhuang.innertube.YouTube.queue(
+                    videoIds = listOf(videoId)
+                ).getOrNull()
+                val item = songs?.firstOrNull()
+                if (item != null) {
+                    val musicItem = MusicItem(
+                        id = item.id,
+                        title = item.title,
+                        artist = item.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
+                        duration = (item.duration?.toLong() ?: 0) * 1000L,
+                        thumbnailUrl = item.thumbnail ?: "",
+                        audioUrl = "",
+                        videoUrl = item.id,
+                        isLive = false,
+                        contentType = MusicContentType.SONG,
+                        setVideoId = item.setVideoId
+                    )
+                    playMusic(musicItem)
+                }
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error handling deep link: $videoId", e)
+            }
+        }
+    }
+
     companion object {
         fun provideFactory(application: Application): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
@@ -2646,3 +2757,5 @@ class MusicPlayerViewModel(
         }
     }
 }
+
+

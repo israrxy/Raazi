@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FormatEntity::class,
         HomeInteractionEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -88,6 +88,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE search_history ADD COLUMN thumbnailUrl TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE search_history ADD COLUMN resultTitle TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE search_history ADD COLUMN resultArtist TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE format ADD COLUMN isrc TEXT DEFAULT NULL")
             }
         }
     }

@@ -5,6 +5,9 @@ import androidx.biometric.BiometricManager
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -47,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.israrxy.raazi.BuildConfig
 import com.israrxy.raazi.data.account.YouTubeAccountSession
+
+import coil.compose.AsyncImage
+import com.israrxy.raazi.ui.components.DevInfo
+import com.israrxy.raazi.ui.components.openLink
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.ui.theme.ErrorRed
@@ -185,8 +193,13 @@ fun SettingsScreen(
 
             SettingsToggle(
                 title = "Use Account For Browse",
-                subtitle = "Use account-backed responses while browsing YouTube Music",
-                checked = useLoginForBrowse,
+                subtitle = if (isYouTubeLoggedIn) {
+                    "Use account-backed responses while browsing YouTube Music"
+                } else {
+                    "Sign in to a YouTube account to enable this"
+                },
+                checked = useLoginForBrowse && isYouTubeLoggedIn,
+                enabled = isYouTubeLoggedIn,
                 onCheckedChange = { enabled ->
                     viewModel.setUseLoginForBrowse(enabled)
                 }
@@ -613,6 +626,70 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // Developer credit — bottom of settings
+        val settingsCtx = LocalContext.current
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    RoundedCornerShape(20.dp)
+                )
+                .padding(vertical = 20.dp, horizontal = 16.dp)
+        ) {
+            AsyncImage(
+                model = DevInfo.PFP_URL,
+                contentDescription = "Developer profile picture",
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(MaterialTheme.colorScheme.surfaceDim, CircleShape)
+            )
+            Text(
+                text = DevInfo.NAME,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+            Text(
+                text = "aka @${DevInfo.HANDLE}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(top = 6.dp)
+            ) {
+                Text(
+                    text = "Instagram",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { openLink(settingsCtx, DevInfo.INSTAGRAM_URL) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+                Text(
+                    text = "GitHub",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { openLink(settingsCtx, DevInfo.GITHUB_URL) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+                Text(
+                    text = "Website",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable { openLink(settingsCtx, DevInfo.WEBSITE_URL) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text(
             text = "Raazi v${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.labelSmall,
@@ -928,11 +1005,13 @@ private fun SettingsToggle(
     title: String,
     subtitle: String? = null,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.4f)
             .padding(vertical = 12.dp, horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -959,6 +1038,7 @@ private fun SettingsToggle(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = MaterialTheme.colorScheme.primary,

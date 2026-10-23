@@ -57,6 +57,9 @@ object YouTubeAccountSession {
 
     suspend fun clear(settingsDataStore: SettingsDataStore) {
         settingsDataStore.clearYouTubeAccount()
+        // Without an account there is nothing to browse with, so force the flag off
+        settingsDataStore.setUseLoginForBrowse(false)
+        YouTube.useLoginForBrowse = false
         YouTube.cookie = null
         YouTube.dataSyncId = null
         YouTube.visitorData = null

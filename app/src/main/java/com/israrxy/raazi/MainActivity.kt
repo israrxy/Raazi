@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.LockScreen
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -141,6 +142,15 @@ class MainActivity : FragmentActivity() {
 
                         var showSplash by remember { mutableStateOf(true) }
 
+                        // Handle deep link intent
+                        LaunchedEffect(Unit) {
+                            val uri = intent?.data
+                            if (uri != null) {
+                                viewModel.handleDeepLink(uri)
+                                intent = null
+                            }
+                        }
+
                         if (showSplash || onboardingCompleted == null) {
                             com.israrxy.raazi.ui.SplashScreen {
                                 showSplash = false
@@ -153,6 +163,25 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             } else {
+                                // Daily "Follow me" prompt: once per calendar day
+                                // on first open. Also catches the first open right
+                                // after onboarding completes, since the date key
+                                // starts out empty.
+                                var showFollowPrompt by remember { mutableStateOf(false) }
+                                LaunchedEffect(Unit) {
+                                    val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+                                        .format(java.util.Date())
+                                    val last = settingsDataStore.lastFollowPromptDate.first()
+                                    if (last != today) {
+                                        showFollowPrompt = true
+                                        settingsDataStore.setLastFollowPromptDate(today)
+                                    }
+                                }
+                                if (showFollowPrompt) {
+                                    com.israrxy.raazi.ui.components.FollowPromptDialog(
+                                        onDismiss = { showFollowPrompt = false }
+                                    )
+                                }
                                 MainScreen(viewModel = viewModel)
                             }
                         }

@@ -182,34 +182,12 @@ fun MiniPlayer(
 
                     if (!compactLayout && miniPlayerUiState.canSkipNext) {
                         IconButton(
-                            onClick = { viewModel.addToQueue(track) },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QueueMusic,
-                                contentDescription = "Add to queue",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        IconButton(
                             onClick = { viewModel.next() },
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
                                 contentDescription = "Next",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else if (!compactLayout) {
-                        IconButton(
-                            onClick = { viewModel.addToQueue(track) },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QueueMusic,
-                                contentDescription = "Add to queue",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

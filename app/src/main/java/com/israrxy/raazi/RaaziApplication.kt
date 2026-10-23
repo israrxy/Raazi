@@ -10,6 +10,7 @@ import com.israrxy.raazi.data.repository.MusicRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.first
 
 class RaaziApplication : Application() {
     lateinit var database: AppDatabase
@@ -29,7 +30,8 @@ class RaaziApplication : Application() {
                 AppDatabase.MIGRATION_11_12,
                 AppDatabase.MIGRATION_12_13,
                 AppDatabase.MIGRATION_13_14,
-                AppDatabase.MIGRATION_14_15
+                AppDatabase.MIGRATION_14_15,
+                AppDatabase.MIGRATION_15_16
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -53,6 +55,15 @@ class RaaziApplication : Application() {
                 YouTubeAccountSession.bootstrap(SettingsDataStore(applicationContext))
             } catch (e: Exception) {
                 android.util.Log.e("RaaziApp", "YouTube account bootstrap failed", e)
+            }
+            try {
+                val settings = SettingsDataStore(applicationContext)
+                val hifiUrl = settings.hifiApiUrl.first()
+                if (!hifiUrl.isNullOrBlank()) {
+                    com.israrxy.raazi.player.flac.HifiApiClient.customInstanceUrl = hifiUrl
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RaaziApp", "HifiApi bootstrap failed", e)
             }
         }
     }

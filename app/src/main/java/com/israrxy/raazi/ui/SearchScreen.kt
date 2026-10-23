@@ -145,6 +145,8 @@ fun SearchScreen(
         }
     }
     
+    val audioSourceLabel by playerViewModel.audioSourceLabel.collectAsStateWithLifecycle()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -247,7 +249,9 @@ fun SearchScreen(
                     keyboardController?.hide()
                     focusManager.clearFocus()
                 }
-            }
+            },
+            audioSourceLabel = audioSourceLabel,
+            onSelectAudioSource = { playerViewModel.setAudioSource(it) }
         )
         // Content: Results OR Suggestions
         Box(modifier = Modifier.weight(1f)) {
@@ -627,7 +631,9 @@ private fun SearchHeader(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
-    onSearch: () -> Unit
+    onSearch: () -> Unit,
+    audioSourceLabel: String = "Auto",
+    onSelectAudioSource: (String) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -680,6 +686,35 @@ private fun SearchHeader(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() })
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Auto", "YouTube", "Hi-Res").forEach { label ->
+                val isSelected = when (label) {
+                    "Auto" -> audioSourceLabel == "Auto"
+                    "YouTube" -> audioSourceLabel == "YouTube"
+                    "Hi-Res" -> audioSourceLabel == "Hi-Res FLAC"
+                    else -> false
+                }
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onSelectAudioSource(label) },
+                    label = {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            }
+        }
     }
 }
 

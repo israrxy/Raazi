@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,10 +17,35 @@ android {
         applicationId = "com.israrxy.raazi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "5.2.0"
+        versionCode = 8
+        versionName = "6.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Release signing order: environment (set by the GitHub Actions workflow)
+    // wins, then keystore.properties at the repo root for local builds. Without
+    // either, storeFile stays unset and the release build falls back to the
+    // debug key below. Never commit keystore.properties (gitignored).
+    val keystoreProps = Properties().apply {
+        val propsFile = rootProject.file("keystore.properties")
+        if (propsFile.exists()) propsFile.inputStream().use { load(it) }
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("SIGNING_STORE_PATH")
+                ?: keystoreProps.getProperty("storeFile")
+            if (!storePath.isNullOrBlank()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                    ?: keystoreProps.getProperty("storePassword")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                    ?: keystoreProps.getProperty("keyAlias")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                    ?: keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -28,6 +55,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
@@ -62,7 +94,7 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     
     // NewPipe Extractor - Real YouTube Music extraction
-    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.2")
+    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.5")
     
     // JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
@@ -72,6 +104,7 @@ dependencies {
     
     // Media playback
     implementation("androidx.media3:media3-exoplayer:1.6.0")
+    implementation("androidx.media3:media3-exoplayer-dash:1.6.0")
     implementation("androidx.media3:media3-ui:1.6.0")
     implementation("androidx.media3:media3-session:1.6.0")
     implementation("androidx.media3:media3-datasource-okhttp:1.6.0")

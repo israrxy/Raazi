@@ -46,6 +46,7 @@ fun ArtistScreen(
     val context = LocalContext.current
     var songs by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var artistThumbnail by remember { mutableStateOf("") }
     // Add To Playlist Dialog State
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
     val savedCollectionIds by viewModel.savedCollectionIds.collectAsStateWithLifecycle()
@@ -53,6 +54,12 @@ fun ArtistScreen(
     LaunchedEffect(artistId) {
         scope.launch {
             try {
+                // Fetch artist page for thumbnail
+                try {
+                    val artistPage = com.zionhuang.innertube.YouTube.artist(artistId).getOrNull()
+                    artistThumbnail = artistPage?.artist?.thumbnail.orEmpty()
+                } catch (_: Exception) {}
+
                 // Search for artist's songs
                 val query = artistName ?: artistId
                 val result = com.zionhuang.innertube.YouTube.search(
@@ -154,7 +161,7 @@ fun ArtistScreen(
                     // For now, using a placeholder or a default image.
                     // If artistDetails is meant to be fetched, it needs to be added to the ViewModel and observed.
                     AsyncImage(
-                        model = ThumbnailUtils.getHighQualityThumbnail(""), // Placeholder for artist thumbnail
+                        model = if (artistThumbnail.isNotEmpty()) ThumbnailUtils.getHighQualityThumbnail(artistThumbnail) else "",
                         contentDescription = "Artist",
                         modifier = Modifier
                             .size(200.dp)

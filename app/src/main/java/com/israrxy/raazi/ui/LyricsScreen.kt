@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -440,7 +441,9 @@ private fun SyncedLyricsList(
 ) {
     val lines = remember(syncedLyrics) {
         syncedLyrics.lines().mapNotNull { line ->
-            val match = Regex("\\[(\\d+):(\\d+\\.\\d+)\\](.*)").find(line)
+            // Timestamps come in both [mm:ss] and [mm:ss.xx] forms; accepting a
+            // plain [mm:ss] matters — LRC files commonly omit the fraction.
+            val match = Regex("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\](.*)").find(line)
             if (match != null) {
                 val min = match.groupValues[1].toLong()
                 val sec = match.groupValues[2].toDouble()
@@ -468,10 +471,20 @@ private fun SyncedLyricsList(
 
         LaunchedEffect(activeIndex) {
             if (lines.isNotEmpty()) {
-                listState.animateScrollToItem(
-                    index = activeIndex.coerceIn(0, lines.lastIndex),
-                    scrollOffset = 0
-                )
+                val idx = activeIndex.coerceIn(0, lines.lastIndex)
+                listState.animateScrollToItem(index = idx, scrollOffset = 0)
+                // scrollToItem anchors the line to the viewport top, where it sits
+                // under the top bar. Re-measure and scroll it to the vertical
+                // center instead.
+                val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
+                    ?: return@LaunchedEffect
+                val viewport = listState.layoutInfo.viewportEndOffset -
+                    listState.layoutInfo.viewportStartOffset
+                val desired = (viewport / 2f) - (info.size / 2f)
+                val delta = info.offset - desired
+                if (abs(delta) > 8f) {
+                    listState.animateScrollBy(delta)
+                }
             }
         }
 

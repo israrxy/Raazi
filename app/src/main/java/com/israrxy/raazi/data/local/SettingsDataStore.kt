@@ -63,6 +63,10 @@ class SettingsDataStore(private val context: Context) {
         val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
         val VIDEO_QUALITY_KEY = stringPreferencesKey("video_quality") // PlaybackVideoQuality wireName
         val DEVICE_EQ_PROFILES_KEY = stringPreferencesKey("device_eq_profiles") // JSON: deviceAddress -> presetName
+        // FLAC Hi-Res settings
+        val FLAC_ENABLED_KEY = booleanPreferencesKey("flac_enabled")
+        val HIFI_API_URL_KEY = stringPreferencesKey("hifi_api_url")
+        val FLAC_QUALITY_KEY = stringPreferencesKey("flac_quality")
     }
 
     // Pure Black (AMOLED) theme
@@ -150,6 +154,20 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[IS_ONBOARDING_COMPLETED_KEY] = completed
+        }
+    }
+
+    // "Follow me" prompt — shown on first open of each day, which also naturally
+    // covers the first open right after onboarding is completed.
+    val LAST_FOLLOW_PROMPT_KEY = stringPreferencesKey("last_follow_prompt_date")
+
+    val lastFollowPromptDate: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[LAST_FOLLOW_PROMPT_KEY]
+    }
+
+    suspend fun setLastFollowPromptDate(date: String) {
+        context.dataStore.edit { prefs ->
+            prefs[LAST_FOLLOW_PROMPT_KEY] = date
         }
     }
 
@@ -505,6 +523,31 @@ class SettingsDataStore(private val context: Context) {
 
     suspend fun setVideoQuality(wireName: String) {
         context.dataStore.edit { prefs -> prefs[VIDEO_QUALITY_KEY] = wireName }
+    }
+
+    // FLAC Hi-Res settings
+    val flacEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[FLAC_ENABLED_KEY] ?: false
+    }
+
+    suspend fun setFlacEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[FLAC_ENABLED_KEY] = enabled }
+    }
+
+    val hifiApiUrl: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[HIFI_API_URL_KEY] ?: ""
+    }
+
+    suspend fun setHifiApiUrl(url: String) {
+        context.dataStore.edit { prefs -> prefs[HIFI_API_URL_KEY] = url }
+    }
+
+    val flacQuality: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[FLAC_QUALITY_KEY] ?: "HI_RES_LOSSLESS"
+    }
+
+    suspend fun setFlacQuality(quality: String) {
+        context.dataStore.edit { prefs -> prefs[FLAC_QUALITY_KEY] = quality }
     }
 
     // Per-device equalizer profiles (deviceAddress -> presetName)

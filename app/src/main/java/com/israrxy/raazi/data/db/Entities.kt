@@ -98,6 +98,7 @@ data class FormatEntity(
     val sampleRate: Int? = null,         // in Hz
     val contentLength: Long = 0,         // file size in bytes
     val loudnessDb: Double? = null,
+    val isrc: String? = null,            // ISRC code for FLAC cross-reference
     val updatedAt: Long = System.currentTimeMillis()
 )
 

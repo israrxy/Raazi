@@ -4,6 +4,7 @@ import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.YouTubeClient
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import android.net.Uri
 import android.util.Log
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -11,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.israrxy.raazi.data.db.MusicDao
 import com.israrxy.raazi.data.db.FormatEntity
@@ -28,12 +30,16 @@ object StreamResolver {
     // Injected DAO for saving format info
     var musicDao: MusicDao? = null
 
+    // Session-level FLAC override: null = use settings, true = force FLAC, false = force YouTube
+    var sessionFlacEnabled: Boolean? = null
+
     data class StreamResult(
         val url: String,
         val userAgent: String,
         val quality: String? = null,
         val mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
-        val hasVideo: Boolean = false
+        val hasVideo: Boolean = false,
+        val isFlac: Boolean = false
     )
 
     private val _currentStreamQuality = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
@@ -64,10 +70,12 @@ object StreamResolver {
         artist: String? = null,
         mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
         preferredVideoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
-        preferAac: Boolean = false
+        preferAac: Boolean = false,
+        isrc: String? = null
     ): StreamResult {
+        _currentStreamQuality.value = null
         try {
-            return resolveStreamUrlInternal(videoIdInput, title, artist, mode, preferredVideoQuality, preferAac)
+            return resolveStreamUrlInternal(videoIdInput, title, artist, mode, preferredVideoQuality, preferAac, isrc)
         } catch (e: Exception) {
             Log.e(TAG, "CRITICAL: Stream resolution failed completely for: $videoIdInput", e)
             throw e
@@ -80,50 +88,43 @@ object StreamResolver {
         artist: String? = null,
         mode: PlaybackMediaMode = PlaybackMediaMode.AUDIO,
         preferredVideoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
-        preferAac: Boolean = false
+        preferAac: Boolean = false,
+        isrc: String? = null
     ): StreamResult {
         var videoId = videoIdInput
         Log.d(TAG, "Resolving stream for input: $videoId")
         
         // Robustly extract ID if input is a URL
-        if (videoId.contains("youtube.com") || videoId.contains("youtu.be")) {
-            if (videoId.contains("v=")) {
-                videoId = videoId.substringAfter("v=").substringBefore("&")
-            } else if (videoId.contains("youtu.be/")) {
-                videoId = videoId.substringAfter("youtu.be/").substringBefore("?")
-            } else if (videoId.contains("/shorts/")) {
-                videoId = videoId.substringAfter("/shorts/").substringBefore("?")
-            }
+        extractYouTubeVideoId(videoId)?.let { extractedId ->
+            videoId = extractedId
+        }
              
-            if (videoId.contains("youtube.com") || videoId.contains("youtu.be")) {
-                if (videoId.startsWith("http")) {
-                    Log.e(TAG, "Failed to extract ID from YouTube URL: $videoId")
+        if ((videoId.contains("youtube.com") || videoId.contains("youtu.be")) && videoId.startsWith("http")) {
+            Log.e(TAG, "Failed to extract ID from YouTube URL: $videoId")
                      
-                    if (!title.isNullOrEmpty()) {
-                        val fallbackId = runBlocking {
-                            withTimeoutOrNull(RESOLVE_TIMEOUT_MS) {
-                                try {
-                                    val extractor = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
-                                    val query = if (!artist.isNullOrEmpty()) "$title $artist" else title
-                                    val searchResult = extractor.searchMusic(query)
-                                    searchResult.items.firstOrNull()?.id
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Fallback search failed", e)
-                                    null
-                                }
-                            }
+            if (!title.isNullOrEmpty()) {
+                val fallbackId = runBlocking {
+                    withTimeoutOrNull(RESOLVE_TIMEOUT_MS) {
+                        try {
+                            val extractor = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+                            val query = if (!artist.isNullOrEmpty()) "$title $artist" else title
+                            val searchResult = extractor.searchMusic(query)
+                            searchResult.items.firstOrNull()?.id
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Fallback search failed", e)
+                            null
                         }
-                         
-                        if (!fallbackId.isNullOrEmpty()) {
-                            Log.i(TAG, "Fallback search successful! New ID: $fallbackId")
-                            videoId = fallbackId
-                        } else {
-                            throw IllegalArgumentException("Invalid YouTube URL and fallback failed: $videoIdInput")
-                        }
-                    } else {
-                        throw IllegalArgumentException("Invalid YouTube URL and no metadata for fallback: $videoIdInput")
                     }
                 }
+                         
+                if (!fallbackId.isNullOrEmpty()) {
+                    Log.i(TAG, "Fallback search successful! New ID: $fallbackId")
+                    videoId = fallbackId
+                } else {
+                    throw IllegalArgumentException("Invalid YouTube URL and fallback failed: $videoIdInput")
+                }
+            } else {
+                throw IllegalArgumentException("Invalid YouTube URL and no metadata for fallback: $videoIdInput")
             }
         }
 
@@ -144,6 +145,50 @@ object StreamResolver {
         getCachedStream(cacheKey)?.let { cached ->
             _currentStreamQuality.value = cached.quality
             return cached
+        }
+
+        // Attempt FLAC resolution if enabled and in AUDIO mode
+        if (mode == PlaybackMediaMode.AUDIO && title != null && artist != null) {
+            val flacPrefs = try {
+                kotlinx.coroutines.runBlocking {
+                    val settings = com.israrxy.raazi.data.local.SettingsDataStore(
+                        com.israrxy.raazi.RaaziApplication.instance
+                    )
+                    Pair(settings.flacEnabled.first(), settings.flacQuality.first())
+                }
+            } catch (e: Exception) { Pair(false, "HI_RES_LOSSLESS") }
+
+            val flacEnabled = sessionFlacEnabled ?: flacPrefs.first
+            val flacQuality = flacPrefs.second
+
+            if (flacEnabled) {
+                try {
+                    val flacResult = kotlinx.coroutines.runBlocking {
+                        com.israrxy.raazi.player.flac.FlacStreamResolver.resolveFlacStream(
+                            context = com.israrxy.raazi.RaaziApplication.instance,
+                            isrc = isrc,
+                            title = title,
+                            artist = artist,
+                            quality = flacQuality
+                        )
+                    }
+                    if (flacResult != null) {
+                        Log.i(TAG, "FLAC resolved successfully: ${flacResult.qualityLabel}")
+                        val quality = flacResult.qualityLabel
+                        _currentStreamQuality.value = quality
+                        return StreamResult(
+                            url = "file://${flacResult.localPath}",
+                            userAgent = "Raazi/FLAC",
+                            quality = quality,
+                            mode = mode,
+                            hasVideo = false,
+                            isFlac = true
+                        ).also { cacheResolvedStream(cacheKey, it) }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "FLAC resolution failed, falling back to YouTube: ${e.message}")
+                }
+            }
         }
 
         val resolved = when {
@@ -183,6 +228,27 @@ object StreamResolver {
         }
     }
 
+    private fun extractYouTubeVideoId(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) return trimmed
+        if (!trimmed.contains("youtube.com") && !trimmed.contains("youtu.be")) return null
+
+        return try {
+            val uri = Uri.parse(trimmed)
+            val host = uri.host.orEmpty().lowercase()
+            when {
+                host == "youtu.be" -> uri.pathSegments.firstOrNull()
+                uri.getQueryParameter("v")?.isNotBlank() == true -> uri.getQueryParameter("v")
+                uri.pathSegments.firstOrNull() in setOf("shorts", "embed", "live") -> uri.pathSegments.getOrNull(1)
+                uri.pathSegments.firstOrNull() == "watch" -> uri.getQueryParameter("v")
+                else -> null
+            }?.takeIf { it.matches(Regex("^[a-zA-Z0-9_-]{11}$")) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse YouTube URL: $input", e)
+            null
+        }
+    }
+
     private fun getCachedStream(cacheKey: String): StreamResult? {
         synchronized(cacheLock) {
             val cached = resolutionCache[cacheKey] ?: return null
@@ -204,6 +270,12 @@ object StreamResolver {
         }
     }
 
+    fun clearCacheForVideoId(videoId: String) {
+        synchronized(cacheLock) {
+            resolutionCache.keys.removeAll { it.contains(videoId) }
+        }
+    }
+
     private fun normalizeCacheKey(
         videoIdInput: String,
         mode: PlaybackMediaMode,
@@ -213,10 +285,7 @@ object StreamResolver {
         val trimmed = videoIdInput.trim()
         val normalized = when {
             trimmed.contains("soundcloud.com") || trimmed.contains("bandcamp.com") -> trimmed
-            trimmed.contains("v=") -> trimmed.substringAfter("v=").substringBefore("&")
-            trimmed.contains("youtu.be/") -> trimmed.substringAfter("youtu.be/").substringBefore("?")
-            trimmed.contains("/shorts/") -> trimmed.substringAfter("/shorts/").substringBefore("?")
-            else -> trimmed
+            else -> extractYouTubeVideoId(trimmed) ?: trimmed
         }
         val qualityKey = if (mode == PlaybackMediaMode.VIDEO) {
             preferredVideoQuality.wireName
@@ -307,11 +376,19 @@ object StreamResolver {
         preferredVideoQuality: PlaybackVideoQuality,
         preferAac: Boolean = false
     ): StreamResult {
+        // Order matters. Resolution returns on the FIRST client that succeeds.
+        // Put audio-only capable clients first: WEB_REMIX's audio URL 403s under
+        // ExoPlayer, so letting it win costs a playback failure on every track
+        // just to expose the Video toggle. WEB_REMIX still gets consulted for
+        // VIDEO mode, where it is the only client returning a muxed URL.
         val clients = listOf(
-            YouTubeClient.ANDROID_VR_NO_AUTH,
-            YouTubeClient.WEB_REMIX,
+            YouTubeClient.VISIONOS,
             YouTubeClient.IOS,
-            YouTubeClient.ANDROID
+            YouTubeClient.ANDROID,
+            YouTubeClient.ANDROID_VR_NO_AUTH,
+            YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+            YouTubeClient.TVHTML5,
+            YouTubeClient.WEB_REMIX
         )
 
         var lastError: Throwable? = null
@@ -355,21 +432,37 @@ object StreamResolver {
                         val response = playerResult.getOrThrow()
                         val streamingData = response.streamingData
                             ?: throw Exception("Missing streaming data for client $client")
-                        val muxedVideoFormats = streamingData.formats
-                            .orEmpty()
-                            .filter { format ->
-                                !format.isAudio &&
-                                    format.url != null &&
-                                    (format.audioChannels ?: 0) > 0
-                            }
+                        // Do NOT rely on Format.isAudio here: for some clients (observed WEB_REMIX)
+                            // every format reports isAudio=true, so 17 adaptive
+                            // renditions looked audio-only and the single progressive
+                            // one looked audio too. The MIME type is always
+                            // populated, so classify on that instead.
+                            val muxedVideoFormats = streamingData.formats
+                                .orEmpty()
+                                .filter { format ->
+                                    format.mimeType.startsWith("video/") &&
+                                        format.url != null
+                                }
+                        val adaptiveFormats = streamingData.adaptiveFormats
+                        val audioFormats = adaptiveFormats.filter { it.mimeType.startsWith("audio/") }
+
+                        // Video playback here only works via progressive (muxed)
+                        // formats, since the player is handed a single URL.
                         val hasVideo = muxedVideoFormats.isNotEmpty()
-                        
+
+                        Log.i(
+                            TAG,
+                            "CLIENT=$client progressive=${streamingData.formats?.size ?: 0} " +
+                                "progWithUrl=${streamingData.formats?.count { it.url != null } ?: 0} " +
+                                "muxedVideo=${muxedVideoFormats.size} " +
+                                "adaptive=${adaptiveFormats.size} " +
+                                "adaptiveAudio=${audioFormats.size} hasVideo=$hasVideo " +
+                                "progMime=${streamingData.formats?.joinToString { it.mimeType }}"
+                        )
+
                         if (response.playabilityStatus.status != "OK") {
                             Log.w(TAG, "Playability status not OK for $client: ${response.playabilityStatus.status}")
                         }
-
-                        val adaptiveFormats = streamingData.adaptiveFormats
-                        val audioFormats = adaptiveFormats.filter { it.isAudio }
                         val selectedFormat = when (mode) {
                             PlaybackMediaMode.AUDIO -> {
                                 audioFormats.maxByOrNull { format ->

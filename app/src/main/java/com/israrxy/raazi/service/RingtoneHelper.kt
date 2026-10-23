@@ -60,6 +60,25 @@ class RingtoneHelper(private val context: Context) {
     }
 
     /**
+     * Returns a local [File] when [url] points at on-device storage, otherwise null.
+     * Handles bare absolute paths as well as file:// URIs.
+     */
+    private fun resolveLocalSource(url: String): File? {
+        return try {
+            when {
+                url.startsWith("file://") -> {
+                    val path = Uri.parse(url).path ?: return null
+                    File(path)
+                }
+                url.startsWith("/") -> File(url)
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * Downloads audio to a temp file and returns its path and total duration in ms.
      * [onProgress] is called with a percentage (0-100) during download.
      */
@@ -92,8 +111,30 @@ class RingtoneHelper(private val context: Context) {
         val cacheDir = File(context.cacheDir, "ringtones")
         if (!cacheDir.exists()) cacheDir.mkdirs()
 
-        val tempFile = File(cacheDir, "${track.id}_raw.m4a")
-        
+        // track.id is not always a bare video id — for many sources it is the full
+        // watch URL, and its slashes would create nonexistent subdirectories.
+        val safeId = track.id.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64)
+        val tempFile = File(cacheDir, "${safeId}_raw.m4a")
+
+        // The resolved URL is not always remote. FLAC resolution and previously
+        // downloaded tracks hand back a local file:// path, and those can vanish
+        // if the cache was evicted. Copy those straight across instead of issuing
+        // an HTTP request, which fails with ENOENT.
+        val localSource = resolveLocalSource(audioUrl)
+        if (localSource != null) {
+            if (!localSource.exists()) {
+                throw Exception("Local audio file is missing: ${localSource.absolutePath}")
+            }
+            localSource.inputStream().use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output, DEFAULT_BUFFER_SIZE)
+                }
+            }
+            onProgress?.invoke(100)
+            val localDuration = if (track.duration > 0) track.duration else getAudioDurationMs(tempFile.absolutePath)
+            return@withContext Pair(tempFile.absolutePath, localDuration)
+        }
+
         var downloadUrl = audioUrl
         if ((downloadUrl.contains("youtube.com") || downloadUrl.contains("googlevideo.com")) && !downloadUrl.contains("&range=")) {
             try {

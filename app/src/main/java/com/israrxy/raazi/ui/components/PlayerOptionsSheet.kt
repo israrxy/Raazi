@@ -64,6 +64,7 @@ fun PlayerOptionsSheet(
     val isFavorite = favoriteTracks.any { it.id == track.id }
     val downloadState = allDownloads.find { it.trackId == track.id }
     val isDownloaded = downloadState?.status == DownloadEntity.STATUS_COMPLETED
+    val audioSourceLabel by viewModel.audioSourceLabel.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -151,6 +152,18 @@ fun PlayerOptionsSheet(
                 }
             }
         }
+
+        Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
+
+        // --- Audio source ---
+        SheetOption(
+            icon = Icons.Default.HighQuality,
+            title = "Audio source",
+            subtitle = "Current: $audioSourceLabel",
+            onClick = {
+                viewModel.toggleAudioSource()
+            }
+        )
 
         Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
 

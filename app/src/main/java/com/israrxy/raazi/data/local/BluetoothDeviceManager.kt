@@ -1,14 +1,18 @@
 package com.israrxy.raazi.data.local
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,8 +85,10 @@ class BluetoothDeviceManager(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             audioDeviceCallback?.let { audioManager.registerAudioDeviceCallback(it, null) }
         }
-        btAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.A2DP)
-        btAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.HEADSET)
+        if (hasBluetoothConnectPermission()) {
+            btAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.A2DP)
+            btAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.HEADSET)
+        }
         refresh()
     }
 
@@ -90,8 +96,10 @@ class BluetoothDeviceManager(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             audioDeviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
         }
-        a2dpProfile?.let { btAdapter?.closeProfileProxy(BluetoothProfile.A2DP, it) }
-        headsetProfile?.let { btAdapter?.closeProfileProxy(BluetoothProfile.HEADSET, it) }
+        if (hasBluetoothConnectPermission()) {
+            a2dpProfile?.let { btAdapter?.closeProfileProxy(BluetoothProfile.A2DP, it) }
+            headsetProfile?.let { btAdapter?.closeProfileProxy(BluetoothProfile.HEADSET, it) }
+        }
         a2dpProfile = null
         headsetProfile = null
     }
@@ -149,9 +157,23 @@ class BluetoothDeviceManager(private val context: Context) {
         }
     }
 
+    private fun hasBluetoothConnectPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun refreshFromBluetooth() {
-        val bonded = (a2dpProfile?.connectedDevices ?: emptyList()) +
-                (headsetProfile?.connectedDevices ?: emptyList())
+        if (!hasBluetoothConnectPermission()) return
+        val bonded = try {
+            (a2dpProfile?.connectedDevices ?: emptyList()) +
+                    (headsetProfile?.connectedDevices ?: emptyList())
+        } catch (e: SecurityException) {
+            Log.w("BluetoothDeviceManager", "BLUETOOTH_CONNECT not granted", e)
+            return
+        }
         val device = bonded.firstOrNull() ?: return
         if (_connectedDevice.value?.isBluetooth == true) return
         val name = device.name ?: "Bluetooth device"

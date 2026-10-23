@@ -769,27 +769,53 @@ class MusicPlaybackService : Service() {
     }
 
     private fun createMediaItem(musicItem: MusicItem): androidx.media3.common.MediaItem {
-        // Use local path if available (downloaded), otherwise use custom raazi URI or direct URL based on stream type
-        val sourceUri = if (musicItem.localPath != null && java.io.File(musicItem.localPath).exists()) {
-             android.net.Uri.fromFile(java.io.File(musicItem.localPath)).toString()
-        } else if (musicItem.videoUrl.contains("soundcloud.com") || musicItem.videoUrl.contains("bandcamp.com")) {
-             // For Soundcloud/Bandcamp, we still use raazi scheme to let resolver handle it, OR we could resolve directly here.
-             // Using resolver is safer as it handles extraction.
-             // Ensure we pass the full URL as the ID in the raazi scheme if needed, or just rely on the resolver's logic
-             "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}" 
-        } else if (musicItem.videoUrl.startsWith("http")) {
-              // Direct URL (already resolved or specific type), usually we just wrap it
-              // But for safety and consistency with our resolver architecture:
-              "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}"
-        } else {
-             "raazi://youtube/${java.net.URLEncoder.encode(musicItem.videoUrl, "UTF-8")}?title=${java.net.URLEncoder.encode(musicItem.title, "UTF-8")}&artist=${java.net.URLEncoder.encode(musicItem.artist, "UTF-8")}"
+        val source = musicItem.videoUrl.ifBlank { musicItem.id }
+        val sourceUri = when {
+            musicItem.localPath != null && java.io.File(musicItem.localPath).exists() -> {
+                android.net.Uri.fromFile(java.io.File(musicItem.localPath)).toString()
+            }
+            musicItem.audioUrl.isDirectPlayableAudioUrl() -> {
+                musicItem.audioUrl
+            }
+            else -> {
+                buildResolverUri(source, musicItem.title, musicItem.artist, musicItem.isrc)
+            }
         }
 
         return androidx.media3.common.MediaItem.Builder()
             .setUri(sourceUri)
-            .setMediaId(musicItem.videoUrl)
-            .setTag(musicItem) // Store the MusicItem in the tag for easy retrieval
+            .setMediaId(source)
+            .setTag(musicItem)
             .build()
+    }
+
+    private fun buildResolverUri(
+        source: String,
+        title: String,
+        artist: String,
+        isrc: String?
+    ): String {
+        return Uri.Builder()
+            .scheme("raazi")
+            .authority("youtube")
+            .appendPath(source)
+            .appendQueryParameter("title", title)
+            .appendQueryParameter("artist", artist)
+            .apply {
+                if (!isrc.isNullOrBlank()) {
+                    appendQueryParameter("isrc", isrc)
+                }
+            }
+            .build()
+            .toString()
+    }
+
+    private fun String.isDirectPlayableAudioUrl(): Boolean {
+        if (isBlank() || !startsWith("http", ignoreCase = true)) return false
+        val lower = lowercase()
+        return !lower.contains("youtube.com") &&
+            !lower.contains("youtu.be") &&
+            !lower.contains("googlevideo.com")
     }
 
     private fun playExoPlayerPlaylist(playlist: List<MusicItem>, startIndex: Int) {
@@ -1370,8 +1396,9 @@ class MusicPlaybackService : Service() {
             // IMPORTANT: Use full path, not lastPathSegment, to preserve SoundCloud URLs
             var videoId = dataSpec.key ?: if (isRaaziScheme) {
                 // Remove leading "/" from path to get the actual URL/ID
-                val encodedId = dataSpec.uri.path?.removePrefix("/") ?: dataSpec.uri.lastPathSegment
-                if (encodedId != null) java.net.URLDecoder.decode(encodedId, "UTF-8") else null
+                val encodedId = dataSpec.uri.encodedPath?.removePrefix("/")
+                    ?: dataSpec.uri.lastPathSegment
+                encodedId?.let { Uri.decode(it) }
             } else null
             
             android.util.Log.d(TAG, "Extracted videoId from dataSpec: $videoId")
@@ -1408,11 +1435,11 @@ class MusicPlaybackService : Service() {
 
             if (!videoId.isNullOrEmpty() && videoId != "watch" && (isRaaziScheme || isResolvableUrl)) {
                 try {
-                    // Extract metadata for fallback
                     val title = dataSpec.uri.getQueryParameter("title")
                     val artist = dataSpec.uri.getQueryParameter("artist")
+                    val isrc = dataSpec.uri.getQueryParameter("isrc")
                     
-                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist, mediaMode, videoQuality)
+                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist, mediaMode, videoQuality, isrc = isrc)
                     android.util.Log.d(TAG, "Resolved stream for $videoId: ${result.url}")
                     
                     serviceScope.launch {
@@ -1448,7 +1475,8 @@ class MusicPlaybackService : Service() {
                          try {
                             val title = dataSpec.uri.getQueryParameter("title")
                             val artist = dataSpec.uri.getQueryParameter("artist")
-                             val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality)
+                            val isrc = dataSpec.uri.getQueryParameter("isrc")
+                             val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality, isrc = isrc)
                              
                              serviceScope.launch {
                                  isVideoAvailable = result.hasVideo
