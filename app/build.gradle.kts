@@ -159,6 +159,13 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     
-    // OuterTune InnerTube Module
-    implementation(project(":innertube"))
+    // InnersTube (YouTube Music API client) — vendored into app module source
+    // (app/src/main/java/com/zionhuang/innertube) so OuterTune-dev is no longer
+    // needed to build. Dependencies the vendored code requires:
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.json)
+    implementation(libs.ktor.client.encoding)
+    implementation(libs.brotli)
+    implementation(libs.newpipe.extractor)
 }

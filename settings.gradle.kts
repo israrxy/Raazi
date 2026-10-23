@@ -22,6 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Raazi"
 include(":app")
-include(":innertube")
-project(":innertube").projectDir = file("OuterTune-dev/innertube")
  
