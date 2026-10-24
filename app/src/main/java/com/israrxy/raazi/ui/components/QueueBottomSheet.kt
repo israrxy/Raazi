@@ -2,14 +2,11 @@ package com.israrxy.raazi.ui.components
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,274 +18,320 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.israrxy.raazi.model.MusicItem
-import com.israrxy.raazi.ui.theme.*
+import com.israrxy.raazi.model.RepeatMode
+import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
-enum class QueueFilter(val label: String) {
-    ALL("All"),
-    FAMILIAR("Familiar"),
-    POPULAR("Popular"),
-    DISCOVER("Discover"),
-    DEEP_CUTS("Deep cuts")
-}
-
-/**
- * YouTube Music style "Playing from your queue" sheet:
- *  - "Save" turns the temporary queue into a permanent playlist.
- *  - Smart filter chips re-order the upcoming auto-played songs (sourced live from InnerTube).
- *  - Drag handles let you manually re-order your own queued tracks.
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueBottomSheet(
     viewModel: MusicPlayerViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSaveQueueAsPlaylist: (List<MusicItem>) -> Unit
 ) {
     val context = LocalContext.current
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
-    val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
-    val currentArtistSongs by viewModel.currentArtistSongs.collectAsStateWithLifecycle()
-    val autoPlayQueue by viewModel.autoPlayQueue.collectAsStateWithLifecycle()
-
-    val density = LocalDensity.current
-    val rowHeightPx = with(density) { 76.dp.toPx() }
-
     val currentTrack = playbackState.currentTrack
+    val playlist = playbackState.playlist
+    val currentIndex = playbackState.currentIndex
 
-    // Pull the real YouTube Music "Up next" autoplay queue for the current song.
-    // Only needed in shuffle mode: in stable mode the playlist is the queue.
-    LaunchedEffect(currentTrack?.id, playbackState.isShuffleEnabled) {
-        if (playbackState.isShuffleEnabled) {
-            currentTrack?.let { viewModel.fetchAutoPlayQueue(it) }
+    val autoPlayTracks by viewModel.autoPlayQueue.collectAsStateWithLifecycle()
+    val isLoadingAutoPlay by viewModel.isLoadingAutoPlay.collectAsStateWithLifecycle()
+
+    var reorderMode by remember { mutableStateOf(false) }
+
+    val upcoming: List<Pair<Int, MusicItem>> = remember(playlist, currentIndex) {
+        if (currentIndex in playlist.indices && currentIndex + 1 <= playlist.lastIndex) {
+            playlist.subList(currentIndex + 1, playlist.size)
+                .mapIndexed { offset, item -> (currentIndex + 1 + offset) to item }
+        } else {
+            emptyList()
         }
     }
 
-    // --- Your own (manually queued) upcoming tracks: draggable, persisted to the service ---
-    val userUpcoming = remember(playbackState.playlist, playbackState.currentIndex) {
-        playbackState.playlist.drop(playbackState.currentIndex + 1)
-    }
-    val userSignature = userUpcoming.joinToString { it.id } + "|" + playbackState.currentIndex
-    val userList = remember { mutableStateListOf<MusicItem>() }
-    LaunchedEffect(userSignature) {
-        userList.clear()
-        userList.addAll(userUpcoming)
+    val extraAutoPlayTracks = remember(autoPlayTracks, playlist, currentTrack) {
+        val queuedIds = playlist.map { it.id }.toSet()
+        autoPlayTracks.filter { it.id !in queuedIds && it.id != currentTrack?.id }
     }
 
-    // --- InnerTube autoplay suggestions: filtered by the smart chips ---
-    var selectedFilter by remember { mutableStateOf(QueueFilter.ALL) }
-    val autoBase = remember(autoPlayQueue, currentTrack?.id) {
-        autoPlayQueue.filter { it.id != currentTrack?.id }
+    // Proactively fetch Up Next radio recommendations when the queue sheet opens
+    LaunchedEffect(currentTrack?.id) {
+        if (currentTrack != null) {
+            viewModel.fetchAutoPlayQueue()
+        }
     }
-    val autoList = remember { mutableStateListOf<MusicItem>() }
-    fun reseedAuto() {
-        autoList.clear()
-        autoList.addAll(applyQueueFilter(autoBase, selectedFilter, favoriteTracks, currentArtistSongs))
-    }
-    LaunchedEffect(autoBase, selectedFilter) { reseedAuto() }
-
-    // Drag state for the user queue
-    var draggingIndex by remember { mutableStateOf(-1) }
-    var dragDelta by remember { mutableFloatStateOf(0f) }
-    val listState = rememberLazyListState()
-
-    fun commitUserOrder() {
-        val current = viewModel.playbackState.value.currentTrack ?: return
-        viewModel.setQueueOrder(listOf(current) + userList)
-    }
-
-    val totalUpcoming = userList.size + autoList.size
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 28.dp)
+            .fillMaxHeight(0.85f)
+            .padding(bottom = 16.dp)
     ) {
-        // Header
+        // --- Header ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Playing from your queue",
+                    text = "Playing Queue",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                val subtitle = when {
+                    upcoming.isEmpty() && extraAutoPlayTracks.isEmpty() -> "1 track playing"
+                    upcoming.isNotEmpty() -> "${upcoming.size} upcoming in queue"
+                    else -> "${extraAutoPlayTracks.size} suggested up next"
+                }
                 Text(
-                    text = if (totalUpcoming == 1) "1 song upcoming" else "$totalUpcoming songs upcoming",
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            TextButton(
-                onClick = {
-                    val tracks = listOfNotNull(currentTrack) + userList + autoList
-                    viewModel.saveCurrentQueueAsPlaylist(tracks = tracks)
-                    Toast.makeText(context, "Queue saved to playlists", Toast.LENGTH_SHORT).show()
-                    onDismiss()
-                }
-            ) {
-                Text(
-                    text = "Save",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Smart filter chips (operate on the InnerTube autoplay section)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            QueueFilter.values().forEach { filter ->
-                FilterChip(
-                    selected = selectedFilter == filter,
-                    onClick = { selectedFilter = filter },
-                    label = { Text(filter.label) },
-                    leadingIcon = if (selectedFilter == filter) {
-                        { Icon(Icons.Filled.Check, null, modifier = Modifier.size(16.dp)) }
-                    } else null,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        labelColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Now playing (not draggable)
-        if (currentTrack != null) {
-            NowPlayingRow(track = currentTrack)
-            Divider(
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-        }
-
-        if (userList.isEmpty() && (!playbackState.isShuffleEnabled || autoList.isEmpty())) {
-            Box(
+            // Shuffle Pill Toggle with distinct active color
+            val shuffleActive = playbackState.isShuffleEnabled
+            Surface(
+                onClick = { viewModel.toggleShuffle() },
+                shape = CircleShape,
+                color = if (shuffleActive) {
+                    Emerald500.copy(alpha = 0.2f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
-                contentAlignment = Alignment.Center
+                    .height(38.dp)
+                    .then(
+                        if (shuffleActive) {
+                            Modifier.border(1.dp, Emerald500.copy(alpha = 0.6f), CircleShape)
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
-                Text(
-                    text = "Nothing lined up yet.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxHeight(0.7f),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                // In stable (non-shuffle) mode the queue is a playlist: it plays in
-                // the order the user built it. Radio suggestions are only relevant
-                // when shuffle is on, so showing them first buried the real queue
-                // and made the list appear to change as tracks advanced.
-                val showRadioSuggestions = playbackState.isShuffleEnabled
-
-                if (showRadioSuggestions && autoList.isNotEmpty()) {
-                    item {
-                        SectionHeader(text = "Up next")
-                    }
-                    itemsIndexed(autoList, key = { _, item -> "a_" + item.id }) { _, item ->
-                        AutoPlayRow(
-                            track = item,
-                            onPlayNext = {
-                                viewModel.playNext(listOf(item))
-                                Toast.makeText(context, "Playing next", Toast.LENGTH_SHORT).show()
-                            },
-                            onAddToQueue = { viewModel.addToQueue(item) },
-                            onHide = {
-                                autoList.remove(item)
-                            }
-                        )
-                    }
-                }
-
-                if (userList.isNotEmpty()) {
-                    item {
-                        SectionHeader(
-                            text = if (showRadioSuggestions) "Your queue" else "Next up"
-                        )
-                    }
-                    itemsIndexed(userList, key = { _, item -> "u_" + item.id }) { index, item ->
-                        val isDragging = draggingIndex == index
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (shuffleActive) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    if (shuffleActive) {
                         Box(
                             modifier = Modifier
-                                .graphicsLayer {
-                                    translationY = if (isDragging) dragDelta else 0f
-                                    shadowElevation = if (isDragging) 8.dp.toPx() else 0f
-                                }
-                                .zIndex(if (isDragging) 1f else 0f)
-                        ) {
-                            QueueRow(
-                                track = item,
-                                isDragging = isDragging,
-                                dragModifier = Modifier.pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            draggingIndex = index
-                                            dragDelta = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            dragDelta += dragAmount.y
-                                            val from = draggingIndex
-                                            if (from < 0 || userList.isEmpty()) return@detectDragGestures
-                                            val shift = (dragDelta / rowHeightPx).toInt()
-                                            val target = (from + shift).coerceIn(0, userList.lastIndex)
-                                            if (target != from) {
-                                                val list = userList.toMutableList()
-                                                val moved = list.removeAt(from)
-                                                list.add(target, moved)
-                                                userList.clear()
-                                                userList.addAll(list)
-                                                draggingIndex = target
-                                                dragDelta -= (target - from) * rowHeightPx
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            draggingIndex = -1
-                                            dragDelta = 0f
-                                            commitUserOrder()
-                                        },
-                                        onDragCancel = {
-                                            draggingIndex = -1
-                                            dragDelta = 0f
-                                        }
-                                    )
-                                },
-                                onPlay = { viewModel.playFromQueue(index) },
-                                onRemove = { viewModel.removeFromUpcoming(index) }
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Emerald500)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Repeat toggle
+            val repeatActive = playbackState.repeatMode != RepeatMode.OFF
+            IconButton(onClick = { viewModel.toggleRepeat() }) {
+                Icon(
+                    imageVector = when (playbackState.repeatMode) {
+                        RepeatMode.ONE -> Icons.Default.RepeatOne
+                        else -> Icons.Default.Repeat
+                    },
+                    contentDescription = "Repeat",
+                    tint = if (repeatActive) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (upcoming.size > 1) {
+                IconButton(onClick = { reorderMode = !reorderMode }) {
+                    Icon(
+                        imageVector = if (reorderMode) Icons.Default.Check else Icons.Outlined.SwapVert,
+                        contentDescription = if (reorderMode) "Done reordering" else "Reorder queue",
+                        tint = if (reorderMode) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // --- Action pills ---
+        if (playlist.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                AssistChip(
+                    onClick = { onSaveQueueAsPlaylist(playlist) },
+                    label = { Text("Save as playlist") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.PlaylistAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+                if (upcoming.isNotEmpty()) {
+                    AssistChip(
+                        onClick = {
+                            viewModel.clearUpcomingQueue()
+                            Toast.makeText(context, "Cleared upcoming tracks", Toast.LENGTH_SHORT).show()
+                        },
+                        label = { Text("Clear upcoming") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.ClearAll,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+
+        // --- Scrollable body ---
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            if (currentTrack != null) {
+                item(key = "header_now_playing") {
+                    SectionLabel("Now playing")
+                }
+                item(key = "now_${currentTrack.id}") {
+                    NowPlayingRow(
+                        track = currentTrack,
+                        isPlaying = playbackState.isPlaying,
+                        onPlayPause = { viewModel.playPause() }
+                    )
+                }
+            }
+
+            if (upcoming.isNotEmpty()) {
+                item(key = "header_up_next") {
+                    SectionLabel(
+                        text = if (reorderMode) "Tap arrows to reorder" else "Next in Queue (${upcoming.size})"
+                    )
+                }
+                itemsIndexed(
+                    items = upcoming,
+                    key = { idx, pair -> "up_${pair.first}_${pair.second.id}_$idx" }
+                ) { relativeIdx, (absoluteIndex, track) ->
+                    UpcomingQueueRow(
+                        track = track,
+                        reorderMode = reorderMode,
+                        canMoveUp = relativeIdx > 0,
+                        canMoveDown = relativeIdx < upcoming.lastIndex,
+                        onClick = { viewModel.jumpToQueueIndex(absoluteIndex) },
+                        onRemove = { viewModel.removeFromQueue(absoluteIndex) },
+                        onMoveUp = {
+                            if (relativeIdx > 0) {
+                                viewModel.moveQueueItem(absoluteIndex, absoluteIndex - 1)
+                            }
+                        },
+                        onMoveDown = {
+                            if (relativeIdx < upcoming.lastIndex) {
+                                viewModel.moveQueueItem(absoluteIndex, absoluteIndex + 1)
+                            }
+                        }
+                    )
+                }
+            }
+
+            // Always show AutoPlay / Radio "Up Next" recommendations if not already in upcoming
+            if (extraAutoPlayTracks.isNotEmpty() || isLoadingAutoPlay) {
+                item(key = "header_autoplay") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Up Next • Radio",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Auto-selected songs based on what's playing",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (isLoadingAutoPlay) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                itemsIndexed(
+                    items = extraAutoPlayTracks,
+                    key = { idx, item -> "auto_${item.id}_$idx" }
+                ) { index, track ->
+                    AutoPlayRow(
+                        track = track,
+                        onClick = {
+                            viewModel.playFromAutoPlay(index)
+                        },
+                        onAddToQueue = {
+                            viewModel.addToQueue(track)
+                            Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            } else if (upcoming.isEmpty() && !isLoadingAutoPlay) {
+                item(key = "empty_upcoming") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 36.dp, horizontal = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Outlined.QueueMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Fetching Up Next songs...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -299,176 +342,32 @@ fun QueueBottomSheet(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
-    )
-}
-
-private fun applyQueueFilter(
-    upcoming: List<MusicItem>,
-    filter: QueueFilter,
-    favorites: List<MusicItem>,
-    artistSongs: List<MusicItem>
-): List<MusicItem> {
-    if (filter == QueueFilter.ALL) return upcoming
-    val favoriteIds = favorites.map { it.id }.toSet()
-    val artistIds = artistSongs.map { it.id }.toSet()
-    val score: (MusicItem) -> Int = when (filter) {
-        QueueFilter.FAMILIAR -> { it -> if (it.id in favoriteIds) 0 else 1 }
-        QueueFilter.DISCOVER -> { it -> if (it.id in favoriteIds) 1 else 0 }
-        QueueFilter.DEEP_CUTS -> { it -> if (it.id in artistIds) 0 else 1 }
-        // POPULAR keeps YouTube Music's own (popularity) ordering.
-        else -> { _ -> 0 }
-    }
-    return upcoming.sortedBy(score)
-}
-
-@Composable
-private fun NowPlayingRow(track: MusicItem) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Icon(
-            imageVector = Icons.Filled.GraphicEq,
-            contentDescription = "Now playing",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-@Composable
-private fun QueueRow(
-    track: MusicItem,
-    isDragging: Boolean,
-    dragModifier: Modifier,
-    onPlay: () -> Unit,
-    onRemove: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (isDragging) MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
-                else Color.Transparent
-            )
-            .clickable(onClick = onPlay)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Drag handle
-        Box(
-            modifier = dragModifier.size(36.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.DragHandle,
-                contentDescription = "Reorder",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-
-        AsyncImage(
-            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        IconButton(onClick = onRemove) {
-            Icon(
-                imageVector = Icons.Outlined.Close,
-                contentDescription = "Remove",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
 private fun AutoPlayRow(
     track: MusicItem,
-    onPlayNext: () -> Unit,
-    onAddToQueue: () -> Unit,
-    onHide: () -> Unit
+    onClick: () -> Unit,
+    onAddToQueue: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onPlayNext)
-            .padding(vertical = 8.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
-            contentDescription = null,
+            contentDescription = track.title,
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .clip(RoundedCornerShape(10.dp)),
             contentScale = ContentScale.Crop
         )
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -481,20 +380,164 @@ private fun AutoPlayRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        IconButton(onClick = onAddToQueue) {
+        IconButton(
+            onClick = onAddToQueue,
+            modifier = Modifier.size(36.dp)
+        ) {
             Icon(
-                imageVector = Icons.Outlined.PlaylistAdd,
+                Icons.Default.Add,
                 contentDescription = "Add to queue",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
         }
-        IconButton(onClick = onHide) {
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun NowPlayingRow(
+    track: MusicItem,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
+                contentDescription = track.title,
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = track.artist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = onPlayPause) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpcomingQueueRow(
+    track: MusicItem,
+    reorderMode: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !reorderMode, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
+            contentDescription = track.title,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(10.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = track.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (reorderMode) {
+            IconButton(
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Move up",
+                    tint = if (canMoveUp) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
+            }
+            IconButton(
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Move down",
+                    tint = if (canMoveDown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
+            }
+        }
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(36.dp)
+        ) {
             Icon(
-                imageVector = Icons.Outlined.Close,
-                contentDescription = "Hide",
+                Icons.Default.Close,
+                contentDescription = "Remove from queue",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }

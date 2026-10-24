@@ -1,732 +1,878 @@
 package com.israrxy.raazi.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
-import androidx.biometric.BiometricManager
-import androidx.compose.animation.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.israrxy.raazi.BuildConfig
-import com.israrxy.raazi.data.account.YouTubeAccountSession
-
-import coil.compose.AsyncImage
-import com.israrxy.raazi.ui.components.DevInfo
-import com.israrxy.raazi.ui.components.openLink
+import com.israrxy.raazi.R
+import com.israrxy.raazi.data.UpdateManager
 import com.israrxy.raazi.data.local.SettingsDataStore
-import com.israrxy.raazi.ui.theme.Emerald500
-import com.israrxy.raazi.ui.theme.ErrorRed
+import com.israrxy.raazi.model.UpdateConfig
+import com.israrxy.raazi.ui.components.UpdateDialog
+import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.launch
-import java.io.File
+
+private enum class SettingsCategory(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector
+) {
+    ACCOUNT(
+        title = "Account & Sync",
+        subtitle = "YouTube Music & Last.fm",
+        icon = Icons.Filled.AccountCircle
+    ),
+    APPEARANCE(
+        title = "Appearance",
+        subtitle = "Theme, colors & layout",
+        icon = Icons.Filled.Palette
+    ),
+    PLAYBACK(
+        title = "Playback & Audio",
+        subtitle = "Streaming quality & crossfade",
+        icon = Icons.AutoMirrored.Filled.VolumeUp
+    ),
+    LYRICS_AI(
+        title = "Lyrics & AI",
+        subtitle = "Translations & smart import",
+        icon = Icons.Filled.AutoAwesome
+    ),
+    DOWNLOADS(
+        title = "Downloads & Storage",
+        subtitle = "Offline quality & cache",
+        icon = Icons.Filled.Download
+    ),
+    SECURITY(
+        title = "Privacy & Security",
+        subtitle = "Biometric lock & reset",
+        icon = Icons.Filled.Security
+    ),
+    ABOUT(
+        title = "About",
+        subtitle = "Updates & version info",
+        icon = Icons.Filled.Info
+    )
+}
 
 @Composable
 fun SettingsScreen(
     viewModel: MusicPlayerViewModel,
-    onNavigateToYouTubeLogin: () -> Unit
+    onNavigateToYouTubeLogin: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val settingsDataStore = remember { SettingsDataStore(context) }
+    val updateManager = remember { UpdateManager() }
 
-    val dataSaverEnabled by settingsDataStore.dataSaverEnabled.collectAsState(initial = false)
-    val audioQuality by settingsDataStore.audioQuality.collectAsState(initial = "Very High")
-    val crossfadeDuration by settingsDataStore.crossfadeDuration.collectAsState(initial = "Off")
-    val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = true)
-    val pureBlack by settingsDataStore.pureBlack.collectAsState(initial = false)
-    val hapticFeedback by settingsDataStore.hapticFeedback.collectAsState(initial = true)
-    val allowLandscape by settingsDataStore.allowLandscape.collectAsState(initial = false)
-    val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
-    val downloadWifiOnly by settingsDataStore.downloadWifiOnly.collectAsState(initial = false)
-    val downloadQuality by settingsDataStore.downloadQuality.collectAsState(initial = "Very High")
-    val maxConcurrentDownloads by settingsDataStore.maxConcurrentDownloads.collectAsState(initial = "2")
-    val biometricLock by settingsDataStore.biometricLock.collectAsState(initial = false)
-    
-    // Custom configurations
-    val blurPlayerBackground by settingsDataStore.blurPlayerBackground.collectAsState(initial = true)
-    val pastelAccent by settingsDataStore.pastelAccent.collectAsState(initial = "Emerald")
-    val useGeminiImport by settingsDataStore.useGeminiImport.collectAsState(initial = false)
-    val geminiApiKey by settingsDataStore.geminiApiKey.collectAsState(initial = "")
-    val lyricsTranslateEnabled by settingsDataStore.lyricsTranslateEnabled.collectAsState(initial = false)
-    val lyricsTranslateLang by settingsDataStore.lyricsTranslateLang.collectAsState(initial = "en")
-    var showTranslateLangDialog by remember { mutableStateOf(false) }
+    // Collect Settings State from SettingsDataStore
+    val audioQuality by settingsDataStore.audioQuality.collectAsStateWithLifecycle(initialValue = "Very High")
+    val downloadQuality by settingsDataStore.downloadQuality.collectAsStateWithLifecycle(initialValue = "Very High")
+    val wifiOnlyDownload by settingsDataStore.downloadWifiOnly.collectAsStateWithLifecycle(initialValue = false)
+    val maxConcurrentDownloads by settingsDataStore.maxConcurrentDownloads.collectAsStateWithLifecycle(initialValue = "2")
 
-    // Last.fm scrobbling
-    val lastfmScrobbleEnabled by settingsDataStore.lastfmScrobbleEnabled.collectAsState(initial = false)
-    val lastfmUsername by settingsDataStore.lastfmUsername.collectAsState(initial = null)
-    val lastfmStatus by viewModel.lastfmStatus.collectAsState()
+    val appTheme by settingsDataStore.themeMode.collectAsStateWithLifecycle(initialValue = "System")
+    val dynamicColors by settingsDataStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = false)
+    val amoledBlack by settingsDataStore.pureBlack.collectAsStateWithLifecycle(initialValue = false)
+    val blurPlayerBackground by settingsDataStore.blurPlayerBackground.collectAsStateWithLifecycle(initialValue = true)
+    val allowRotation by settingsDataStore.allowLandscape.collectAsStateWithLifecycle(initialValue = false)
+    val hapticFeedback by settingsDataStore.hapticFeedback.collectAsStateWithLifecycle(initialValue = true)
 
+    val crossfadeDuration by settingsDataStore.crossfadeDuration.collectAsStateWithLifecycle(initialValue = "Off")
+    val dataSaver by settingsDataStore.dataSaverEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val biometricLock by settingsDataStore.biometricLock.collectAsStateWithLifecycle(initialValue = false)
+
+    // Last.fm State
+    val lastFmSessionKey by settingsDataStore.lastfmSessionKey.collectAsStateWithLifecycle(initialValue = null)
+    val lastFmUsername by settingsDataStore.lastfmUsername.collectAsStateWithLifecycle(initialValue = null)
+    val isScrobblingEnabled by settingsDataStore.lastfmScrobbleEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val lastFmMessage by viewModel.lastfmMessage.collectAsStateWithLifecycle()
+
+    // AI & Lyrics State
+    val translateLyrics by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val targetLanguage by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
+    val optimizeImportWithGemini by settingsDataStore.useGeminiImport.collectAsStateWithLifecycle(initialValue = false)
+    val geminiApiKey by settingsDataStore.geminiApiKey.collectAsStateWithLifecycle(initialValue = null)
+    val accentColorName by settingsDataStore.pastelAccent.collectAsStateWithLifecycle(initialValue = "Emerald")
+
+    // Update State
+    var updateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+    var isCheckingForUpdate by remember { mutableStateOf(false) }
+
+    // YouTube Account State from ViewModel
+    val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsStateWithLifecycle()
+    val youTubeAccountName by viewModel.youTubeAccountName.collectAsStateWithLifecycle()
+    val youTubeAccountEmail by viewModel.youTubeAccountEmail.collectAsStateWithLifecycle()
+    val useLoginForBrowse by viewModel.useLoginForBrowse.collectAsStateWithLifecycle()
+    val isSyncingYouTubeLibrary by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
+    val youTubeSyncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
+
+    var selectedCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
+
+    // Dialog States
+    var showAudioQualityDialog by remember { mutableStateOf(false) }
+    var showDownloadQualityDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showCrossfadeDialog by remember { mutableStateOf(false) }
+    var showConcurrentDownloadsDialog by remember { mutableStateOf(false) }
+    var showClearCacheDialog by remember { mutableStateOf(false) }
+    var showResetSettingsDialog by remember { mutableStateOf(false) }
+    var showLastFmLoginDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
-    var tempApiKey by remember { mutableStateOf("") }
 
-    var showLastFmDialog by remember { mutableStateOf(false) }
-    var lfmUser by remember { mutableStateOf("") }
-    var lfmPass by remember { mutableStateOf("") }
-
-    val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsState()
-    val youTubeAccountName by viewModel.youTubeAccountName.collectAsState()
-    val youTubeAccountEmail by viewModel.youTubeAccountEmail.collectAsState()
-    val useLoginForBrowse by viewModel.useLoginForBrowse.collectAsState()
-    val isSyncingYouTubeLibrary by viewModel.isSyncingYouTubeLibrary.collectAsState()
-    val youTubeSyncStatus by viewModel.youTubeSyncStatus.collectAsState()
-
-    var cacheSize by remember { mutableStateOf(calculateCacheSize(context.cacheDir)) }
-
-    LaunchedEffect(youTubeSyncStatus) {
-        val status = youTubeSyncStatus ?: return@LaunchedEffect
-        Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
-        viewModel.clearYouTubeSyncStatus()
+    BackHandler(enabled = selectedCategory != null) {
+        selectedCategory = null
     }
 
-    val lastfmMessage by viewModel.lastfmMessage.collectAsState()
-    LaunchedEffect(lastfmMessage) {
-        val msg = lastfmMessage ?: return@LaunchedEffect
-        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-        viewModel.clearLastFmMessage()
+    LaunchedEffect(lastFmMessage) {
+        lastFmMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearLastFmMessage()
+        }
     }
 
-    Column(
+    if (updateConfig != null) {
+        UpdateDialog(
+            config = updateConfig!!,
+            onDismiss = { updateConfig = null }
+        )
+    }
+
+    val pastelAccents = remember {
+        listOf(
+            "Emerald" to Emerald500,
+            "Rose" to Color(0xFFFFB7B2),
+            "Peach" to Color(0xFFFFDAC1),
+            "Mint" to Color(0xFFE2F0CB),
+            "Sage" to Color(0xFFB5EAD7),
+            "Lavender" to Color(0xFFC7CEEA),
+            "Sky" to Color(0xFFAEC6CF),
+            "Lilac" to Color(0xFFD9B8FF),
+            "Lemon" to Color(0xFFFDFD96),
+            "Coral" to Color(0xFFFFAB91),
+            "Aqua" to Color(0xFF80DEEA),
+            "Periwinkle" to Color(0xFF9FA8DA),
+            "Blush" to Color(0xFFF48FB1),
+            "Pistachio" to Color(0xFFC5E1A5),
+            "Butter" to Color(0xFFFFF59D),
+            "Mauve" to Color(0xFFCE93D8)
+        )
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scrollState)
-            .padding(horizontal = 24.dp, vertical = 24.dp)
-            .padding(bottom = 100.dp)
     ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Text(
-            text = "Appearance, playback, downloads, and account controls in one place.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
-
-        SettingsHeroCard(
-            isYouTubeLoggedIn = isYouTubeLoggedIn,
-            accountName = youTubeAccountName,
-            themeMode = themeMode,
-            audioQuality = audioQuality
-        )
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        SettingsSection(title = "YOUTUBE MUSIC") {
-            SettingsItem(
-                title = if (isYouTubeLoggedIn) {
-                    youTubeAccountName ?: "Connected"
-                } else {
-                    "Connect Account"
-                },
-                subtitle = "Sign in for synced likes, playlists, and library import",
-                value = if (isYouTubeLoggedIn) "Connected" else "Not connected",
-                valueColor = if (isYouTubeLoggedIn) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant,
-                showChevron = true,
-                onClick = onNavigateToYouTubeLogin
-            )
-
-            if (!youTubeAccountEmail.isNullOrBlank()) {
-                SettingsItem(
-                    title = "Account",
-                    subtitle = "Current YouTube Music identity",
-                    value = youTubeAccountEmail,
-                    valueColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            SettingsToggle(
-                title = "Use Account For Browse",
-                subtitle = if (isYouTubeLoggedIn) {
-                    "Use account-backed responses while browsing YouTube Music"
-                } else {
-                    "Sign in to a YouTube account to enable this"
-                },
-                checked = useLoginForBrowse && isYouTubeLoggedIn,
-                enabled = isYouTubeLoggedIn,
-                onCheckedChange = { enabled ->
-                    viewModel.setUseLoginForBrowse(enabled)
-                }
-            )
-
-            SettingsActionButton(
-                title = if (isSyncingYouTubeLibrary) "Syncing..." else "Sync Likes & Playlists",
-                onClick = { viewModel.syncYouTubeLibrary() },
-                enabled = isYouTubeLoggedIn && !isSyncingYouTubeLibrary
-            )
-
-            if (isYouTubeLoggedIn) {
-                SettingsActionButton(
-                    title = "Log Out",
-                    onClick = { viewModel.logoutFromYouTube() },
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                )
-            } else {
-                Text(
-                    text = "Sign in to save likes to your YouTube Music account and create synced playlists.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "THEME") {
-            SettingsItem(
-                title = "App Theme",
-                subtitle = "Switch between system, light, and dark mode",
-                value = themeMode,
-                valueColor = Emerald500,
-                onClick = {
-                    val modes = listOf("System", "Light", "Dark")
-                    val currentIndex = modes.indexOf(themeMode)
-                    val nextMode = modes[(currentIndex + 1) % modes.size]
-                    scope.launch {
-                        settingsDataStore.setThemeMode(nextMode)
-                    }
-                }
-            )
-
-            SettingsToggle(
-                title = "Material You / Dynamic Colors",
-                subtitle = "Match the app palette to your wallpaper on supported devices",
-                checked = useDynamicColor,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setDynamicColor(enabled)
-                    }
-                }
-            )
-
-            SettingsToggle(
-                title = "Pure Black (AMOLED)",
-                subtitle = "Use true-black backgrounds to save power on OLED screens",
-                checked = pureBlack,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setPureBlack(enabled)
-                    }
-                }
-            )
-
-            SettingsToggle(
-                title = "Haptic Feedback",
-                subtitle = "Vibrate on taps, toggles, and seeking",
-                checked = hapticFeedback,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setHapticFeedback(enabled)
-                    }
-                }
-            )
-
-            SettingsToggle(
-                title = "Allow Rotation",
-                subtitle = "Permit landscape and tablet orientations",
-                checked = allowLandscape,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setAllowLandscape(enabled)
-                    }
-                }
-            )
-
-            SettingsItem(
-                title = "Pastel Accent Color",
-                subtitle = "Choose your custom theme pastel accent color",
-                value = pastelAccent,
-                valueColor = when (pastelAccent) {
-                    "Emerald" -> Emerald500
-                    "Lavender" -> Color(0xFFB39DDB)
-                    "Sky" -> Color(0xFF90CAF9)
-                    "Peach" -> Color(0xFFFFCC80)
-                    else -> Emerald500
-                },
-                onClick = {
-                    val accents = listOf("Emerald", "Lavender", "Sky", "Peach")
-                    val currentIndex = accents.indexOf(pastelAccent)
-                    val nextAccent = accents[(currentIndex + 1) % accents.size]
-                    scope.launch {
-                        settingsDataStore.setPastelAccent(nextAccent)
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "PLAYBACK") {
-            SettingsToggle(
-                title = "Data Saver",
-                subtitle = "Prefer lighter streams when bandwidth is limited",
-                checked = dataSaverEnabled,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setDataSaver(enabled)
-                    }
-                }
-            )
-
-            SettingsItem(
-                title = "Audio Quality",
-                subtitle = "Default stream quality for playback",
-                value = audioQuality,
-                valueColor = Emerald500,
-                onClick = {
-                    val qualities = listOf("Low", "Normal", "High", "Very High")
-                    val currentIndex = qualities.indexOf(audioQuality)
-                    val nextQuality = qualities[(currentIndex + 1) % qualities.size]
-                    scope.launch {
-                        settingsDataStore.setAudioQuality(nextQuality)
-                    }
-                    Toast.makeText(context, "Audio quality: $nextQuality", Toast.LENGTH_SHORT).show()
-                }
-            )
-
-            SettingsItem(
-                title = "Crossfade",
-                subtitle = "Blend the end of one track into the next",
-                value = crossfadeDuration,
-                onClick = {
-                    val options = listOf("Off", "3s", "5s", "8s", "12s")
-                    val currentIndex = options.indexOf(crossfadeDuration)
-                    val nextOption = options[(currentIndex + 1) % options.size]
-                    scope.launch {
-                        settingsDataStore.setCrossfadeDuration(nextOption)
-                    }
-                }
-            )
-
-            SettingsToggle(
-                title = "Blur Player Background",
-                subtitle = "Apply a blurred backdrop on the active player layout",
-                checked = blurPlayerBackground,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setBlurPlayerBackground(enabled)
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "DOWNLOADS") {
-            SettingsToggle(
-                title = "WiFi Only",
-                subtitle = "Avoid downloading on mobile data",
-                checked = downloadWifiOnly,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setDownloadWifiOnly(enabled)
-                    }
-                }
-            )
-
-            SettingsItem(
-                title = "Download Quality",
-                subtitle = "Choose how much storage each song should use",
-                value = downloadQuality,
-                valueColor = Emerald500,
-                onClick = {
-                    val qualities = listOf("Normal", "High", "Very High", "Best")
-                    val currentIndex = qualities.indexOf(downloadQuality)
-                    val nextQuality = qualities[(currentIndex + 1) % qualities.size]
-                    scope.launch {
-                        settingsDataStore.setDownloadQuality(nextQuality)
-                    }
-                    Toast.makeText(context, "Download quality: $nextQuality", Toast.LENGTH_SHORT).show()
-                }
-            )
-
-            SettingsItem(
-                title = "Max Concurrent Downloads",
-                subtitle = "Control how many downloads can run at once",
-                value = maxConcurrentDownloads,
-                onClick = {
-                    val options = listOf("1", "2", "3", "4")
-                    val currentIndex = options.indexOf(maxConcurrentDownloads)
-                    val nextOption = options[(currentIndex + 1) % options.size]
-                    scope.launch {
-                        settingsDataStore.setMaxConcurrentDownloads(nextOption)
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "GEMINI AI INTEGRATION") {
-            SettingsToggle(
-                title = "Optimize Playlist Imports",
-                subtitle = "Use Gemini 1.5 Flash to automatically improve matching",
-                checked = useGeminiImport,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setUseGeminiImport(enabled)
-                    }
-                }
-            )
-
-            if (useGeminiImport) {
-                SettingsItem(
-                    title = "Gemini API Key",
-                    subtitle = if (geminiApiKey.isNullOrBlank()) "No key configured" else "Key set (Tap to update)",
-                    value = if (geminiApiKey.isNullOrBlank()) "Set Key" else "••••••••",
-                    valueColor = if (geminiApiKey.isNullOrBlank()) ErrorRed else Emerald500,
-                    onClick = {
-                        tempApiKey = geminiApiKey ?: ""
-                        showApiKeyDialog = true
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "LYRICS") {
-            SettingsToggle(
-                title = "Translate Lyrics",
-                subtitle = "Use Gemini to translate lyric lines inline",
-                checked = lyricsTranslateEnabled,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setLyricsTranslateEnabled(enabled)
-                    }
-                }
-            )
-
-            if (lyricsTranslateEnabled) {
-                SettingsItem(
-                    title = "Translate To",
-                    subtitle = "Target language for inline translation",
-                    value = lyricsTranslateLang.uppercase(),
-                    valueColor = Emerald500,
-                    onClick = { showTranslateLangDialog = true }
-                )
-            }
-        }
-
-        if (showTranslateLangDialog) {
-            val langs = listOf("en", "es", "fr", "de", "hi", "ja", "ko", "pt", "ru", "ar", "zh", "it", "tr")
-            AlertDialog(
-                onDismissRequest = { showTranslateLangDialog = false },
-                title = { Text("Translate To") },
-                text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        langs.forEach { lang ->
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        scope.launch { settingsDataStore.setLyricsTranslateLang(lang) }
-                                        showTranslateLangDialog = false
-                                    },
-                                color = if (lang == lyricsTranslateLang) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    Color.Transparent
-                                }
-                            ) {
-                                Text(
-                                    text = lang.uppercase(),
-                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (lang == lyricsTranslateLang) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showTranslateLangDialog = false }) { Text("Done") }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "SECURITY") {
-            SettingsToggle(
-                title = "App Lock",
-                subtitle = "Require biometrics to open the app",
-                checked = biometricLock,
-                onCheckedChange = { enabled ->
-                    if (enabled) {
-                        val canAuthenticate = BiometricManager.from(context).canAuthenticate(
-                            BiometricManager.Authenticators.BIOMETRIC_STRONG
-                                or BiometricManager.Authenticators.BIOMETRIC_WEAK
-                        ) == BiometricManager.BIOMETRIC_SUCCESS
-                        if (!canAuthenticate) {
-                            Toast.makeText(
-                                context,
-                                "Biometrics not available on this device",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                    scope.launch {
-                        settingsDataStore.setBiometricLock(enabled)
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsSection(title = "LAST.FM SCROBBLING") {
-            SettingsToggle(
-                title = "Enable Scrobbling",
-                subtitle = "Send now-playing and scrobbles to your Last.fm profile",
-                checked = lastfmScrobbleEnabled,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        settingsDataStore.setLastfmScrobbleEnabled(enabled)
-                    }
-                }
-            )
-
-            if (lastfmScrobbleEnabled) {
-                if (lastfmUsername != null) {
-                    SettingsItem(
-                        title = "Connected as",
-                        subtitle = "Scrobbles are being sent to your account",
-                        value = lastfmUsername,
-                        valueColor = Emerald500
+        AnimatedContent(
+            targetState = selectedCategory,
+            transitionSpec = {
+                if (targetState != null) {
+                    (slideInHorizontally(tween(220)) { it / 5 } + fadeIn(tween(180))).togetherWith(
+                        slideOutHorizontally(tween(220)) { -it / 6 } + fadeOut(tween(150))
                     )
-
-                    if (lastfmStatus != null) {
-                        SettingsItem(
-                            title = lastfmStatus!!,
-                            subtitle = "Current Last.fm status"
+                } else {
+                    (slideInHorizontally(tween(220)) { -it / 6 } + fadeIn(tween(180))).togetherWith(
+                        slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(150))
+                    )
+                }
+            },
+            label = "settings_category_navigation"
+        ) { currentCategory ->
+            if (currentCategory == null) {
+                // Clean, minimal Settings Hub
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp),
+                    contentPadding = PaddingValues(bottom = 120.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Settings",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                         )
                     }
 
-                    SettingsActionButton(
-                        title = "Disconnect",
-                        onClick = {
-                            scope.launch {
-                                settingsDataStore.setLastfmSession(null, null)
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Column {
+                                SettingsCategory.entries.forEachIndexed { index, category ->
+                                    val valueText = when (category) {
+                                        SettingsCategory.ACCOUNT -> if (isYouTubeLoggedIn) {
+                                            youTubeAccountName?.takeIf { it.isNotBlank() } ?: "Connected"
+                                        } else {
+                                            "Not signed in"
+                                        }
+                                        SettingsCategory.APPEARANCE -> appTheme
+                                        SettingsCategory.PLAYBACK -> audioQuality
+                                        SettingsCategory.LYRICS_AI -> if (translateLyrics) targetLanguage.uppercase() else "Off"
+                                        SettingsCategory.DOWNLOADS -> downloadQuality
+                                        SettingsCategory.SECURITY -> if (biometricLock) "On" else "Off"
+                                        SettingsCategory.ABOUT -> "v${BuildConfig.VERSION_NAME}"
+                                    }
+                                    MinimalSettingsCategoryRow(
+                                        category = category,
+                                        valueText = valueText,
+                                        onClick = { selectedCategory = category }
+                                    )
+                                    if (index < SettingsCategory.entries.lastIndex) {
+                                        SettingsDivider()
+                                    }
+                                }
                             }
-                        },
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                } else {
-                    SettingsItem(
-                        title = "Not connected",
-                        subtitle = "Sign in with your Last.fm account to start scrobbling",
-                        value = "Connect",
-                        valueColor = ErrorRed,
-                        onClick = {
-                            lfmUser = ""
-                            lfmPass = ""
-                            showLastFmDialog = true
                         }
-                    )
+                    }
+                }
+            } else {
+                // Clean Category Detail Screen
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { selectedCategory = null },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = currentCategory.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        when (currentCategory) {
+                            SettingsCategory.ACCOUNT -> {
+                                item {
+                                    SettingsSection(title = "YouTube Music") {
+                                        if (isYouTubeLoggedIn) {
+                                            SettingsAccountSummaryItem(
+                                                title = youTubeAccountName?.takeIf { it.isNotBlank() } ?: "YouTube Music Account",
+                                                subtitle = youTubeAccountEmail?.takeIf { it.isNotBlank() } ?: "Connected"
+                                            )
+                                            SettingsDivider()
+                                            SettingsSwitchItem(
+                                                icon = Icons.Filled.Public,
+                                                title = "Use Login for Browse",
+                                                subtitle = "Personalize Home feed using your account",
+                                                checked = useLoginForBrowse,
+                                                onCheckedChange = { viewModel.setUseLoginForBrowse(it) }
+                                            )
+                                            SettingsDivider()
+                                            SettingsActionItem(
+                                                icon = Icons.Filled.Sync,
+                                                title = if (isSyncingYouTubeLibrary) "Syncing Library..." else "Sync Library Now",
+                                                subtitle = youTubeSyncStatus ?: "Pull liked songs and saved playlists",
+                                                onClick = {
+                                                    if (!isSyncingYouTubeLibrary) {
+                                                        viewModel.syncYouTubeLibrary()
+                                                    }
+                                                }
+                                            )
+                                            SettingsDivider()
+                                            SettingsActionItem(
+                                                icon = Icons.Filled.ManageAccounts,
+                                                title = "Refresh Session",
+                                                subtitle = "Re-open YouTube Music login",
+                                                onClick = onNavigateToYouTubeLogin
+                                            )
+                                            SettingsDivider()
+                                            SettingsActionItem(
+                                                icon = Icons.AutoMirrored.Filled.Logout,
+                                                title = "Sign Out",
+                                                subtitle = "Disconnect your YouTube Music account",
+                                                onClick = {
+                                                    viewModel.logoutFromYouTube()
+                                                    Toast.makeText(context, "Signed out of YouTube Music", Toast.LENGTH_SHORT).show()
+                                                },
+                                                isDestructive = true
+                                            )
+                                        } else {
+                                            SettingsActionItem(
+                                                icon = Icons.AutoMirrored.Filled.Login,
+                                                title = "Sign in to YouTube Music",
+                                                subtitle = "Sync library, playlists & personalized home feed",
+                                                onClick = onNavigateToYouTubeLogin
+                                            )
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    SettingsSection(title = "Last.fm") {
+                                        if (!lastFmSessionKey.isNullOrBlank()) {
+                                            SettingsActionItem(
+                                                icon = Icons.Filled.AccountCircle,
+                                                title = lastFmUsername ?: "Connected",
+                                                subtitle = "Tap to sign out of Last.fm",
+                                                onClick = {
+                                                    scope.launch {
+                                                        settingsDataStore.setLastfmSession(null, null)
+                                                        settingsDataStore.setLastfmScrobbleEnabled(false)
+                                                        Toast.makeText(context, "Signed out of Last.fm", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                isDestructive = true
+                                            )
+                                            SettingsDivider()
+                                            SettingsSwitchItem(
+                                                icon = Icons.Filled.Album,
+                                                title = "Scrobble Tracks",
+                                                subtitle = "Send listening history to Last.fm",
+                                                checked = isScrobblingEnabled,
+                                                onCheckedChange = { enabled ->
+                                                    scope.launch { settingsDataStore.setLastfmScrobbleEnabled(enabled) }
+                                                }
+                                            )
+                                        } else {
+                                            SettingsActionItem(
+                                                icon = Icons.AutoMirrored.Filled.Login,
+                                                title = "Sign in to Last.fm",
+                                                subtitle = "Scrobble tracks you play",
+                                                onClick = { showLastFmLoginDialog = true }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.APPEARANCE -> {
+                                item {
+                                    SettingsSection(title = "Theme") {
+                                        SettingsSelectItem(
+                                            icon = Icons.Filled.Palette,
+                                            title = "Theme Mode",
+                                            value = appTheme,
+                                            onClick = { showThemeDialog = true }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.ColorLens,
+                                            title = "Dynamic Colors",
+                                            subtitle = "Match system wallpaper on Android 12+",
+                                            checked = dynamicColors,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setDynamicColor(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.DarkMode,
+                                            title = "Pure Black (AMOLED)",
+                                            subtitle = "True black background in dark mode",
+                                            checked = amoledBlack,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setPureBlack(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.BlurOn,
+                                            title = "Blur Player Backdrop",
+                                            subtitle = "Soft artwork blur on the player screen",
+                                            checked = blurPlayerBackground,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setBlurPlayerBackground(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.ScreenRotation,
+                                            title = "Allow Landscape",
+                                            subtitle = "Rotate screen across the app",
+                                            checked = allowRotation,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setAllowLandscape(enabled) }
+                                            }
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    SettingsSection(title = "Accent Color") {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp)
+                                        ) {
+                                            LazyRow(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                items(pastelAccents) { (name, color) ->
+                                                    val isSelected = accentColorName == name
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                scope.launch { settingsDataStore.setPastelAccent(name) }
+                                                            }
+                                                            .padding(4.dp)
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(36.dp)
+                                                                .clip(CircleShape)
+                                                                .background(color)
+                                                                .border(
+                                                                    width = if (isSelected) 2.dp else 1.dp,
+                                                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                                                    shape = CircleShape
+                                                                ),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            if (isSelected) {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.Check,
+                                                                    contentDescription = "Selected",
+                                                                    tint = Color.Black,
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(
+                                                            text = name,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.PLAYBACK -> {
+                                item {
+                                    SettingsSection(title = "Audio") {
+                                        SettingsSelectItem(
+                                            icon = Icons.Filled.HighQuality,
+                                            title = "Streaming Quality",
+                                            value = audioQuality,
+                                            onClick = { showAudioQualityDialog = true }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSelectItem(
+                                            icon = Icons.Filled.GraphicEq,
+                                            title = "Crossfade",
+                                            value = crossfadeDuration,
+                                            onClick = { showCrossfadeDialog = true }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.DataSaverOn,
+                                            title = "Data Saver",
+                                            subtitle = "Lower stream bitrate on mobile data",
+                                            checked = dataSaver,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setDataSaver(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.Vibration,
+                                            title = "Haptic Feedback",
+                                            subtitle = "Subtle vibrations on controls",
+                                            checked = hapticFeedback,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setHapticFeedback(enabled) }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.LYRICS_AI -> {
+                                item {
+                                    SettingsSection(title = "Lyrics & AI") {
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.Translate,
+                                            title = "Translate Lyrics",
+                                            subtitle = "Show translated lines below lyrics",
+                                            checked = translateLyrics,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setLyricsTranslateEnabled(enabled) }
+                                            }
+                                        )
+                                        if (translateLyrics) {
+                                            SettingsDivider()
+                                            SettingsSelectItem(
+                                                icon = Icons.Filled.Language,
+                                                title = "Target Language",
+                                                value = targetLanguage.uppercase(),
+                                                onClick = { showLanguageDialog = true }
+                                            )
+                                        }
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.AutoAwesome,
+                                            title = "Smart Playlist Import",
+                                            subtitle = "Clean track metadata with Gemini",
+                                            checked = optimizeImportWithGemini,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setUseGeminiImport(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.Key,
+                                            title = "Gemini API Key",
+                                            subtitle = if (geminiApiKey.isNullOrBlank()) "Not configured" else "Configured",
+                                            onClick = { showApiKeyDialog = true }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.DOWNLOADS -> {
+                                item {
+                                    SettingsSection(title = "Downloads & Cache") {
+                                        SettingsSelectItem(
+                                            icon = Icons.Filled.Download,
+                                            title = "Download Quality",
+                                            value = downloadQuality,
+                                            onClick = { showDownloadQualityDialog = true }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.Wifi,
+                                            title = "Wi-Fi Only",
+                                            subtitle = "Pause downloads on cellular data",
+                                            checked = wifiOnlyDownload,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setDownloadWifiOnly(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsSelectItem(
+                                            icon = Icons.Filled.Speed,
+                                            title = "Concurrent Downloads",
+                                            value = maxConcurrentDownloads,
+                                            onClick = { showConcurrentDownloadsDialog = true }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.CleaningServices,
+                                            title = "Clear Cache",
+                                            subtitle = "Remove temporary cached images and streams",
+                                            onClick = { showClearCacheDialog = true }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.SECURITY -> {
+                                item {
+                                    SettingsSection(title = "Security & Reset") {
+                                        SettingsSwitchItem(
+                                            icon = Icons.Filled.Fingerprint,
+                                            title = "Biometric Lock",
+                                            subtitle = "Require authentication on launch",
+                                            checked = biometricLock,
+                                            onCheckedChange = { enabled ->
+                                                scope.launch { settingsDataStore.setBiometricLock(enabled) }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.Restore,
+                                            title = "Reset Settings",
+                                            subtitle = "Restore default preferences",
+                                            onClick = { showResetSettingsDialog = true },
+                                            isDestructive = true
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsCategory.ABOUT -> {
+                                item {
+                                    SettingsSection(title = "Application") {
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.SystemUpdate,
+                                            title = "Check for Updates",
+                                            subtitle = if (isCheckingForUpdate) "Checking..." else "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                            onClick = {
+                                                if (!isCheckingForUpdate) {
+                                                    isCheckingForUpdate = true
+                                                    scope.launch {
+                                                        val config = updateManager.checkUpdate()
+                                                        isCheckingForUpdate = false
+                                                        if (config != null && config.latestVersionCode > BuildConfig.VERSION_CODE) {
+                                                            updateConfig = config
+                                                        } else {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Up to date (v${BuildConfig.VERSION_NAME})",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.Code,
+                                            title = "Source Code",
+                                            subtitle = "github.com/israrxy/Raazi",
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/israrxy/Raazi"))
+                                                context.startActivity(intent)
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.Person,
+                                            title = "Developer",
+                                            subtitle = "@israrxy on Instagram",
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy"))
+                                                context.startActivity(intent)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    // Dialogs
+    if (showAudioQualityDialog) {
+        SelectionDialog(
+            title = "Streaming Audio Quality",
+            options = listOf("Low", "Normal", "High", "Very High"),
+            selectedOption = audioQuality,
+            onOptionSelected = { selected ->
+                scope.launch { settingsDataStore.setAudioQuality(selected) }
+                showAudioQualityDialog = false
+            },
+            onDismiss = { showAudioQualityDialog = false }
+        )
+    }
 
-        SettingsSection(title = "APP") {
-            SettingsItem(
-                title = "Clear Cache",
-                subtitle = "Remove temporary artwork, lyrics, and network files",
-                value = cacheSize,
-                onClick = {
-                    try {
-                        context.cacheDir.deleteRecursively()
-                        cacheSize = calculateCacheSize(context.cacheDir)
-                        Toast.makeText(context, "Cache cleared!", Toast.LENGTH_SHORT).show()
-                    } catch (_: Exception) {
-                        Toast.makeText(context, "Failed to clear cache", Toast.LENGTH_SHORT).show()
-                    }
+    if (showDownloadQualityDialog) {
+        SelectionDialog(
+            title = "Download Quality",
+            options = listOf("Low", "Normal", "High", "Very High"),
+            selectedOption = downloadQuality,
+            onOptionSelected = { selected ->
+                scope.launch { settingsDataStore.setDownloadQuality(selected) }
+                showDownloadQualityDialog = false
+            },
+            onDismiss = { showDownloadQualityDialog = false }
+        )
+    }
+
+    if (showThemeDialog) {
+        SelectionDialog(
+            title = "Theme Mode",
+            options = listOf("System", "Light", "Dark"),
+            selectedOption = appTheme,
+            onOptionSelected = { selected ->
+                scope.launch { settingsDataStore.setThemeMode(selected) }
+                showThemeDialog = false
+            },
+            onDismiss = { showThemeDialog = false }
+        )
+    }
+
+    if (showCrossfadeDialog) {
+        val options = listOf("Off", "2s", "4s", "6s", "8s", "10s", "12s")
+        SelectionDialog(
+            title = "Crossfade",
+            options = options,
+            selectedOption = crossfadeDuration,
+            onOptionSelected = { selected ->
+                scope.launch {
+                    settingsDataStore.setCrossfade(selected != "Off")
+                    settingsDataStore.setCrossfadeDuration(selected)
                 }
-            )
+                showCrossfadeDialog = false
+            },
+            onDismiss = { showCrossfadeDialog = false }
+        )
+    }
 
-            SettingsItem(
-                title = "Reset Settings",
-                subtitle = "Restore defaults and clear the saved account session",
-                valueColor = ErrorRed,
-                onClick = {
-                    scope.launch {
-                        settingsDataStore.clearAll()
-                        YouTubeAccountSession.bootstrap(settingsDataStore)
-                        cacheSize = calculateCacheSize(context.cacheDir)
-                        Toast.makeText(context, "Settings reset!", Toast.LENGTH_SHORT).show()
+    if (showConcurrentDownloadsDialog) {
+        val options = listOf("1", "2", "3", "4", "5")
+        SelectionDialog(
+            title = "Concurrent Downloads",
+            options = options,
+            selectedOption = maxConcurrentDownloads,
+            onOptionSelected = { selected ->
+                scope.launch { settingsDataStore.setMaxConcurrentDownloads(selected) }
+                showConcurrentDownloadsDialog = false
+            },
+            onDismiss = { showConcurrentDownloadsDialog = false }
+        )
+    }
+
+    if (showLanguageDialog) {
+        SelectionDialog(
+            title = "Target Language",
+            options = listOf("en", "es", "fr", "de", "hi", "ur", "ar", "ja", "ko", "pt", "ru", "tr"),
+            selectedOption = targetLanguage,
+            onOptionSelected = { selected ->
+                scope.launch { settingsDataStore.setLyricsTranslateLang(selected) }
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
+        )
+    }
+
+    if (showClearCacheDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheDialog = false },
+            title = { Text("Clear Cache?", fontWeight = FontWeight.SemiBold) },
+            text = { Text("Cached thumbnails and temporary streams will be removed. Downloaded tracks are kept.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        runCatching { context.cacheDir.deleteRecursively() }
+                        Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                        showClearCacheDialog = false
                     }
+                ) {
+                    Text("Clear")
                 }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Developer credit — bottom of settings
-        val settingsCtx = LocalContext.current
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    RoundedCornerShape(20.dp)
-                )
-                .padding(vertical = 20.dp, horizontal = 16.dp)
-        ) {
-            AsyncImage(
-                model = DevInfo.PFP_URL,
-                contentDescription = "Developer profile picture",
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(MaterialTheme.colorScheme.surfaceDim, CircleShape)
-            )
-            Text(
-                text = DevInfo.NAME,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-            Text(
-                text = "aka @${DevInfo.HANDLE}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(top = 6.dp)
-            ) {
-                Text(
-                    text = "Instagram",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable { openLink(settingsCtx, DevInfo.INSTAGRAM_URL) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-                Text(
-                    text = "GitHub",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable { openLink(settingsCtx, DevInfo.GITHUB_URL) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-                Text(
-                    text = "Website",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable { openLink(settingsCtx, DevInfo.WEBSITE_URL) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheDialog = false }) {
+                    Text("Cancel")
+                }
             }
-        }
+        )
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Raazi v${BuildConfig.VERSION_NAME}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
+    if (showResetSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetSettingsDialog = false },
+            title = { Text("Reset Settings?", fontWeight = FontWeight.SemiBold) },
+            text = { Text("Restore all preferences to their default values?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            settingsDataStore.clearAll()
+                            Toast.makeText(context, "Settings reset", Toast.LENGTH_SHORT).show()
+                        }
+                        showResetSettingsDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSettingsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     if (showApiKeyDialog) {
+        var keyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey ?: "") }
         AlertDialog(
             onDismissRequest = { showApiKeyDialog = false },
-            title = { Text("Enter Gemini API Key") },
+            title = { Text("Gemini API Key", fontWeight = FontWeight.SemiBold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Paste your free Gemini API Key from Google AI Studio (ai.google.dev). Keys are stored safely in local preferences.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = tempApiKey,
-                        onValueChange = { tempApiKey = it },
-                        placeholder = { Text("AIzaSy...") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text("API Key") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        settingsDataStore.setGeminiApiKey(tempApiKey)
+                TextButton(
+                    onClick = {
+                        scope.launch { settingsDataStore.setGeminiApiKey(keyInput.trim()) }
                         showApiKeyDialog = false
                     }
-                }) {
+                ) {
                     Text("Save")
                 }
             },
@@ -738,47 +884,71 @@ fun SettingsScreen(
         )
     }
 
-    if (showLastFmDialog) {
+    if (showLastFmLoginDialog) {
+        var username by remember { mutableStateOf("") }
+        var password by remember { mutableStateOf("") }
+        var isLoggingIn by remember { mutableStateOf(false) }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
         AlertDialog(
-            onDismissRequest = { showLastFmDialog = false },
-            title = { Text("Connect Last.fm") },
+            onDismissRequest = { if (!isLoggingIn) showLastFmLoginDialog = false },
+            title = { Text("Sign in to Last.fm", fontWeight = FontWeight.SemiBold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Enter your Last.fm username and password. Credentials are used only to obtain a session key and are not stored.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
-                        value = lfmUser,
-                        onValueChange = { lfmUser = it },
+                        value = username,
+                        onValueChange = { username = it },
                         label = { Text("Username") },
-                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = lfmPass,
-                        onValueChange = { lfmPass = it },
+                        value = password,
+                        onValueChange = { password = it },
                         label = { Text("Password") },
-                        modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
                     )
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val ok = viewModel.connectLastFm(lfmUser.trim(), lfmPass)
-                        if (ok) showLastFmDialog = false
+                TextButton(
+                    enabled = !isLoggingIn && username.isNotBlank() && password.isNotBlank(),
+                    onClick = {
+                        isLoggingIn = true
+                        errorMessage = null
+                        scope.launch {
+                            val success = viewModel.connectLastFm(username.trim(), password)
+                            isLoggingIn = false
+                            if (success) {
+                                settingsDataStore.setLastfmScrobbleEnabled(true)
+                                showLastFmLoginDialog = false
+                            } else {
+                                errorMessage = "Invalid credentials or network error"
+                            }
+                        }
                     }
-                }) {
-                    Text("Connect")
+                ) {
+                    if (isLoggingIn) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Sign In")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLastFmDialog = false }) {
+                TextButton(
+                    enabled = !isLoggingIn,
+                    onClick = { showLastFmLoginDialog = false }
+                ) {
                     Text("Cancel")
                 }
             }
@@ -787,308 +957,303 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsHeroCard(
-    isYouTubeLoggedIn: Boolean,
-    accountName: String?,
-    themeMode: String,
-    audioQuality: String
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = if (isYouTubeLoggedIn) {
-                        accountName ?: "YouTube account connected"
-                    } else {
-                        "Private mode active"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (isYouTubeLoggedIn) {
-                        "Library sync and account-backed browse are available."
-                    } else {
-                        "Raazi stays local until you choose to connect a YouTube Music account."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                SettingsBadge(
-                    label = "Theme",
-                    value = themeMode
-                )
-                SettingsBadge(
-                    label = "Quality",
-                    value = audioQuality
-                )
-                SettingsBadge(
-                    label = "Account",
-                    value = if (isYouTubeLoggedIn) "Connected" else "Offline",
-                    highlight = isYouTubeLoggedIn
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsBadge(
-    label: String,
-    value: String,
-    highlight: Boolean = false
-) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = if (highlight) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        }
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (highlight) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    var isExpanded by remember { mutableStateOf(true) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { isExpanded = !isExpanded }
-                .padding(vertical = 12.dp, horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                ),
-                color = MaterialTheme.colorScheme.primary
-            )
-            Icon(
-                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isExpanded) "Collapse" else "Expand",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
-                ),
-                tonalElevation = 1.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                    content = content
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsItem(
-    title: String,
-    subtitle: String? = null,
-    value: String? = null,
-    valueColor: Color? = null,
-    showChevron: Boolean = false,
-    onClick: () -> Unit = {}
-) {
-    val resolvedValueColor = valueColor ?: MaterialTheme.colorScheme.primary
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 14.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (resolvedValueColor == ErrorRed) ErrorRed else MaterialTheme.colorScheme.onSurface
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        if (value != null) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                color = resolvedValueColor,
-                fontWeight = FontWeight.Medium
-            )
-        } else if (showChevron) {
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsToggle(
-    title: String,
-    subtitle: String? = null,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    enabled: Boolean = true
+private fun MinimalSettingsCategoryRow(
+    category: SettingsCategory,
+    valueText: String?,
+    onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .alpha(if (enabled) 1f else 0.4f)
-            .padding(vertical = 12.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Icon(
+            imageVector = category.icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
+                text = category.title,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = category.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+        if (!valueText.isNullOrBlank()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 110.dp)
             )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.size(13.dp)
         )
     }
 }
 
 @Composable
-private fun SettingsActionButton(
+fun SettingsSection(
     title: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    containerColor: Color = MaterialTheme.colorScheme.primary,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimary
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        ),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(title, fontWeight = FontWeight.Bold)
-    }
-}
-
-private fun calculateCacheSize(dir: File): String {
-    val size = calculateDirSize(dir)
-    return when {
-        size >= 1024 * 1024 * 1024 -> String.format("%.1f GB", size / (1024.0 * 1024 * 1024))
-        size >= 1024 * 1024 -> String.format("%.1f MB", size / (1024.0 * 1024))
-        size >= 1024 -> String.format("%.1f KB", size / 1024.0)
-        else -> "$size B"
-    }
-}
-
-private fun calculateDirSize(dir: File): Long {
-    var size = 0L
-    if (dir.isDirectory) {
-        dir.listFiles()?.forEach { file ->
-            size += if (file.isDirectory) calculateDirSize(file) else file.length()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(content = content)
         }
     }
-    return size
+}
+
+@Composable
+fun SettingsSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+fun SettingsSelectItem(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.size(13.dp)
+        )
+    }
+}
+
+@Composable
+fun SettingsActionItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+    isDestructive: Boolean = false
+) {
+    val contentColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    val iconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconColor,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = contentColor
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsAccountSummaryItem(
+    title: String,
+    subtitle: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Filled.AccountCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(28.dp)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+    )
+}
+
+@Composable
+fun SelectionDialog(
+    title: String,
+    options: List<String>,
+    selectedOption: String,
+    onOptionSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column {
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onOptionSelected(option) }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = option == selectedOption,
+                            onClick = { onOptionSelected(option) }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = option,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

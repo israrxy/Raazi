@@ -62,6 +62,8 @@ fun HomeScreen(
     val homeFeedState by viewModel.homeFeedState.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
+    val selectedInnerTubeChip by viewModel.selectedInnerTubeChip.collectAsState()
+    val playbackState by viewModel.playbackState.collectAsState()
 
     // Home batch-selection state
     var isHomeSelectionMode by remember { mutableStateOf(false) }
@@ -158,12 +160,47 @@ fun HomeScreen(
                 }
             }
 
+        val allCategoryChips = remember(homePage?.chips) {
+            val dynamicChips = homePage?.chips.orEmpty()
+            val defaultTitles = listOf("Podcasts", "Party", "Relax", "Workout", "Focus", "Romance", "Sleep")
+            val merged = mutableListOf<com.zionhuang.innertube.pages.HomePage.Chip>()
+            dynamicChips.forEach { chip ->
+                if (!chip.title.equals("All", ignoreCase = true)) {
+                    merged.add(chip)
+                }
+            }
+            defaultTitles.forEach { title ->
+                if (merged.none { it.title.equals(title, ignoreCase = true) }) {
+                    merged.add(
+                        com.zionhuang.innertube.pages.HomePage.Chip(
+                            title = title,
+                            endpoint = null,
+                            deselectEndPoint = null
+                        )
+                    )
+                }
+            }
+            merged
+        }
+
         if (homeFeedState.isLoading) {
             androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    HomeStatusHeader(
+                        activeCategoryTitle = selectedInnerTubeChip?.title,
+                        isRefreshing = true,
+                        onRefresh = { viewModel.refreshHomeSection("home_status") }
+                    )
+                    HomeCategoryFilterBar(
+                        chips = allCategoryChips,
+                        selectedChip = selectedInnerTubeChip,
+                        onSelectChip = { viewModel.selectFilterChip(it) }
+                    )
+                }
                 item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
                 items(4) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
                 item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
@@ -177,20 +214,26 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 HomeStatusHeader(
+                    activeCategoryTitle = selectedInnerTubeChip?.title,
                     isRefreshing = homeFeedState.isRefreshing,
                     onRefresh = { viewModel.refreshHomeSection("home_status") }
+                )
+                HomeCategoryFilterBar(
+                    chips = allCategoryChips,
+                    selectedChip = selectedInnerTubeChip,
+                    onSelectChip = { viewModel.selectFilterChip(it) }
                 )
                 Spacer(modifier = Modifier.height(56.dp))
                 Icon(
                     imageVector = Icons.Default.CloudOff,
                     contentDescription = null,
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Something went wrong",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -204,16 +247,22 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
-                    onClick = { viewModel.loadHomeContent() },
+                    onClick = {
+                        if (selectedInnerTubeChip != null) {
+                            viewModel.selectFilterChip(selectedInnerTubeChip)
+                        } else {
+                            viewModel.loadHomeContent()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 48.dp)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Refresh, null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Retry", fontWeight = FontWeight.Bold)
+                    Text("Retry", fontWeight = FontWeight.SemiBold)
                 }
             }
         } else if (homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
@@ -224,20 +273,26 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 HomeStatusHeader(
+                    activeCategoryTitle = selectedInnerTubeChip?.title,
                     isRefreshing = homeFeedState.isRefreshing,
                     onRefresh = { viewModel.refreshHomeSection("home_status") }
+                )
+                HomeCategoryFilterBar(
+                    chips = allCategoryChips,
+                    selectedChip = selectedInnerTubeChip,
+                    onSelectChip = { viewModel.selectFilterChip(it) }
                 )
                 Spacer(modifier = Modifier.height(64.dp))
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Search for a song",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -254,12 +309,12 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 32.dp)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Search, null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Search a Song", fontWeight = FontWeight.Bold)
+                    Text("Search a Song", fontWeight = FontWeight.SemiBold)
                 }
             }
         } else {
@@ -273,8 +328,14 @@ fun HomeScreen(
                     when (section.type) {
                         HomeSectionType.STATUS -> item {
                             HomeStatusHeader(
+                                activeCategoryTitle = selectedInnerTubeChip?.title,
                                 isRefreshing = homeFeedState.isRefreshing,
                                 onRefresh = { viewModel.refreshHomeSection(section.id) }
+                            )
+                            HomeCategoryFilterBar(
+                                chips = allCategoryChips,
+                                selectedChip = selectedInnerTubeChip,
+                                onSelectChip = { viewModel.selectFilterChip(it) }
                             )
                         }
 
@@ -354,8 +415,8 @@ fun HomeScreen(
                 }
                 
                 if (homePage?.continuation != null && !isLoadingMore) {
-                    item {
-                        LaunchedEffect(Unit) {
+                    item(key = "pagination_${homePage?.continuation}") {
+                        LaunchedEffect(homePage?.continuation) {
                             viewModel.loadMoreSections()
                         }
                     }
@@ -405,6 +466,7 @@ fun HomeScreen(
 
 @Composable
 fun HomeStatusHeader(
+    activeCategoryTitle: String? = null,
     isRefreshing: Boolean,
     onRefresh: () -> Unit
 ) {
@@ -421,59 +483,136 @@ fun HomeStatusHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        // Branding pill — top left
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                .clickable {
-                    val intent = android.content.Intent(
-                        android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse("https://israrxy.qzz.io")
-                    )
-                    context.startActivity(intent)
-                }
-                .padding(horizontal = 14.dp, vertical = 8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            // Branding pill — minimal flat surface
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://israrxy.qzz.io")
+                        )
+                        context.startActivity(intent)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(id = com.israrxy.raazi.R.drawable.raazi_logo),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Raazi",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.israrxy.raazi.R.drawable.raazi_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Raazi",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "@israrxy",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (isRefreshing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "@israrxy",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Greeting
         Text(
-            text = greeting,
-            style = MaterialTheme.typography.headlineLarge,
+            text = activeCategoryTitle ?: greeting,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
+    }
+}
+
+@Composable
+fun HomeCategoryFilterBar(
+    chips: List<com.zionhuang.innertube.pages.HomePage.Chip>,
+    selectedChip: com.zionhuang.innertube.pages.HomePage.Chip?,
+    onSelectChip: (com.zionhuang.innertube.pages.HomePage.Chip?) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+    ) {
+        item(key = "chip_all") {
+            val isAllSelected = selectedChip == null
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (isAllSelected) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onSelectChip(null) }
+            ) {
+                Text(
+                    text = "All",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (isAllSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (isAllSelected) {
+                        MaterialTheme.colorScheme.background
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+        items(chips, key = { "chip_${it.title}" }) { chip ->
+            val isSelected = selectedChip?.title.equals(chip.title, ignoreCase = true)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onSelectChip(chip) }
+            ) {
+                Text(
+                    text = chip.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.background
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
     }
 }
 
@@ -668,6 +807,7 @@ fun YouTubeFeedCard(
     ytItem: com.zionhuang.innertube.models.YTItem,
     onClick: () -> Unit
 ) {
+    val isArtist = ytItem is com.zionhuang.innertube.models.ArtistItem
     val title = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.title
         is com.zionhuang.innertube.models.AlbumItem -> ytItem.title
@@ -676,9 +816,12 @@ fun YouTubeFeedCard(
     }
     val subtitle = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Song"
-        is com.zionhuang.innertube.models.AlbumItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Album"
+        is com.zionhuang.innertube.models.AlbumItem -> listOfNotNull(
+            ytItem.artists?.joinToString(", ") { it.name },
+            ytItem.year?.toString()
+        ).joinToString(" • ").ifBlank { "Album" }
         is com.zionhuang.innertube.models.ArtistItem -> "Artist"
-        is com.zionhuang.innertube.models.PlaylistItem -> "Playlist"
+        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.author?.name ?: "Playlist"
     }
     val thumbnail = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.thumbnail
@@ -690,14 +833,17 @@ fun YouTubeFeedCard(
     Column(
         modifier = Modifier
             .width(160.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
+            .padding(4.dp),
+        horizontalAlignment = if (isArtist) Alignment.CenterHorizontally else Alignment.Start
     ) {
         AsyncImage(
-            model = thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
+            model = ThumbnailUtils.getHighQualityThumbnail(thumbnail ?: ""),
+            contentDescription = title,
             modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(152.dp)
+                .clip(if (isArtist) CircleShape else RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
@@ -708,14 +854,16 @@ fun YouTubeFeedCard(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (isArtist) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (isArtist) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
         )
     }
 }
@@ -726,7 +874,7 @@ private fun com.zionhuang.innertube.models.SongItem.toHomeMusicItem(): MusicItem
         title = title,
         artist = artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
         duration = (duration ?: 0) * 1000L,
-        thumbnailUrl = thumbnail,
+        thumbnailUrl = ThumbnailUtils.getHighQualityThumbnail(thumbnail),
         audioUrl = "",
         videoUrl = id,
         isLive = false
@@ -853,7 +1001,11 @@ fun KeepListeningPanel(
                     action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                     sourceType = sourceType
                 )
-                viewModel.playMusic(items.first())
+                if (items.size > 1) {
+                    viewModel.playPlaylist(items, 0)
+                } else {
+                    viewModel.playMusic(items.first())
+                }
                 onNavigateToPlayer()
             }
         )
@@ -876,7 +1028,7 @@ fun KeepListeningPanel(
                                 action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                                 sourceType = sourceType
                             )
-                            viewModel.playMusic(track)
+                            viewModel.playPlaylist(items, index + 1)
                             onNavigateToPlayer()
                         }
                     )
@@ -900,12 +1052,12 @@ fun KeepListeningResumeItem(
         modifier = Modifier
             .fillMaxWidth()
             .height(104.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
                 onLongClick = { onEnterSelection(musicItem) }
             ),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
         tonalElevation = 1.dp
     ) {
@@ -939,7 +1091,7 @@ fun KeepListeningResumeItem(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Resume",
+                    text = "Latest Played • Resume",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -1127,7 +1279,11 @@ fun QuickPicksPanel(
                     action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                     sourceType = sourceType
                 )
-                viewModel.playMusic(featuredTrack)
+                if (items.size > 1) {
+                    viewModel.playPlaylist(items, 0)
+                } else {
+                    viewModel.playMusic(featuredTrack)
+                }
                 onNavigateToPlayer()
             }
         )
@@ -1154,7 +1310,7 @@ fun QuickPicksPanel(
                                 action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                                 sourceType = sourceType
                             )
-                            viewModel.playMusic(track)
+                            viewModel.playPlaylist(items, quickPickIndex)
                             onNavigateToPlayer()
                         }
                     )

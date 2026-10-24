@@ -298,6 +298,26 @@ class MusicPlayerViewModel(
     private val _autoPlayQueue = MutableStateFlow<List<MusicItem>>(emptyList())
     val autoPlayQueue: StateFlow<List<MusicItem>> = _autoPlayQueue.asStateFlow()
 
+    private val _isLoadingAutoPlay = MutableStateFlow(false)
+    val isLoadingAutoPlay: StateFlow<Boolean> = _isLoadingAutoPlay.asStateFlow()
+
+    // InnerTube Home filter chip state
+    private val _selectedInnerTubeChip = MutableStateFlow<com.zionhuang.innertube.pages.HomePage.Chip?>(null)
+    val selectedInnerTubeChip: StateFlow<com.zionhuang.innertube.pages.HomePage.Chip?> = _selectedInnerTubeChip.asStateFlow()
+    private val _categorySections = MutableStateFlow<List<HomeSection>>(emptyList())
+    private val _isCategoryLoading = MutableStateFlow(false)
+
+    // Connectivity observer for intelligent offline/online transitions
+    private val connectivityObserver = com.israrxy.raazi.utils.ConnectivityObserver(app)
+    val isOnline: StateFlow<Boolean> = connectivityObserver.isOnline
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    private val _justReconnected = MutableStateFlow(false)
+    val justReconnected: StateFlow<Boolean> = _justReconnected.asStateFlow()
+
+    // Tracks whether the current playback queue originated from Search results
+    private val _isSearchQueue = MutableStateFlow(false)
+    val isSearchQueue: StateFlow<Boolean> = _isSearchQueue.asStateFlow()
+
     data class EqualizerState(
         val bands: Short = 0,
         val minLevel: Short = 0,
@@ -385,10 +405,12 @@ class MusicPlayerViewModel(
                     val oldState = _playbackState.value
                     _playbackState.value = state
                     
-                    // Fetch lyrics if track changed
+                    // Fetch lyrics, Up Next radio, and update history if track changed
                     if (state.currentTrack?.id != oldState.currentTrack?.id) {
                         state.currentTrack?.let { track ->
+                            addToHistoryInternal(track)
                             fetchLyrics(track)
+                            fetchAutoPlayQueue(track)
                         }
                     }
                 }
@@ -485,15 +507,13 @@ class MusicPlayerViewModel(
                 loadEqualizerState()
                 loadCustomPresets()
                 
-                // Create and store visualizer listener
+                // Create and store visualizer listener passively (activated on Equalizer screen)
                 playbackService?.let { musicService ->
-                    if (musicService.isVisualizerSupported()) {
-                        val vizListener: (ByteArray) -> Unit = { data ->
-                            _visualizerData.value = data
-                        }
-                        visualizerListener = vizListener
-                        musicService.addVisualizerListener(vizListener)
+                    val vizListener: (ByteArray) -> Unit = { data ->
+                        _visualizerData.value = data
                     }
+                    visualizerListener = vizListener
+                    musicService.addVisualizerListener(vizListener)
                 }
 
                 // Process any pending playback requests
@@ -833,6 +853,7 @@ class MusicPlayerViewModel(
     private var lastFmNowPlayingSent = false
 
     init {
+        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = false
         bindPlaybackService()
         loadHomeContent()
         observeDownloadEvents()
@@ -840,13 +861,70 @@ class MusicPlayerViewModel(
         initLastFmScrobbling()
         // Observe flows continuously for real-time updates (separate from loading)
         observeHistoryUpdates()
+        observeNetworkConnectivity()
+    }
+
+    private fun observeNetworkConnectivity() {
+        viewModelScope.launch {
+            var wasOffline = false
+            connectivityObserver.isOnline.collect { online ->
+                if (!online) {
+                    wasOffline = true
+                    // Clear blocking network errors so offline home content renders cleanly
+                    if (_error.value != null) {
+                        _error.value = null
+                    }
+                    rebuildHomeFeedState()
+                } else {
+                    if (wasOffline) {
+                        wasOffline = false
+                        _justReconnected.value = true
+                        launch {
+                            kotlinx.coroutines.delay(3000L)
+                            _justReconnected.value = false
+                        }
+                        // Intelligently reload everything when network comes back
+                        loadHomeContent()
+                        _playbackState.value.currentTrack?.let { track ->
+                            if (_lyrics.value == null) fetchLyrics(track)
+                            if (_autoPlayQueue.value.isEmpty()) fetchAutoPlayQueue(track)
+                            if (_playbackState.value.playlist.size <= 1) {
+                                playbackService?.let { service ->
+                                    launch(Dispatchers.IO) {
+                                        try {
+                                            val upNext = musicExtractor.getUpNext(track.id)
+                                                .filter { it.id.isNotBlank() && it.id != track.id }
+                                                .distinctBy { it.id }
+                                            if (upNext.isNotEmpty()) {
+                                                withContext(Dispatchers.Main) {
+                                                    service.addToQueue(upNext)
+                                                }
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                            }
+                        }
+                    } else if (_homePage.value == null && !_isLoading.value) {
+                        loadHomeContent()
+                    }
+                }
+            }
+        }
     }
 
     private fun observeHistoryUpdates() {
         viewModelScope.launch {
             try {
                 repository.playbackHistory.collect { history ->
-                    _keepListening.value = history.take(30)
+                    val activeTrack = _playbackState.value.currentTrack
+                    val merged = if (activeTrack != null) {
+                        (listOf(activeTrack) + history.filter { it.id != activeTrack.id }).take(30)
+                    } else {
+                        history.take(30)
+                    }
+                    _keepListening.value = merged
+                    rebuildHomeFeedState()
                 }
             } catch (e: Exception) {
                 Log.w("MusicVM", "History observation stopped", e)
@@ -856,6 +934,7 @@ class MusicPlayerViewModel(
             try {
                 repository.getForgottenFavorites().collect { forgotten ->
                     _forgottenFavorites.value = forgotten
+                    rebuildHomeFeedState()
                 }
             } catch (e: Exception) {
                 Log.w("MusicVM", "Forgotten favorites observation stopped", e)
@@ -967,14 +1046,28 @@ class MusicPlayerViewModel(
                     }
                 }
                 
-                // Load YouTube Music sections
+                // Load YouTube Music InnerTube sections (+ auto-fetch first continuation for a richer home feed)
                 try {
-                    com.zionhuang.innertube.YouTube.home().onSuccess { page ->
-                        _homePage.value = page
+                    val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                    com.zionhuang.innertube.YouTube.home(params = chipParams).onSuccess { page ->
+                        var finalPage = page
+                        val firstContinuation = page.continuation
+                        if (page.sections.size < 6 && firstContinuation != null) {
+                            com.zionhuang.innertube.YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
+                                finalPage = page.copy(
+                                    sections = page.sections + nextPage.sections,
+                                    continuation = nextPage.continuation
+                                )
+                            }
+                        }
+                        _homePage.value = finalPage
+                        _error.value = null
                         rebuildHomeFeedState()
                     }.onFailure {
                         Log.e("MusicVM", "InnerTube home failed", it)
-                        _error.value = "Failed to load home feed"
+                        if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
+                            _error.value = "Failed to load home feed"
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e("MusicVM", "Error loading InnerTube home", e)
@@ -982,7 +1075,9 @@ class MusicPlayerViewModel(
                 
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error loading home", e)
-                _error.value = "Failed to load content: ${e.message}"
+                if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
+                    _error.value = "Failed to load content: ${e.message}"
+                }
             } finally {
                 _isLoading.value = false
                 rebuildHomeFeedState()
@@ -1032,16 +1127,40 @@ class MusicPlayerViewModel(
 
     private fun rebuildHomeFeedState(isRefreshing: Boolean = _homeFeedState.value.isRefreshing) {
         val sections = mutableListOf<HomeSection>()
+        val activeCategoryChip = _selectedInnerTubeChip.value
 
         sections += HomeSection(
             id = "home_status",
-            title = "Home",
+            title = activeCategoryChip?.title ?: "Home",
             type = HomeSectionType.STATUS,
             sourceType = HomeInteractionEntity.SOURCE_LOCAL,
             actionLabel = "Refresh"
         )
 
-        val keepListeningItems = rankHomeMusicItems(_keepListening.value).take(7)
+        // When a category chip ("Podcasts", "Party", "Relax", "Workout", etc.) is active,
+        // display the dedicated screen for that category rather than the default "All" feed.
+        if (activeCategoryChip != null) {
+            sections += _categorySections.value
+            _homeFeedState.value = HomeFeedUiState(
+                isLoading = _isCategoryLoading.value && _categorySections.value.isEmpty(),
+                isRefreshing = isRefreshing || _isCategoryLoading.value,
+                sections = sections,
+                errorMessage = _error.value
+            )
+            return
+        }
+
+        // Keep Listening preserves strict chronological order (latest played / currently playing first)
+        val activeTrack = _playbackState.value.currentTrack
+        val orderedHistory = if (activeTrack != null) {
+            listOf(activeTrack) + _keepListening.value.filter { it.id != activeTrack.id }
+        } else {
+            _keepListening.value
+        }
+        val keepListeningItems = orderedHistory
+            .filter { it.id !in dismissedHomeItemIds }
+            .distinctBy { it.id }
+            .take(14)
         if (keepListeningItems.isNotEmpty()) {
             sections += HomeSection(
                 id = "keep_listening",
@@ -1053,7 +1172,7 @@ class MusicPlayerViewModel(
             )
         }
 
-        val quickPickItems = rankHomeMusicItems(_quickPicks.value).take(11)
+        val quickPickItems = rankHomeMusicItems(_quickPicks.value).take(12)
         if (quickPickItems.isNotEmpty()) {
             sections += HomeSection(
                 id = "quick_picks",
@@ -1425,17 +1544,195 @@ class MusicPlayerViewModel(
     }
 
     fun selectFilterChip(chip: com.zionhuang.innertube.pages.HomePage.Chip?) {
+        val targetChip = if (chip == null || chip.title.equals("All", ignoreCase = true) || _selectedInnerTubeChip.value?.title == chip.title) {
+            null
+        } else {
+            chip
+        }
+        _selectedInnerTubeChip.value = targetChip
+
+        if (targetChip == null) {
+            _categorySections.value = emptyList()
+            _isCategoryLoading.value = false
+            rebuildHomeFeedState(isRefreshing = true)
+            viewModelScope.launch {
+                try {
+                    val existingChips = _homePage.value?.chips
+                    com.zionhuang.innertube.YouTube.home(params = null).onSuccess { defaultPage ->
+                        _homePage.value = if (defaultPage.chips.isNullOrEmpty() && !existingChips.isNullOrEmpty()) {
+                            defaultPage.copy(chips = existingChips)
+                        } else {
+                            defaultPage
+                        }
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    rebuildHomeFeedState(isRefreshing = false)
+                }
+            }
+            return
+        }
+
+        // Dedicated Category Screen Reload ("Podcasts", "Party", "Relax", "Workout", etc.)
+        _categorySections.value = emptyList()
+        _isCategoryLoading.value = true
+        rebuildHomeFeedState(isRefreshing = true)
+
         viewModelScope.launch {
+            val builtSections = mutableListOf<HomeSection>()
+            val categoryTitle = targetChip.title.trim()
+            val lowerTitle = categoryTitle.lowercase()
+
             try {
-                com.zionhuang.innertube.YouTube.home(params = chip?.endpoint?.params).onSuccess { filteredPage ->
-                    _homePage.value = filteredPage
-                    rebuildHomeFeedState()
-                    android.util.Log.d("MusicVM", "Filtered home with chip: ${chip?.title}")
-                }.onFailure {
-                    android.util.Log.e("MusicVM", "Filter chip failed", it)
+                // 1. If the chip came with InnerTube endpoint params, fetch the InnerTube filtered home page
+                val chipParams = targetChip.endpoint?.params
+                if (!chipParams.isNullOrBlank()) {
+                    runCatching {
+                        com.zionhuang.innertube.YouTube.home(params = chipParams).onSuccess { filteredPage ->
+                            filteredPage.sections.forEachIndexed { idx, section ->
+                                val items = section.items
+                                    .filter { homeYouTubeItemId(it) !in dismissedHomeItemIds }
+                                    .take(14)
+                                    .map(HomeFeedItem::YouTube)
+                                if (items.isNotEmpty()) {
+                                    builtSections += HomeSection(
+                                        id = "cat_yt_${lowerTitle}_$idx",
+                                        title = section.title,
+                                        type = HomeSectionType.YOUTUBE_RAIL,
+                                        sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                        items = items
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Always populate dedicated category rails so "Podcasts", "Party", etc. have rich content
+                when {
+                    lowerTitle.contains("podcast") -> {
+                        runCatching {
+                            val topEpisodes = repository.searchMusic("popular podcast episode").items.take(14)
+                            if (topEpisodes.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_podcast_top",
+                                    title = "Top Podcast Episodes",
+                                    type = HomeSectionType.QUICK_PICKS,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = topEpisodes.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val podcastShows = repository.getMoodPlaylists("Podcasts").take(12)
+                            if (podcastShows.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_podcast_shows",
+                                    title = "Featured Podcast Shows",
+                                    type = HomeSectionType.MOOD_PLAYLISTS,
+                                    sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                                    items = podcastShows.map(HomeFeedItem::PlaylistResult)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val talkEpisodes = repository.searchMusic("tech culture stories podcast").items.take(12)
+                            if (talkEpisodes.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_podcast_stories",
+                                    title = "Stories, Tech & Conversations",
+                                    type = HomeSectionType.RECOMMENDATION,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = talkEpisodes.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                    }
+
+                    lowerTitle.contains("party") -> {
+                        runCatching {
+                            val partyHits = repository.searchMusic("party hits dance club anthems").items.take(14)
+                            if (partyHits.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_party_hits",
+                                    title = "Party Anthems",
+                                    type = HomeSectionType.QUICK_PICKS,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = partyHits.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val partyPlaylists = repository.getMoodPlaylists("Party").take(12)
+                            if (partyPlaylists.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_party_playlists",
+                                    title = "Party Mixes & Playlists",
+                                    type = HomeSectionType.MOOD_PLAYLISTS,
+                                    sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                                    items = partyPlaylists.map(HomeFeedItem::PlaylistResult)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val clubRemixes = repository.searchMusic("upbeat party remix club").items.take(12)
+                            if (clubRemixes.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_party_remixes",
+                                    title = "Club & Remix Energy",
+                                    type = HomeSectionType.RECOMMENDATION,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = clubRemixes.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                    }
+
+                    else -> {
+                        runCatching {
+                            val moodTracks = repository.searchMusic("$categoryTitle music hits").items.take(14)
+                            if (moodTracks.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_${lowerTitle}_tracks",
+                                    title = "Top $categoryTitle Picks",
+                                    type = HomeSectionType.QUICK_PICKS,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = moodTracks.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val moodPlaylists = repository.getMoodPlaylists(categoryTitle).take(12)
+                            if (moodPlaylists.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_${lowerTitle}_playlists",
+                                    title = "$categoryTitle Playlists",
+                                    type = HomeSectionType.MOOD_PLAYLISTS,
+                                    sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                                    items = moodPlaylists.map(HomeFeedItem::PlaylistResult)
+                                )
+                            }
+                        }
+                        runCatching {
+                            val moodMix = repository.searchMusic("$categoryTitle vibes mix").items.take(12)
+                            if (moodMix.isNotEmpty()) {
+                                builtSections += HomeSection(
+                                    id = "cat_${lowerTitle}_mix",
+                                    title = "$categoryTitle Essentials",
+                                    type = HomeSectionType.RECOMMENDATION,
+                                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                                    items = moodMix.map(HomeFeedItem::Music)
+                                )
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MusicVM", "Error selecting filter chip", e)
+                android.util.Log.e("MusicVM", "Error loading category feed for $categoryTitle", e)
+            } finally {
+                _categorySections.value = builtSections
+                _isCategoryLoading.value = false
+                rebuildHomeFeedState(isRefreshing = false)
             }
         }
     }
@@ -1530,13 +1827,23 @@ class MusicPlayerViewModel(
     fun playMusic(musicItem: MusicItem) {
         viewModelScope.launch {
             try {
+                _isSearchQueue.value = false
                 // Update current track ID for format info tracking
                 _currentTrackId.value = musicItem.id
 
-                // Add to history
+                // Optimistically update UI state before delegating to service
+                _playbackState.value = _playbackState.value.copy(
+                    playlist = listOf(musicItem),
+                    currentIndex = 0,
+                    currentTrack = musicItem,
+                    isLoading = true
+                )
+
+                // Add to history immediately and update Home Keep Listening section
                 addToHistoryInternal(musicItem)
 
-                // Trigger background fetch for recommendation engine
+                // Fetch Up Next autoplay queue and related recommendations in background
+                fetchAutoPlayQueue(musicItem)
                 launch(Dispatchers.IO) {
                     try {
                         repository.fetchAndSaveRelated(musicItem)
@@ -1545,8 +1852,13 @@ class MusicPlayerViewModel(
                     }
                 }
 
-                // Delegate completely to service which handles local files and Raazi resolution
-                playbackService?.playMusic(musicItem)
+                // Delegate to service or queue if service is still binding
+                if (isServiceBound && playbackService != null) {
+                    playbackService?.playMusic(musicItem)
+                } else {
+                    pendingPlaybackQueue.add(PendingPlayback.Single(musicItem))
+                    bindPlaybackService()
+                }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error playing music: ${musicItem.title}", e)
                 _error.value = "Failed to play: ${e.message}"
@@ -1555,8 +1867,15 @@ class MusicPlayerViewModel(
     }
     
     private fun addToHistoryInternal(musicItem: MusicItem) {
+        // Optimistically place the playing track at the very front of Keep Listening
+        _keepListening.value = (listOf(musicItem) + _keepListening.value.filter { it.id != musicItem.id }).take(30)
+        rebuildHomeFeedState()
         viewModelScope.launch {
-            repository.addToHistory(musicItem)
+            try {
+                repository.addToHistory(musicItem)
+            } catch (e: Exception) {
+                Log.w("MusicVM", "Failed to persist track to history", e)
+            }
         }
     }
 
@@ -1749,8 +2068,9 @@ class MusicPlayerViewModel(
     }
 
     fun playFromPlaylist(index: Int) {
-        _currentPlaylist.value?.items?.getOrNull(index)?.let { musicItem ->
-            playMusic(musicItem)
+        val items = _currentPlaylist.value?.items ?: return
+        if (index in items.indices) {
+            playPlaylist(items, index)
         }
     }
 
@@ -1798,6 +2118,14 @@ class MusicPlayerViewModel(
         try { playbackService?.playNext(items) } catch (e: Exception) { Log.w("MusicVM", "playNext failed", e) }
     }
 
+    fun playPause() {
+        if (_playbackState.value.isPlaying) {
+            pause()
+        } else {
+            resume()
+        }
+    }
+
     // ---- Queue management (YouTube Music style) ----
 
     fun playFromQueue(upcomingIndex: Int) {
@@ -1805,9 +2133,17 @@ class MusicPlayerViewModel(
         try { playbackService?.jumpToIndex(abs) } catch (e: Exception) { Log.w("MusicVM", "playFromQueue failed", e) }
     }
 
+    fun jumpToQueueIndex(absoluteIndex: Int) {
+        try { playbackService?.jumpToIndex(absoluteIndex) } catch (e: Exception) { Log.w("MusicVM", "jumpToQueueIndex failed", e) }
+    }
+
     fun removeFromUpcoming(upcomingIndex: Int) {
         val abs = _playbackState.value.currentIndex + 1 + upcomingIndex
         try { playbackService?.removeFromQueue(abs) } catch (e: Exception) { Log.w("MusicVM", "removeFromUpcoming failed", e) }
+    }
+
+    fun removeFromQueue(absoluteIndex: Int) {
+        try { playbackService?.removeFromQueue(absoluteIndex) } catch (e: Exception) { Log.w("MusicVM", "removeFromQueue failed", e) }
     }
 
     fun moveUpcoming(fromUpcoming: Int, toUpcoming: Int) {
@@ -1815,44 +2151,70 @@ class MusicPlayerViewModel(
         try { playbackService?.moveQueueItem(base + fromUpcoming, base + toUpcoming) } catch (e: Exception) { Log.w("MusicVM", "moveUpcoming failed", e) }
     }
 
+    fun moveQueueItem(fromAbsolute: Int, toAbsolute: Int) {
+        try { playbackService?.moveQueueItem(fromAbsolute, toAbsolute) } catch (e: Exception) { Log.w("MusicVM", "moveQueueItem failed", e) }
+    }
+
     fun dismissQueue() {
         try { playbackService?.clearUpcoming() } catch (e: Exception) { Log.w("MusicVM", "dismissQueue failed", e) }
+    }
+
+    fun clearUpcomingQueue() {
+        dismissQueue()
     }
 
     fun setQueueOrder(newOrder: List<MusicItem>) {
         try { playbackService?.setQueueOrder(newOrder) } catch (e: Exception) { Log.w("MusicVM", "setQueueOrder failed", e) }
     }
 
+    fun playFromAutoPlay(autoPlayIndex: Int) {
+        val currentQueue = _playbackState.value.playlist
+        val queuedIds = currentQueue.map { it.id }.toSet()
+        val currentTrackId = _playbackState.value.currentTrack?.id
+        val extraTracks = _autoPlayQueue.value.filter { it.id !in queuedIds && it.id != currentTrackId }
+        val target = extraTracks.getOrNull(autoPlayIndex) ?: return
+        val remaining = extraTracks.drop(autoPlayIndex)
+        addToQueue(remaining)
+        val newPlaylist = playbackService?.getPlaybackState()?.playlist ?: (currentQueue + remaining)
+        val targetIdx = newPlaylist.indexOfFirst { it.id == target.id }
+        if (targetIdx >= 0) {
+            jumpToQueueIndex(targetIdx)
+        } else {
+            playMusic(target)
+        }
+    }
+
+    fun fetchAutoPlayQueue() {
+        val track = _playbackState.value.currentTrack ?: return
+        fetchAutoPlayQueue(track)
+    }
+
     /** Fetch the real YouTube Music "Up next" autoplay queue (radio) for a song via InnerTube. */
     fun fetchAutoPlayQueue(track: MusicItem) {
         viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingAutoPlay.value = true
             try {
-                val endpoint = com.zionhuang.innertube.models.WatchEndpoint(
-                    videoId = track.id,
-                    playlistId = "RDAMVM" + track.id
-                )
-                val result = com.zionhuang.innertube.YouTube.next(endpoint).getOrNull()
-                val items = result?.items?.map { song ->
-                    val id = song.id
-                    MusicItem(
-                        id = id,
-                        title = song.title,
-                        artist = song.artists?.joinToString(", ") { it.name ?: "" }
-                            .orEmpty().ifBlank { "Unknown Artist" },
-                        duration = (song.duration?.toLong() ?: 0L) * 1000L,
-                        thumbnailUrl = song.thumbnail,
-                        audioUrl = "",
-                        videoUrl = id,
-                        isLive = false,
-                        isFavorite = false,
-                        contentType = MusicContentType.SONG,
-                        setVideoId = null
-                    )
-                }.orEmpty()
-                _autoPlayQueue.value = items
+                val upNextItems = musicExtractor.getUpNext(track.id)
+                    .filter { it.id.isNotBlank() && it.id != track.id }
+                    .distinctBy { it.id }
+                if (upNextItems.isNotEmpty()) {
+                    _autoPlayQueue.value = upNextItems
+                    // If the active playlist only has 1 track, also append to the service queue
+                    withContext(Dispatchers.Main) {
+                        val state = _playbackState.value
+                        if (state.currentTrack?.id == track.id && state.playlist.size <= 1) {
+                            val toAdd = if (state.isShuffleEnabled) upNextItems.shuffled() else upNextItems
+                            playbackService?.addToQueue(toAdd)
+                        }
+                    }
+                } else {
+                    val related = repository.getRelatedTracks(track.id).first()
+                    _autoPlayQueue.value = related.filter { it.id != track.id }
+                }
             } catch (e: Exception) {
                 Log.w("MusicVM", "fetchAutoPlayQueue failed", e)
-                _autoPlayQueue.value = emptyList()
+            } finally {
+                _isLoadingAutoPlay.value = false
             }
         }
     }
@@ -2145,26 +2507,61 @@ class MusicPlayerViewModel(
 
     fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0) {
         if (items.isEmpty()) return
-        
-        // Delegate to service which now handles stream extraction internally
-        playbackService?.playPlaylist(items, startIndex)
-        
+        _isSearchQueue.value = false
+        playPlaylistInternal(items, startIndex)
+    }
+
+    /**
+     * Plays a list of search result tracks and locks the queue to only show those search results
+     * (without injecting unrelated radio/autoplay suggestions).
+     */
+    fun playSearchQueue(items: List<MusicItem>, startIndex: Int = 0) {
+        if (items.isEmpty()) return
+        val distinctItems = items.distinctBy { it.id }
+        val targetItem = items.getOrNull(startIndex)
+        val resolvedIndex = if (targetItem != null) {
+            distinctItems.indexOfFirst { it.id == targetItem.id }.coerceAtLeast(0)
+        } else {
+            startIndex.coerceIn(0, distinctItems.lastIndex)
+        }
+        _isSearchQueue.value = true
+        _autoPlayQueue.value = emptyList()
+        playPlaylistInternal(distinctItems, resolvedIndex)
+    }
+
+    private fun playPlaylistInternal(items: List<MusicItem>, startIndex: Int = 0) {
+        if (items.isEmpty()) return
+        val safeStartIndex = startIndex.coerceIn(0, items.lastIndex)
+        val initialTrack = items.getOrNull(safeStartIndex)
+        _currentTrackId.value = initialTrack?.id
+
+        // Optimistically update UI state BEFORE delegating to service so we don't
+        // overwrite the service's synchronous stateListener callback (e.g., shuffle/loading).
+        _playbackState.value = _playbackState.value.copy(
+            playlist = items,
+            currentIndex = safeStartIndex,
+            currentTrack = initialTrack,
+            isLoading = true
+        )
+
+        // Delegate to service which handles stream extraction internally
+        if (isServiceBound && playbackService != null) {
+            playbackService?.playPlaylist(items, safeStartIndex)
+        } else {
+            pendingPlaybackQueue.add(PendingPlayback.Playlist(items, safeStartIndex))
+            bindPlaybackService()
+        }
+
         // Add currently playing track to history
-        items.getOrNull(startIndex)?.let { currentTrack ->
+        initialTrack?.let { currentTrack ->
             addToHistoryInternal(currentTrack)
             // Trigger background fetch for recommendations
             viewModelScope.launch(Dispatchers.IO) {
                 repository.fetchAndSaveRelated(currentTrack)
             }
         }
-        
-        // Optimistically update UI state
-        _playbackState.value = _playbackState.value.copy(
-            playlist = items,
-            currentIndex = startIndex,
-            currentTrack = items.getOrNull(startIndex)
-        )
-        android.util.Log.d("MusicVM", "Playing playlist from index $startIndex with ${items.size} total songs")
+
+        android.util.Log.d("MusicVM", "Playing playlist from index $safeStartIndex with ${items.size} total songs (isSearchQueue=${_isSearchQueue.value})")
     }
 
     // User Playlist Management
@@ -2366,6 +2763,10 @@ class MusicPlayerViewModel(
         return playbackService?.togglePlaybackMode() ?: false
     }
 
+    fun setPlaybackMediaMode(mode: com.israrxy.raazi.model.PlaybackMediaMode): Boolean {
+        return playbackService?.setPlaybackMediaMode(mode) ?: false
+    }
+
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
         viewModelScope.launch {
             settingsDataStore.setVideoQuality(quality.wireName)
@@ -2374,49 +2775,16 @@ class MusicPlayerViewModel(
     }
 
     fun toggleAudioSource() {
-        val current = com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled
-        val next = when (current) {
-            null -> false  // settings-based -> force YouTube
-            false -> true  // YouTube -> force FLAC
-            true -> null   // FLAC -> settings-based
-        }
-        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = next
-        _audioSourceLabel.value = when (next) {
-            null -> "Auto"
-            false -> "YouTube"
-            true -> "Hi-Res FLAC"
-        }
-        // Clear cache for current track and re-play with new source
-        val track = playbackService?.getCurrentTrack()
-        if (track != null) {
-            com.israrxy.raazi.player.StreamResolver.clearCacheForVideoId(track.videoUrl)
-            playbackService?.playMusic(track)
-        }
+        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = false
+        _audioSourceLabel.value = "YouTube"
     }
 
     fun setAudioSource(mode: String) {
-        val next: Boolean? = when (mode) {
-            "Auto" -> null
-            "YouTube" -> false
-            "Hi-Res" -> true
-            else -> null
-        }
-        val current = com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled
-        if (current == next) return
-        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = next
-        _audioSourceLabel.value = when (next) {
-            null -> "Auto"
-            false -> "YouTube"
-            true -> "Hi-Res FLAC"
-        }
-        val track = playbackService?.getCurrentTrack()
-        if (track != null) {
-            com.israrxy.raazi.player.StreamResolver.clearCacheForVideoId(track.videoUrl)
-            playbackService?.playMusic(track)
-        }
+        com.israrxy.raazi.player.StreamResolver.sessionFlacEnabled = false
+        _audioSourceLabel.value = "YouTube"
     }
 
-    private val _audioSourceLabel = MutableStateFlow("Auto")
+    private val _audioSourceLabel = MutableStateFlow("YouTube")
     val audioSourceLabel: StateFlow<String> = _audioSourceLabel.asStateFlow()
 
     fun setVideoSurface(surface: android.view.Surface?) {
@@ -2506,6 +2874,10 @@ class MusicPlayerViewModel(
                 _ringtoneState.value = RingtoneState.Error("Failed to set ringtone: ${e.message}")
             }
         }
+    }
+
+    fun restoreRingtoneReadyState(filePath: String, durationMs: Long) {
+        _ringtoneState.value = RingtoneState.Ready(filePath, durationMs)
     }
 
     fun resetRingtoneState() {

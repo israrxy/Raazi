@@ -72,6 +72,7 @@ class MusicPlaybackService : Service() {
     private var pendingNotificationTrackId: String? = null
     @Volatile private var isDestroyed = false
     private var audioEffectsInitRetryCount = 0
+    private var currentTrackRetryCount = 0
     
     // Playback modes
     private var isShuffleEnabled = false
@@ -102,9 +103,15 @@ class MusicPlaybackService : Service() {
         
         val dataSourceFactory = createDataSourceFactory()
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val playerAudioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
         
         exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setAudioAttributes(playerAudioAttributes, false)
+            .setHandleAudioBecomingNoisy(true)
             .build()
             
         // Initialize audio effects after player is built
@@ -208,6 +215,7 @@ class MusicPlaybackService : Service() {
                 // Sync current index with ExoPlayer
                 if (mediaItem != null) {
                     currentIndex = exoPlayer.currentMediaItemIndex
+                    currentTrackRetryCount = 0
                     val tag = mediaItem.localConfiguration?.tag
                     if (tag is MusicItem) {
                          currentAlbumArt = null
@@ -216,7 +224,6 @@ class MusicPlaybackService : Service() {
                          loadAlbumArt(tag.thumbnailUrl)
                          // Notify track changed
                          notifyTrackChanged(tag)
-                         preloadAdjacentTracks(currentIndex)
                     }
                     updateMediaSessionState()
                     notifyPlaybackState(refreshNotification = true)
@@ -224,12 +231,15 @@ class MusicPlaybackService : Service() {
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
+                if (playbackState == Player.STATE_READY) {
+                    currentTrackRetryCount = 0
+                    preloadAdjacentTracks(currentIndex)
+                } else if (playbackState == Player.STATE_ENDED) {
                     // Playlist ended
                     notifyPlaybackState()
                 }
                 updateMediaSessionState()
-                notifyPlaybackState()
+                notifyPlaybackState(refreshNotification = playbackState == Player.STATE_READY)
             }
             
             override fun onPositionDiscontinuity(
@@ -243,9 +253,49 @@ class MusicPlaybackService : Service() {
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 android.util.Log.e(TAG, "ExoPlayer error: ${error.errorCodeName}", error)
-                // Auto-skip to next on playback errors instead of crashing
+                val currentTrack = getCurrentTrack()
+                if (currentTrack != null) {
+                    StreamResolver.clearCacheForVideoId(currentTrack.id)
+                    if (currentTrack.videoUrl.isNotBlank()) {
+                        StreamResolver.clearCacheForVideoId(currentTrack.videoUrl)
+                    }
+                }
+
+                if (currentTrack != null && currentTrackRetryCount < 2) {
+                    currentTrackRetryCount++
+                    android.util.Log.w(
+                        TAG,
+                        "Retrying track '${currentTrack.title}' (attempt $currentTrackRetryCount/2) after ${error.errorCodeName}"
+                    )
+                    serviceScope.launch {
+                        delay(300L)
+                        if (!isDestroyed && currentPlaylist.isNotEmpty()) {
+                            val safeIndex = currentIndex.coerceIn(0, currentPlaylist.lastIndex)
+                            val refreshedTrack = currentPlaylist[safeIndex].copy(audioUrl = "")
+                            val updatedList = currentPlaylist.toMutableList()
+                            updatedList[safeIndex] = refreshedTrack
+                            currentPlaylist = updatedList
+
+                            val mediaItem = createMediaItem(refreshedTrack)
+                            if (safeIndex < exoPlayer.mediaItemCount) {
+                                exoPlayer.replaceMediaItem(safeIndex, mediaItem)
+                            } else {
+                                val mediaItems = currentPlaylist.map { createMediaItem(it) }
+                                exoPlayer.setMediaItems(mediaItems, safeIndex, 0L)
+                            }
+                            notifyPlaybackState(isLoading = true, refreshNotification = true)
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                            exoPlayer.play()
+                            requestAudioFocus()
+                        }
+                    }
+                    return
+                }
+
+                // Auto-skip to next on unrecoverable playback errors
                 serviceScope.launch {
-                    delay(500L) // Brief delay before auto-skip
+                    delay(500L)
                     if (currentPlaylist.size > 1 && currentIndex < currentPlaylist.lastIndex) {
                         android.util.Log.w(TAG, "Auto-skipping to next track after error")
                         next()
@@ -266,7 +316,7 @@ class MusicPlaybackService : Service() {
             val currentPosition = try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L } catch (_: Exception) { 0L }
             val shouldKeepPlaying = try { if (::exoPlayer.isInitialized) exoPlayer.playWhenReady else false } catch (_: Exception) { false }
             isShuffleEnabled = !isShuffleEnabled
-            if (currentPlaylist.isNotEmpty()) {
+            if (currentPlaylist.size > 1) {
                 if (isShuffleEnabled) {
                     val remaining = originalPlaylist.filter { it.id != currentTrack?.id }.shuffled()
                     currentPlaylist = if (currentTrack != null) listOf(currentTrack) + remaining else remaining
@@ -275,15 +325,31 @@ class MusicPlaybackService : Service() {
                     currentPlaylist = originalPlaylist
                     currentIndex = currentPlaylist.indexOfFirst { it.id == currentTrack?.id }.coerceAtLeast(0)
                 }
-                // Reorder the ExoPlayer timeline in place. We keep the currently playing
-                // item where it is and only swap the *upcoming* items, so playback is never
-                // interrupted (the old code called setMediaItems, which re-resolved the stream
-                // and caused the ~1s pause/glitch when toggling shuffle).
                 reorderQueueInPlace(
                     targetIndex = currentIndex,
                     targetPositionMs = currentPosition,
                     shouldPlay = shouldKeepPlaying
                 )
+            } else if (isShuffleEnabled && currentTrack != null) {
+                val targetId = currentTrack.id
+                serviceScope.launch(Dispatchers.IO) {
+                    try {
+                        val upNext = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+                            .getUpNext(targetId)
+                            .filter { it.id.isNotBlank() && it.id != targetId }
+                            .distinctBy { it.id }
+                            .shuffled()
+                        if (upNext.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                if (!isDestroyed && getCurrentTrack()?.id == targetId && currentPlaylist.size <= 1) {
+                                    addToQueue(upNext)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Shuffle radio populate failed: ${e.message}")
+                    }
+                }
             }
             notifyPlaybackState(refreshNotification = true)
         } catch (e: Exception) {
@@ -434,8 +500,20 @@ class MusicPlaybackService : Service() {
     }
 
     private fun startForegroundService() {
-        val notification = createNotification(getPlaybackState())
-        startForeground(notificationId, notification)
+        try {
+            val notification = createNotification(getPlaybackState())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    notificationId,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(notificationId, notification)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Could not start foreground service: ${e.message}")
+        }
     }
 
     private fun createContentPendingIntent(): PendingIntent {
@@ -766,31 +844,61 @@ class MusicPlaybackService : Service() {
         }
         
         playExoPlayerPlaylist(currentPlaylist, currentIndex)
+
+        // Proactively populate Up Next radio tracks when playing a single song
+        if (currentPlaylist.size <= 1) {
+            val targetId = musicItem.id
+            serviceScope.launch(Dispatchers.IO) {
+                try {
+                    val upNext = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+                        .getUpNext(targetId)
+                        .filter { it.id.isNotBlank() && it.id != targetId }
+                        .distinctBy { it.id }
+                    if (upNext.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            if (!isDestroyed && getCurrentTrack()?.id == targetId && currentPlaylist.size <= 1) {
+                                val tracksToQueue = if (isShuffleEnabled) upNext.shuffled() else upNext
+                                addToQueue(tracksToQueue)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w(TAG, "Auto-populate Up Next queue failed for $targetId: ${e.message}")
+                }
+            }
+        }
     }
 
     private fun createMediaItem(musicItem: MusicItem): androidx.media3.common.MediaItem {
-        val source = musicItem.videoUrl.ifBlank { musicItem.id }
+        val rawSource = musicItem.videoUrl.ifBlank { musicItem.id }
+        val isExternalPlatform = rawSource.contains("soundcloud.com", ignoreCase = true) ||
+            rawSource.contains("bandcamp.com", ignoreCase = true)
+        val isYouTubeId = musicItem.id.matches(Regex("^[a-zA-Z0-9_-]{11}$"))
+        val source = when {
+            isExternalPlatform -> rawSource
+            isYouTubeId && (rawSource.isBlank() || rawSource == "watch" || !rawSource.startsWith("http")) -> musicItem.id
+            else -> rawSource.ifBlank { musicItem.id }
+        }
+
         val sourceUri = when {
             musicItem.localPath != null && java.io.File(musicItem.localPath).exists() -> {
                 android.net.Uri.fromFile(java.io.File(musicItem.localPath)).toString()
             }
-            musicItem.audioUrl.isDirectPlayableAudioUrl() -> {
-                musicItem.audioUrl
-            }
             else -> {
-                buildResolverUri(source, musicItem.title, musicItem.artist, musicItem.isrc)
+                buildResolverUri(source, musicItem.id, musicItem.title, musicItem.artist, musicItem.isrc)
             }
         }
 
         return androidx.media3.common.MediaItem.Builder()
             .setUri(sourceUri)
-            .setMediaId(source)
+            .setMediaId(musicItem.id.ifBlank { source })
             .setTag(musicItem)
             .build()
     }
 
     private fun buildResolverUri(
         source: String,
+        trackId: String,
         title: String,
         artist: String,
         isrc: String?
@@ -799,8 +907,11 @@ class MusicPlaybackService : Service() {
             .scheme("raazi")
             .authority("youtube")
             .appendPath(source)
+            .appendQueryParameter("id", trackId)
             .appendQueryParameter("title", title)
             .appendQueryParameter("artist", artist)
+            .appendQueryParameter("mode", mediaMode.name)
+            .appendQueryParameter("quality", videoQuality.wireName)
             .apply {
                 if (!isrc.isNullOrBlank()) {
                     appendQueryParameter("isrc", isrc)
@@ -810,29 +921,25 @@ class MusicPlaybackService : Service() {
             .toString()
     }
 
-    private fun String.isDirectPlayableAudioUrl(): Boolean {
-        if (isBlank() || !startsWith("http", ignoreCase = true)) return false
-        val lower = lowercase()
-        return !lower.contains("youtube.com") &&
-            !lower.contains("youtu.be") &&
-            !lower.contains("googlevideo.com")
-    }
-
     private fun playExoPlayerPlaylist(playlist: List<MusicItem>, startIndex: Int) {
         try {
-            android.util.Log.d(TAG, "Setting playlist of ${playlist.size} items, starting at $startIndex")
+            if (playlist.isEmpty()) return
+            val safeStartIndex = startIndex.coerceIn(0, playlist.lastIndex)
+            android.util.Log.d(TAG, "Setting playlist of ${playlist.size} items, starting at $safeStartIndex")
+            currentTrackRetryCount = 0
+            currentIndex = safeStartIndex
             
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             
             val mediaItems = playlist.map { createMediaItem(it) }
-            exoPlayer.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
+            exoPlayer.setMediaItems(mediaItems, safeStartIndex, androidx.media3.common.C.TIME_UNSET)
             
-            exoPlayer.prepare()
             applyRepeatModeToPlayer()
-            exoPlayer.playWhenReady = true
             requestAudioFocus()
-            preloadAdjacentTracks(startIndex)
+            exoPlayer.playWhenReady = true
+            exoPlayer.prepare()
+            exoPlayer.play()
             
             // Notify state change
             notifyPlaybackState(isLoading = true, refreshNotification = true)
@@ -872,8 +979,26 @@ class MusicPlaybackService : Service() {
     fun resume() {
         if (isDestroyed) return
         try {
-            exoPlayer.play()
+            if (exoPlayer.mediaItemCount == 0 && currentPlaylist.isNotEmpty()) {
+                val safeIndex = currentIndex.coerceIn(0, currentPlaylist.lastIndex)
+                playExoPlayerPlaylist(currentPlaylist, safeIndex)
+                return
+            }
+            when (exoPlayer.playbackState) {
+                androidx.media3.common.Player.STATE_IDLE -> {
+                    currentTrackRetryCount = 0
+                    notifyPlaybackState(isLoading = true, refreshNotification = true)
+                    exoPlayer.prepare()
+                }
+                androidx.media3.common.Player.STATE_ENDED -> {
+                    val safeIndex = currentIndex.coerceIn(0, (exoPlayer.mediaItemCount - 1).coerceAtLeast(0))
+                    exoPlayer.seekTo(safeIndex, 0L)
+                }
+            }
             requestAudioFocus()
+            exoPlayer.playWhenReady = true
+            exoPlayer.play()
+            notifyPlaybackState(refreshNotification = true)
         } catch (e: Exception) { android.util.Log.e(TAG, "Error resuming", e) }
     }
 
@@ -891,11 +1016,48 @@ class MusicPlaybackService : Service() {
 
         val targetIndex = when {
             currentIndex < currentPlaylist.lastIndex -> currentIndex + 1
-            repeatMode == RepeatMode.ALL && currentPlaylist.isNotEmpty() -> 0
+            repeatMode == RepeatMode.ALL && currentPlaylist.size > 1 -> 0
             else -> null
-        } ?: return
+        }
 
-        skipToPlaylistIndex(targetIndex)
+        if (targetIndex != null) {
+            skipToPlaylistIndex(targetIndex)
+            return
+        }
+
+        // If only 1 song is in the playlist (or we're at the end) and user tapped Next,
+        // fetch Up Next radio tracks immediately and skip to the first one.
+        val currentTrack = getCurrentTrack() ?: return
+        notifyPlaybackState(isLoading = true, refreshNotification = false)
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val upNext = com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+                    .getUpNext(currentTrack.id)
+                    .filter { it.id.isNotBlank() && it.id != currentTrack.id }
+                    .distinctBy { it.id }
+                if (upNext.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        if (!isDestroyed && getCurrentTrack()?.id == currentTrack.id) {
+                            val tracksToAdd = if (isShuffleEnabled) upNext.shuffled() else upNext
+                            val nextPos = currentIndex + 1
+                            addToQueue(tracksToAdd)
+                            if (nextPos in currentPlaylist.indices) {
+                                skipToPlaylistIndex(nextPos)
+                            }
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        notifyPlaybackState(isLoading = false, refreshNotification = false)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Next track radio fetch failed: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    notifyPlaybackState(isLoading = false, refreshNotification = false)
+                }
+            }
+        }
     }
 
     fun previous() {
@@ -929,11 +1091,25 @@ class MusicPlaybackService : Service() {
     fun isPlaying(): Boolean = try { if (::exoPlayer.isInitialized) exoPlayer.isPlaying else false } catch (_: Exception) { false }
 
     fun getCurrentTrack(): MusicItem? {
-        return if (currentPlaylist.isNotEmpty() && currentIndex >= 0) {
-            currentPlaylist.getOrNull(currentIndex)
-        } else {
-            exoPlayer.currentMediaItem?.localConfiguration?.tag as? MusicItem
+        val exoTrack = try {
+            if (::exoPlayer.isInitialized && exoPlayer.mediaItemCount > 0) {
+                exoPlayer.currentMediaItem?.localConfiguration?.tag as? MusicItem
+            } else null
+        } catch (_: Exception) { null }
+
+        if (exoTrack != null) {
+            if (currentPlaylist.getOrNull(currentIndex)?.id != exoTrack.id) {
+                val foundIdx = currentPlaylist.indexOfFirst { it.id == exoTrack.id }
+                if (foundIdx >= 0) {
+                    currentIndex = foundIdx
+                }
+            }
+            return exoTrack
         }
+
+        return if (currentPlaylist.isNotEmpty() && currentIndex in currentPlaylist.indices) {
+            currentPlaylist[currentIndex]
+        } else null
     }
 
     fun getPlayer(): ExoPlayer? {
@@ -941,21 +1117,31 @@ class MusicPlaybackService : Service() {
     }
 
     fun togglePlaybackMode(): Boolean {
-        mediaMode = if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO) {
+        val nextMode = if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO) {
             com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
         } else {
             com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
         }
-        if (currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-            val currentPos = exoPlayer.currentPosition
-            val isPlaying = exoPlayer.playWhenReady
-            syncPlaylistQueue(currentIndex, currentPos, isPlaying)
+        return setPlaybackMediaMode(nextMode)
+    }
+
+    fun setPlaybackMediaMode(mode: com.israrxy.raazi.model.PlaybackMediaMode): Boolean {
+        if (mediaMode == mode) {
+            notifyPlaybackState()
+            return true
         }
-        // Re-attach the video surface if we just switched into video mode and the UI
-        // already handed us a SurfaceView (the player keeps rendering to it).
+        mediaMode = mode
         if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
             && videoSurface != null && ::exoPlayer.isInitialized) {
             exoPlayer.setVideoSurface(videoSurface)
+        } else if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO && ::exoPlayer.isInitialized) {
+            exoPlayer.clearVideoSurface()
+        }
+        if (currentIndex >= 0 && currentIndex < currentPlaylist.size) {
+            val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val isPlaying = exoPlayer.playWhenReady
+            notifyPlaybackState(isLoading = true)
+            syncPlaylistQueue(currentIndex, currentPos, isPlaying, forceRePrepare = true)
         }
         notifyPlaybackState()
         return true
@@ -980,9 +1166,10 @@ class MusicPlaybackService : Service() {
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
         videoQuality = quality
         if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-            val currentPos = exoPlayer.currentPosition
+            val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
             val isPlaying = exoPlayer.playWhenReady
-            syncPlaylistQueue(currentIndex, currentPos, isPlaying)
+            notifyPlaybackState(isLoading = true)
+            syncPlaylistQueue(currentIndex, currentPos, isPlaying, forceRePrepare = true)
         }
         notifyPlaybackState()
         return true
@@ -1012,13 +1199,13 @@ class MusicPlaybackService : Service() {
             speed = if (::exoPlayer.isInitialized) exoPlayer.playbackParameters.speed else 1.0f
         } catch (_: Exception) { speed = 1.0f }
 
+        val activeTrack = getCurrentTrack()
+
         return PlaybackState(
             isPlaying = playing,
             currentPosition = position,
             duration = duration,
-            currentTrack = if (currentPlaylist.isNotEmpty() && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-                currentPlaylist[currentIndex]
-            } else null,
+            currentTrack = activeTrack,
             playlist = currentPlaylist,
             currentIndex = currentIndex,
             isShuffleEnabled = isShuffleEnabled,
@@ -1086,21 +1273,22 @@ class MusicPlaybackService : Service() {
     private fun syncPlaylistQueue(
         targetIndex: Int,
         targetPositionMs: Long = 0L,
-        shouldPlay: Boolean = exoPlayer.playWhenReady
+        shouldPlay: Boolean = exoPlayer.playWhenReady,
+        forceRePrepare: Boolean = false
     ) {
         if (targetIndex !in currentPlaylist.indices) return
 
         val mediaItems = currentPlaylist.map { createMediaItem(it) }
         val alreadyPrepared = exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE
         exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
-        // Only (re)prepare when the player isn't already prepared. Calling prepare() on an
-        // already-playing player tears down and rebuilds the renderer pipeline, which is what
-        // caused the ~1s pause/glitch when toggling shuffle.
-        if (!alreadyPrepared) exoPlayer.prepare()
+        if (!alreadyPrepared || forceRePrepare) {
+            exoPlayer.prepare()
+        }
         applyRepeatModeToPlayer()
         exoPlayer.playWhenReady = shouldPlay
         if (shouldPlay) {
             requestAudioFocus()
+            exoPlayer.play()
         }
         preloadAdjacentTracks(targetIndex)
     }
@@ -1115,14 +1303,18 @@ class MusicPlaybackService : Service() {
         }
 
         currentIndex = targetIndex
+        currentTrackRetryCount = 0
         currentAlbumArt = null
         pendingNotificationTrackId = currentPlaylist[targetIndex].id
         updateMediaSessionState()
         notifyPlaybackState(isLoading = true, refreshNotification = true)
         exoPlayer.seekToDefaultPosition(targetIndex)
-        exoPlayer.playWhenReady = true
+        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+            exoPlayer.prepare()
+        }
         requestAudioFocus()
-        preloadAdjacentTracks(targetIndex)
+        exoPlayer.playWhenReady = true
+        exoPlayer.play()
     }
 
     private fun preloadAdjacentTracks(centerIndex: Int) {
@@ -1133,8 +1325,10 @@ class MusicPlaybackService : Service() {
             .forEach { index ->
                 val track = currentPlaylist.getOrNull(index) ?: return@forEach
                 if (track.localPath != null && java.io.File(track.localPath).exists()) return@forEach
+                val sourceId = track.videoUrl.ifBlank { track.id }
+                if (sourceId.isBlank()) return@forEach
                 StreamResolver.preloadStream(
-                    videoIdInput = track.videoUrl,
+                    videoIdInput = sourceId,
                     title = track.title,
                     artist = track.artist
                 )
@@ -1179,6 +1373,26 @@ class MusicPlaybackService : Service() {
     private var visualizerData: ByteArray? = null
     private var visualizerListeners = CopyOnWriteArraySet<(ByteArray) -> Unit>()
 
+    private fun isAudioEffectAvailable(effectTypeUuid: java.util.UUID): Boolean {
+        return runCatching {
+            AudioEffect.queryEffects()?.any { descriptor ->
+                descriptor.type == effectTypeUuid
+            } ?: false
+        }.getOrDefault(false)
+    }
+
+    private fun hasRecordAudioPermission(): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun isVisualizerEffectAvailable(): Boolean {
+        val visualizerUuid = java.util.UUID.fromString("e46b26a0-dddd-11db-8afd-0002a5d5c51b")
+        return isAudioEffectAvailable(visualizerUuid)
+    }
+
     private fun initializeAudioEffects() {
         if (isDestroyed || audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
             if (audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
@@ -1197,45 +1411,94 @@ class MusicPlaybackService : Service() {
                 return
             }
 
-            audioEqualizer = android.media.audiofx.Equalizer(0, audioSessionId)
-            audioEqualizer?.enabled = true
-
-            bassBoost = BassBoost(0, audioSessionId)
-            bassBoost?.enabled = true
-
-            virtualizer = Virtualizer(0, audioSessionId)
-            virtualizer?.enabled = true
-
-            presetReverb = PresetReverb(0, audioSessionId)
-            presetReverb?.enabled = true
-
-            try {
-                visualizer = Visualizer(audioSessionId)
-                visualizer?.enabled = false
-                visualizer?.captureSize = Visualizer.getCaptureSizeRange()[1]
-                visualizer?.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
-                    override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-                        fft?.let { data ->
-                            visualizerData = data
-                            visualizerListeners.forEach { listener ->
-                                try {
-                                    listener(data)
-                                } catch (e: Exception) {
-                                    android.util.Log.e("MusicService", "Error notifying visualizer listener", e)
-                                }
-                            }
-                        }
+            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_EQUALIZER)) {
+                runCatching {
+                    audioEqualizer = android.media.audiofx.Equalizer(0, audioSessionId).apply {
+                        enabled = true
                     }
-                }, Visualizer.getMaxCaptureRate() / 2, false, true)
-                android.util.Log.d("MusicService", "Visualizer initialized successfully")
-            } catch (e: Exception) {
-                android.util.Log.e("MusicService", "Error initializing visualizer", e)
+                }.onFailure { e ->
+                    android.util.Log.w("MusicService", "Equalizer unavailable: ${e.message}")
+                }
+            }
+
+            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_BASS_BOOST)) {
+                runCatching {
+                    bassBoost = BassBoost(0, audioSessionId).apply {
+                        enabled = true
+                    }
+                }.onFailure { e ->
+                    android.util.Log.w("MusicService", "BassBoost unavailable: ${e.message}")
+                }
+            }
+
+            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_VIRTUALIZER)) {
+                runCatching {
+                    virtualizer = Virtualizer(0, audioSessionId).apply {
+                        enabled = true
+                    }
+                }.onFailure { e ->
+                    android.util.Log.w("MusicService", "Virtualizer unavailable: ${e.message}")
+                }
+            }
+
+            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB)) {
+                runCatching {
+                    presetReverb = PresetReverb(0, audioSessionId).apply {
+                        enabled = true
+                    }
+                }.onFailure { e ->
+                    android.util.Log.w("MusicService", "PresetReverb unavailable: ${e.message}")
+                }
+            }
+
+            // Only initialize Visualizer if RECORD_AUDIO is granted AND listeners are actively waiting
+            if (visualizerListeners.isNotEmpty() && hasRecordAudioPermission()) {
+                ensureVisualizerInitialized()
             }
 
             android.util.Log.d("MusicService", "Advanced audio effects initialized successfully")
         } catch (e: Exception) {
-            android.util.Log.e("MusicService", "Error initializing audio effects", e)
+            android.util.Log.w("MusicService", "Error initializing audio effects: ${e.message}")
+        }
+    }
+
+    private fun ensureVisualizerInitialized(): Boolean {
+        if (isDestroyed) return false
+        if (visualizer != null) return true
+        if (!hasRecordAudioPermission() || !isVisualizerEffectAvailable()) {
+            return false
+        }
+        val audioSessionId = runCatching { exoPlayer.audioSessionId }.getOrDefault(0)
+        if (audioSessionId == 0) return false
+
+        return runCatching {
+            val createdVisualizer = Visualizer(audioSessionId)
+            createdVisualizer.enabled = false
+            val captureRange = Visualizer.getCaptureSizeRange()
+            if (captureRange.size >= 2) {
+                createdVisualizer.captureSize = captureRange[1]
+            }
+            createdVisualizer.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
+                override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                    fft?.let { data ->
+                        visualizerData = data
+                        visualizerListeners.forEach { listener ->
+                            try {
+                                listener(data)
+                            } catch (e: Exception) {
+                                android.util.Log.w("MusicService", "Error notifying visualizer listener: ${e.message}")
+                            }
+                        }
+                    }
+                }
+            }, Visualizer.getMaxCaptureRate() / 2, false, true)
+            visualizer = createdVisualizer
+            android.util.Log.d("MusicService", "Visualizer initialized successfully")
+            true
+        }.getOrElse { e ->
+            android.util.Log.w("MusicService", "Visualizer unavailable on this session: ${e.message}")
+            false
         }
     }
 
@@ -1326,30 +1589,31 @@ class MusicPlaybackService : Service() {
 
     // Visualizer Management
     fun isVisualizerSupported(): Boolean {
-        return visualizer != null
+        return visualizer != null || (hasRecordAudioPermission() && isVisualizerEffectAvailable())
     }
 
     fun enableVisualizer(enable: Boolean) {
         try {
+            if (enable) {
+                if (!ensureVisualizerInitialized()) {
+                    return
+                }
+            }
             visualizer?.enabled = enable
             android.util.Log.d("MusicService", "Visualizer enabled: $enable")
         } catch (e: Exception) {
-            android.util.Log.e("MusicService", "Error enabling visualizer", e)
+            android.util.Log.w("MusicService", "Could not toggle visualizer: ${e.message}")
         }
     }
 
     fun addVisualizerListener(listener: (ByteArray) -> Unit) {
         visualizerListeners.add(listener)
-        // Enable visualizer if this is the first listener
-        if (visualizerListeners.size == 1) {
-            enableVisualizer(true)
-        }
     }
 
     fun removeVisualizerListener(listener: (ByteArray) -> Unit) {
         visualizerListeners.remove(listener)
         // Disable visualizer if no more listeners
-        if (visualizerListeners.isEmpty()) {
+        if (visualizerListeners.isEmpty() && visualizer != null) {
             enableVisualizer(false)
         }
     }
@@ -1365,8 +1629,9 @@ class MusicPlaybackService : Service() {
         // Cleanup visualizer
         try {
             visualizer?.release()
+            visualizer = null
         } catch (e: Exception) {
-            android.util.Log.e("MusicService", "Error releasing visualizer", e)
+            android.util.Log.w("MusicService", "Error releasing visualizer: ${e.message}")
         }
         // Cleanup other audio effects
         try {
@@ -1375,7 +1640,7 @@ class MusicPlaybackService : Service() {
             virtualizer?.release()
             presetReverb?.release()
         } catch (e: Exception) {
-            android.util.Log.e("MusicService", "Error releasing audio effects", e)
+            android.util.Log.w("MusicService", "Error releasing audio effects: ${e.message}")
         }
         // Clear listener references
         playbackStateListeners.clear()
@@ -1384,14 +1649,24 @@ class MusicPlaybackService : Service() {
     }
 
     private fun createDataSourceFactory(): androidx.media3.datasource.DataSource.Factory {
-        val okHttpClient = OkHttpClient.Builder().build()
+        val okHttpClient = OkHttpClient.Builder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
         val okHttpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            .setDefaultRequestProperties(
+                mapOf("User-Agent" to com.zionhuang.innertube.models.YouTubeClient.ANDROID_VR_NO_AUTH.userAgent)
+            )
         
         // DefaultDataSource will use OkHttp for valid URLs and handle file/asset/content URIs too
         val upstreamFactory = DefaultDataSource.Factory(this, okHttpDataSourceFactory)
         
         return ResolvingDataSource.Factory(upstreamFactory) { dataSpec ->
             val isRaaziScheme = dataSpec.uri.scheme == "raazi" && dataSpec.uri.host == "youtube"
+            val queryTrackId = dataSpec.uri.getQueryParameter("id")?.takeIf { it.isNotBlank() }
             // Use key if available, otherwise extract full path from URI for 'raazi://' scheme
             // IMPORTANT: Use full path, not lastPathSegment, to preserve SoundCloud URLs
             var videoId = dataSpec.key ?: if (isRaaziScheme) {
@@ -1400,6 +1675,10 @@ class MusicPlaybackService : Service() {
                     ?: dataSpec.uri.lastPathSegment
                 encodedId?.let { Uri.decode(it) }
             } else null
+
+            if ((videoId.isNullOrBlank() || videoId == "watch") && !queryTrackId.isNullOrBlank()) {
+                videoId = queryTrackId
+            }
             
             android.util.Log.d(TAG, "Extracted videoId from dataSpec: $videoId")
             
@@ -1408,13 +1687,6 @@ class MusicPlaybackService : Service() {
                 // Preserve SoundCloud and Bandcamp URLs as-is
                 if (videoId.contains("soundcloud.com") || videoId.contains("bandcamp.com")) {
                     android.util.Log.d(TAG, "Detected SoundCloud/Bandcamp URL, keeping full URL: $videoId")
-                } else if (!videoId.contains("youtube.com") && !videoId.contains("youtu.be")) {
-                    // Not a URL with youtube in it?
-                    // Maybe check if it's a URL at all for safety
-                    if (videoId.startsWith("http")) {
-                         // It's a non-youtube HTTP URL? Usually shouldn't happen for us unless it's direct.
-                         // Let it fall through to isResolvableUrl check
-                    }
                 }
             } else if (videoId.isNullOrEmpty()) {
                  // Fallback: Use the URI itself if key is missing
@@ -1427,8 +1699,6 @@ class MusicPlaybackService : Service() {
 
             // Determine if we should attempt to resolve this URI
             val host = dataSpec.uri.host?.lowercase() ?: ""
-            // Simplified check: if it looks like something we support, try resolving it.
-            // StreamResolver now handles extraction, so we just pass the URL string.
             val isResolvableUrl = videoId?.contains("youtube.com") == true || videoId?.contains("youtu.be") == true ||
                                   host.contains("youtube.com") || host.contains("youtu.be") || 
                                   host.contains("soundcloud.com") || host.contains("bandcamp.com")
@@ -1438,27 +1708,44 @@ class MusicPlaybackService : Service() {
                     val title = dataSpec.uri.getQueryParameter("title")
                     val artist = dataSpec.uri.getQueryParameter("artist")
                     val isrc = dataSpec.uri.getQueryParameter("isrc")
-                    
-                    val result = StreamResolver.resolveStreamUrl(videoId!!, title, artist, mediaMode, videoQuality, isrc = isrc)
-                    android.util.Log.d(TAG, "Resolved stream for $videoId: ${result.url}")
-                    
-                    serviceScope.launch {
-                        isVideoAvailable = result.hasVideo
-                        notifyPlaybackState()
+                    val modeParam = dataSpec.uri.getQueryParameter("mode")
+                    val effectiveMode = com.israrxy.raazi.model.PlaybackMediaMode.values()
+                        .firstOrNull { it.name.equals(modeParam, ignoreCase = true) }
+                        ?: mediaMode
+                    val isActiveTrack = queryTrackId == null || currentPlaylist.getOrNull(currentIndex)?.id == queryTrackId
+
+                    val result = StreamResolver.resolveStreamUrl(
+                        videoIdInput = videoId!!,
+                        title = title,
+                        artist = artist,
+                        mode = effectiveMode,
+                        preferredVideoQuality = videoQuality,
+                        isrc = isrc,
+                        updateQualityState = isActiveTrack
+                    )
+                    android.util.Log.d(TAG, "Resolved stream for $videoId (mode=$effectiveMode, hasVideo=${result.hasVideo}, active=$isActiveTrack): ${result.url}")
+
+                    if (isActiveTrack) {
+                        serviceScope.launch(Dispatchers.Main) {
+                            if (!isDestroyed) {
+                                isVideoAvailable = result.hasVideo
+                                if (result.hasVideo && effectiveMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && videoSurface != null && ::exoPlayer.isInitialized) {
+                                    exoPlayer.setVideoSurface(videoSurface)
+                                }
+                                notifyPlaybackState()
+                            }
+                        }
                     }
-                    
-                    val headers = mutableMapOf<String, String>()
+
+                    val headers = HashMap(dataSpec.httpRequestHeaders)
                     headers["User-Agent"] = result.userAgent
-                    
+
                     return@Factory dataSpec.buildUpon()
                         .setUri(Uri.parse(result.url))
                         .setHttpRequestHeaders(headers)
                         .build()
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Failed to resolve stream for $videoId", e)
-                    // If it was a YouTube URL that failed, throw exception.
-                    // If it was just a random http url, maybe fall through?
-                    // Let's stick to throwing for network failures on supported streams to avoid bad state.
                     throw androidx.media3.common.PlaybackException(
                         "Failed to resolve stream for $videoId",
                         e,
@@ -1466,36 +1753,35 @@ class MusicPlaybackService : Service() {
                     )
                 }
             } else if (videoId == "watch") {
-                 // Handle case where parsing failed or lastPathSegment was 'watch'
-                 // Try to find v parameter from the URI query itself if possible
                  val originalUri = dataSpec.uri.toString()
-                 if (originalUri.contains("v=")) {
-                     val extractedId = originalUri.substringAfter("v=").substringBefore("&")
-                     if (extractedId.isNotEmpty()) {
-                         try {
-                            val title = dataSpec.uri.getQueryParameter("title")
-                            val artist = dataSpec.uri.getQueryParameter("artist")
-                            val isrc = dataSpec.uri.getQueryParameter("isrc")
-                             val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality, isrc = isrc)
-                             
-                             serviceScope.launch {
-                                 isVideoAvailable = result.hasVideo
-                                 notifyPlaybackState()
-                             }
-                             
-                             val headers = mutableMapOf<String, String>()
-                             headers["User-Agent"] = result.userAgent
-                             
-                             return@Factory dataSpec.buildUpon()
-                                 .setUri(Uri.parse(result.url))
-                                 .setHttpRequestHeaders(headers)
-                                 .build()
-                         } catch(e: Exception) {
-                             // Log and fall through
+                 val extractedId = when {
+                     !queryTrackId.isNullOrBlank() -> queryTrackId
+                     originalUri.contains("v=") -> originalUri.substringAfter("v=").substringBefore("&")
+                     else -> ""
+                 }
+                 if (extractedId.isNotEmpty()) {
+                     try {
+                         val title = dataSpec.uri.getQueryParameter("title")
+                         val artist = dataSpec.uri.getQueryParameter("artist")
+                         val isrc = dataSpec.uri.getQueryParameter("isrc")
+                         val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality, isrc = isrc)
+                         
+                         serviceScope.launch {
+                             isVideoAvailable = result.hasVideo
+                             notifyPlaybackState()
                          }
+                         
+                         val headers = HashMap(dataSpec.httpRequestHeaders)
+                         headers["User-Agent"] = result.userAgent
+                         
+                         return@Factory dataSpec.buildUpon()
+                             .setUri(Uri.parse(result.url))
+                             .setHttpRequestHeaders(headers)
+                             .build()
+                     } catch (e: Exception) {
+                         android.util.Log.e(TAG, "Failed to resolve fallback watch ID: $extractedId", e)
                      }
                  } else {
-                     // NEW: If "watch" segment but NO v= param, this is invalid.
                      android.util.Log.e(TAG, "Invalid 'watch' URL without ID: ${dataSpec.uri}")
                      throw androidx.media3.common.PlaybackException(
                         "Invalid watch URL: ${dataSpec.uri}",
@@ -1588,11 +1874,23 @@ class MusicPlaybackService : Service() {
     /** Replace the whole playlist order (current item + reordered upcoming) and keep playback seamless. */
     fun setQueueOrder(newPlaylist: List<MusicItem>) {
         if (isDestroyed || newPlaylist.isEmpty()) return
+        val currentTrackId = getCurrentTrack()?.id
         currentPlaylist = newPlaylist
         originalPlaylist = newPlaylist
+        if (currentTrackId != null) {
+            val updatedIndex = newPlaylist.indexOfFirst { it.id == currentTrackId }
+            if (updatedIndex >= 0) {
+                currentIndex = updatedIndex
+            } else {
+                currentIndex = currentIndex.coerceIn(0, newPlaylist.lastIndex)
+            }
+        } else {
+            currentIndex = currentIndex.coerceIn(0, newPlaylist.lastIndex)
+        }
         val isPlaying = try { exoPlayer.isPlaying } catch (_: Exception) { false }
         val pos = try { exoPlayer.currentPosition } catch (_: Exception) { 0L }
-        syncPlaylistQueue(currentIndex.coerceIn(0, newPlaylist.lastIndex), pos, isPlaying)
+        syncPlaylistQueue(currentIndex, pos, isPlaying)
+        notifyPlaybackState(refreshNotification = false)
     }
 
     companion object {

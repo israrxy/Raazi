@@ -28,16 +28,39 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import com.israrxy.raazi.data.local.BluetoothDeviceManager
 import com.israrxy.raazi.ui.components.GlassBox
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 @Composable
 fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
+    val context = LocalContext.current
     val equalizerState by viewModel.equalizerState.collectAsState()
     val customPresets by viewModel.customPresets.collectAsState()
     val visualizerData by viewModel.visualizerData.collectAsState()
     val device by viewModel.connectedAudioDevice.collectAsState()
+
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted
+        if (granted) {
+            viewModel.enableVisualizer(true)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.loadEqualizerState()
@@ -45,8 +68,13 @@ fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
         viewModel.applyDeviceEqProfileIfAny()
     }
 
-    LaunchedEffect(equalizerState.bands) {
-        if (viewModel.isVisualizerSupported()) viewModel.enableVisualizer(true)
+    DisposableEffect(hasAudioPermission, equalizerState.bands) {
+        if (hasAudioPermission && equalizerState.bands > 0) {
+            viewModel.enableVisualizer(true)
+        }
+        onDispose {
+            viewModel.enableVisualizer(false)
+        }
     }
 
     Box(
@@ -108,10 +136,17 @@ fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
                 GlassBox(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp),
+                        .height(64.dp)
+                        .clickable(enabled = !hasAudioPermission) {
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    SpectrumBars(visualizerData, viewModel.isVisualizerSupported())
+                    SpectrumBars(
+                        visualizerData = visualizerData,
+                        isSupported = hasAudioPermission && viewModel.isVisualizerSupported(),
+                        hasPermission = hasAudioPermission
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -177,7 +212,11 @@ fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
 }
 
 @Composable
-private fun SpectrumBars(visualizerData: ByteArray?, isSupported: Boolean) {
+private fun SpectrumBars(
+    visualizerData: ByteArray?,
+    isSupported: Boolean,
+    hasPermission: Boolean = true
+) {
     if (isSupported && visualizerData != null) {
         val processed = remember(visualizerData) { processFftData(visualizerData, 48) }
         val infiniteTransition = rememberInfiniteTransition(label = "spectrum")
@@ -217,7 +256,11 @@ private fun SpectrumBars(visualizerData: ByteArray?, isSupported: Boolean) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                if (isSupported) "Waiting for audio..." else "Spectrum not available",
+                when {
+                    !hasPermission -> "Tap to enable live audio spectrum"
+                    isSupported -> "Waiting for audio..."
+                    else -> "Spectrum not available on this device"
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )

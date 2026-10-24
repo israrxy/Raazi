@@ -88,19 +88,58 @@ class RingtoneHelper(private val context: Context) {
         onProgress: ((Int) -> Unit)? = null
     ): Pair<String, Long> = withContext(Dispatchers.IO) {
         onProgress?.invoke(0)
-        val audioUrl = if (track.audioUrl.isNotEmpty() && !track.audioUrl.contains("youtube.com") && !track.audioUrl.contains("googlevideo.com")) {
+
+        val cacheDir = File(context.cacheDir, "ringtones")
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+
+        val safeId = track.id.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifEmpty { "track" }
+
+        // 1. Check if track already has a valid local non-FLAC file we can use directly
+        val existingLocalPath = track.localPath?.takeIf { it.isNotBlank() }
+        if (existingLocalPath != null) {
+            val localFile = resolveLocalSource(existingLocalPath)
+            if (localFile != null && localFile.exists() && localFile.length() > 0L && !localFile.name.endsWith(".flac", ignoreCase = true)) {
+                val ext = if (isWebmFormat(localFile.absolutePath)) "webm" else "m4a"
+                val tempFile = File(cacheDir, "${safeId}_raw.$ext")
+                localFile.inputStream().use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output, DEFAULT_BUFFER_SIZE)
+                    }
+                }
+                onProgress?.invoke(100)
+                val extractedDuration = getAudioDurationMs(tempFile.absolutePath)
+                val localDuration = when {
+                    extractedDuration > 0L -> extractedDuration
+                    track.duration > 0L -> track.duration
+                    else -> 30_000L
+                }
+                return@withContext Pair(tempFile.absolutePath, localDuration)
+            }
+        }
+
+        // 2. Resolve remote stream preferring AAC/M4A so MediaMuxer and Android RingtoneManager work reliably
+        var resolvedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        val sourceVideoId = track.videoUrl.ifBlank { track.id }
+        val audioUrl = if (track.audioUrl.isNotEmpty() &&
+            !track.audioUrl.contains("youtube.com") &&
+            !track.audioUrl.contains("googlevideo.com") &&
+            !track.audioUrl.endsWith(".flac", ignoreCase = true)
+        ) {
             track.audioUrl
         } else {
             try {
-                com.israrxy.raazi.player.StreamResolver.resolveStreamUrl(
-                    videoIdInput = track.videoUrl,
+                val streamResult = com.israrxy.raazi.player.StreamResolver.resolveStreamUrl(
+                    videoIdInput = sourceVideoId,
                     title = track.title,
                     artist = track.artist,
-                    mode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO
-                ).url
+                    mode = com.israrxy.raazi.model.PlaybackMediaMode.AUDIO,
+                    preferAac = true
+                )
+                resolvedUserAgent = streamResult.userAgent
+                streamResult.url
             } catch (e: Exception) {
                 Log.w("RingtoneHelper", "StreamResolver failed for ringtone, falling back to extractor", e)
-                extractor.getAudioStreamUrl(track.videoUrl)
+                extractor.getAudioStreamUrl(sourceVideoId)
             }
         }
         if (audioUrl.isEmpty()) {
@@ -108,31 +147,30 @@ class RingtoneHelper(private val context: Context) {
         }
 
         onProgress?.invoke(5)
-        val cacheDir = File(context.cacheDir, "ringtones")
-        if (!cacheDir.exists()) cacheDir.mkdirs()
+        val rawTempFile = File(cacheDir, "${safeId}_download.tmp")
 
-        // track.id is not always a bare video id — for many sources it is the full
-        // watch URL, and its slashes would create nonexistent subdirectories.
-        val safeId = track.id.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64)
-        val tempFile = File(cacheDir, "${safeId}_raw.m4a")
-
-        // The resolved URL is not always remote. FLAC resolution and previously
-        // downloaded tracks hand back a local file:// path, and those can vanish
-        // if the cache was evicted. Copy those straight across instead of issuing
-        // an HTTP request, which fails with ENOENT.
         val localSource = resolveLocalSource(audioUrl)
         if (localSource != null) {
             if (!localSource.exists()) {
                 throw Exception("Local audio file is missing: ${localSource.absolutePath}")
             }
             localSource.inputStream().use { input ->
-                FileOutputStream(tempFile).use { output ->
+                FileOutputStream(rawTempFile).use { output ->
                     input.copyTo(output, DEFAULT_BUFFER_SIZE)
                 }
             }
+            val finalExt = if (isWebmFormat(rawTempFile.absolutePath)) "webm" else "m4a"
+            val finalFile = File(cacheDir, "${safeId}_raw.$finalExt")
+            rawTempFile.copyTo(finalFile, overwrite = true)
+            rawTempFile.delete()
             onProgress?.invoke(100)
-            val localDuration = if (track.duration > 0) track.duration else getAudioDurationMs(tempFile.absolutePath)
-            return@withContext Pair(tempFile.absolutePath, localDuration)
+            val extractedDuration = getAudioDurationMs(finalFile.absolutePath)
+            val localDuration = when {
+                extractedDuration > 0L -> extractedDuration
+                track.duration > 0L -> track.duration
+                else -> 30_000L
+            }
+            return@withContext Pair(finalFile.absolutePath, localDuration)
         }
 
         var downloadUrl = audioUrl
@@ -143,7 +181,7 @@ class RingtoneHelper(private val context: Context) {
                 val length = if (format != null && format.contentLength > 0L) {
                     format.contentLength
                 } else {
-                    10_000_000L
+                    15_000_000L
                 }
                 downloadUrl += "&range=0-$length"
                 Log.d("RingtoneHelper", "Bypassing YouTube throttling for ringtone ${track.title} with range=0-$length")
@@ -154,12 +192,12 @@ class RingtoneHelper(private val context: Context) {
 
         val request = Request.Builder()
             .url(downloadUrl)
-            .header("User-Agent", "Mozilla/5.0")
+            .header("User-Agent", resolvedUserAgent)
             .build()
 
         httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("Failed to download: ${response.code}")
-            
+            if (!response.isSuccessful) throw Exception("Failed to download audio (HTTP ${response.code})")
+
             val body = response.body ?: throw Exception("Empty response body")
             val contentLength = body.contentLength()
             var downloaded = 0L
@@ -167,7 +205,7 @@ class RingtoneHelper(private val context: Context) {
             val buffer = ByteArray(8192)
 
             body.byteStream().use { input ->
-                FileOutputStream(tempFile).use { output ->
+                FileOutputStream(rawTempFile).use { output ->
                     var bytesRead: Int
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
@@ -176,7 +214,7 @@ class RingtoneHelper(private val context: Context) {
                         if (now - lastProgressUpdate > 100 || downloaded == contentLength) {
                             val progress = if (contentLength > 0) {
                                 5 + ((downloaded * 95 / contentLength).toInt()).coerceIn(0, 95)
-                            } else 0
+                            } else 50
                             onProgress?.invoke(progress)
                             lastProgressUpdate = now
                         }
@@ -184,9 +222,19 @@ class RingtoneHelper(private val context: Context) {
                 }
             }
         }
-        
+
+        val finalExt = if (isWebmFormat(rawTempFile.absolutePath)) "webm" else "m4a"
+        val tempFile = File(cacheDir, "${safeId}_raw.$finalExt")
+        rawTempFile.copyTo(tempFile, overwrite = true)
+        rawTempFile.delete()
+
         onProgress?.invoke(100)
-        val durationMs = if (track.duration > 0) track.duration else getAudioDurationMs(tempFile.absolutePath)
+        val extractedDuration = getAudioDurationMs(tempFile.absolutePath)
+        val durationMs = when {
+            extractedDuration > 0L -> extractedDuration
+            track.duration > 0L -> track.duration
+            else -> 30_000L
+        }
         Pair(tempFile.absolutePath, durationMs)
     }
 
@@ -224,7 +272,19 @@ class RingtoneHelper(private val context: Context) {
         if (!outputDir.exists()) outputDir.mkdirs()
         val outputFile = File(outputDir, "trimmed_${System.currentTimeMillis()}.$ext")
 
-        trimAudio(inputFilePath, outputFile.absolutePath, startMs, endMs)
+        try {
+            trimAudio(inputFilePath, outputFile.absolutePath, startMs, endMs)
+        } catch (e: Exception) {
+            Log.w("RingtoneHelper", "MediaMuxer trim failed, falling back to full audio file copy", e)
+            inputFile.copyTo(outputFile, overwrite = true)
+        }
+
+        if (!outputFile.exists() || outputFile.length() == 0L) {
+            // Fallback copy if muxer wrote 0 bytes
+            try {
+                inputFile.copyTo(outputFile, overwrite = true)
+            } catch (_: Exception) {}
+        }
 
         if (!outputFile.exists() || outputFile.length() == 0L) {
             outputFile.delete()
@@ -235,20 +295,19 @@ class RingtoneHelper(private val context: Context) {
         val uri = saveToMediaStore(outputFile.absolutePath, title, ringtoneType)
             ?: run {
                 outputFile.delete()
-                throw Exception("Failed to write ringtone to system storage. Check storage permissions.")
+                throw Exception("Failed to write ringtone to system storage.")
             }
 
         // 4. Set as default ringtone/notification/alarm
         try {
             RingtoneManager.setActualDefaultRingtoneUri(context, ringtoneType.ringtoneManagerType, uri)
         } catch (e: Exception) {
-            android.util.Log.e("RingtoneHelper", "Failed to set actual default ringtone", e)
+            Log.e("RingtoneHelper", "Failed to set actual default ringtone", e)
             outputFile.delete()
-            inputFile.delete()
-            throw Exception("Saved ringtone to storage but couldn't set it as default. Try again from system Settings > Sound.")
+            throw Exception("Saved ringtone to storage, but couldn't set it as default. Check system Sound settings.")
         }
 
-        // Clean up temp file
+        // Clean up temp files
         outputFile.delete()
         inputFile.delete()
     }
@@ -265,9 +324,9 @@ class RingtoneHelper(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("RingtoneHelper", "isWebmFormat check failed for $filePath", e)
         } finally {
-            extractor.release()
+            try { extractor.release() } catch (_: Exception) {}
         }
         return false
     }
@@ -279,14 +338,15 @@ class RingtoneHelper(private val context: Context) {
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME)
-                if (mime?.startsWith("audio/") == true) {
-                    return format.getLong(MediaFormat.KEY_DURATION) / 1000L
+                if (mime?.startsWith("audio/") == true && format.containsKey(MediaFormat.KEY_DURATION)) {
+                    val durationUs = format.getLong(MediaFormat.KEY_DURATION)
+                    if (durationUs > 0L) return durationUs / 1000L
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("RingtoneHelper", "getAudioDurationMs failed for $filePath", e)
         } finally {
-            extractor.release()
+            try { extractor.release() } catch (_: Exception) {}
         }
         return 0L
     }
@@ -294,6 +354,7 @@ class RingtoneHelper(private val context: Context) {
     private fun trimAudio(inputPath: String, outputPath: String, startMs: Long, endMs: Long) {
         val extractor = MediaExtractor()
         var muxer: MediaMuxer? = null
+        var muxerStarted = false
         try {
             extractor.setDataSource(inputPath)
             var audioTrackIndex = -1
@@ -312,9 +373,11 @@ class RingtoneHelper(private val context: Context) {
             if (audioTrackIndex == -1 || format == null) throw Exception("No audio track found")
 
             extractor.selectTrack(audioTrackIndex)
-            extractor.seekTo(startMs * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            val startUs = (startMs * 1000L).coerceAtLeast(0L)
+            val endUs = (endMs * 1000L).coerceAtLeast(startUs + 500_000L)
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
-            val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+            val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
             val isWebm = mime.contains("webm") || mime.contains("opus") || mime.contains("vorbis")
             val outputFormat = if (isWebm) {
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
@@ -322,39 +385,55 @@ class RingtoneHelper(private val context: Context) {
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
             }
 
-            try {
-                muxer = MediaMuxer(outputPath, outputFormat)
-            } catch (e: Exception) {
-                Log.e("RingtoneHelper", "Failed to create MediaMuxer with $outputFormat", e)
-                throw Exception("This device cannot write the audio format. Try a different track.")
-            }
-
+            muxer = MediaMuxer(outputPath, outputFormat)
             val muxerTrackIndex = muxer.addTrack(format)
             muxer.start()
+            muxerStarted = true
 
-            val maxChunkSize = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).takeIf { it > 0 } ?: 1024 * 1024
+            val maxChunkSize = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).takeIf { it > 0 } ?: (512 * 1024)
+            } else {
+                512 * 1024
+            }
             val buffer = ByteBuffer.allocate(maxChunkSize)
             val bufferInfo = MediaCodec.BufferInfo()
 
+            var firstSampleTimeUs = -1L
+            var lastWrittenPtsUs = -1L
+
             while (true) {
+                bufferInfo.offset = 0
                 bufferInfo.size = extractor.readSampleData(buffer, 0)
                 if (bufferInfo.size < 0) break
 
-                val presentationTimeUs = extractor.sampleTime
-                if (presentationTimeUs > endMs * 1000) break
+                val sampleTimeUs = extractor.sampleTime
+                if (sampleTimeUs < 0L || sampleTimeUs > endUs) break
 
-                bufferInfo.presentationTimeUs = presentationTimeUs
+                if (firstSampleTimeUs < 0L) {
+                    firstSampleTimeUs = sampleTimeUs
+                }
+
+                // Normalize presentation timestamps so trimmed ringtone starts immediately at 0s
+                var normalizedPtsUs = (sampleTimeUs - firstSampleTimeUs).coerceAtLeast(0L)
+                if (normalizedPtsUs <= lastWrittenPtsUs) {
+                    normalizedPtsUs = lastWrittenPtsUs + 1L
+                }
+                lastWrittenPtsUs = normalizedPtsUs
+
+                bufferInfo.presentationTimeUs = normalizedPtsUs
                 bufferInfo.flags = extractor.sampleFlags
 
                 muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
                 extractor.advance()
             }
         } finally {
-            extractor.release()
-            try {
-                muxer?.stop()
-            } catch (e: Exception) {
-                Log.w("RingtoneHelper", "MediaMuxer.stop failed", e)
+            try { extractor.release() } catch (_: Exception) {}
+            if (muxerStarted) {
+                try {
+                    muxer?.stop()
+                } catch (e: Exception) {
+                    Log.w("RingtoneHelper", "MediaMuxer.stop failed", e)
+                }
             }
             try {
                 muxer?.release()
@@ -364,44 +443,66 @@ class RingtoneHelper(private val context: Context) {
         }
     }
 
-    private fun saveToMediaStore(filePath: String, title: String, ringtoneType: RingtoneType = RingtoneType.RINGTONE): Uri? {
+    private fun saveToMediaStore(
+        filePath: String,
+        title: String,
+        ringtoneType: RingtoneType = RingtoneType.RINGTONE
+    ): Uri? {
         val file = File(filePath)
         if (!file.exists() || file.length() == 0L) {
             Log.e("RingtoneHelper", "saveToMediaStore called with missing/empty file: $filePath")
             return null
         }
-        val ext = file.extension.lowercase()
+        val ext = file.extension.lowercase().ifEmpty { "m4a" }
         val mimeType = if (ext == "webm") "audio/webm" else "audio/mp4"
 
-        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val cleanTitle = title.trim().ifEmpty { "Raazi Ringtone" }
+        val safeFileName = cleanTitle
+            .replace(Regex("[^A-Za-z0-9 _.-]"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(60)
+            .ifEmpty { "Raazi_Ringtone" }
 
-        // Delete existing with same title to avoid duplicates
-        try {
-            context.contentResolver.delete(uri, "${MediaStore.MediaColumns.TITLE}=?", arrayOf(title))
-        } catch (e: Exception) {
-            Log.w("RingtoneHelper", "Failed to delete existing ringtone entry", e)
+        val collectionUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.TITLE, title)
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.$ext")
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(MediaStore.Audio.Media.IS_RINGTONE, ringtoneType == RingtoneType.RINGTONE)
-                put(MediaStore.Audio.Media.IS_NOTIFICATION, ringtoneType == RingtoneType.NOTIFICATION)
-                put(MediaStore.Audio.Media.IS_ALARM, ringtoneType == RingtoneType.ALARM)
-                put(MediaStore.Audio.Media.IS_MUSIC, false)
+        // Best-effort cleanup of previously created ringtone with the same title owned by our app
+        try {
+            context.contentResolver.delete(
+                collectionUri,
+                "${MediaStore.MediaColumns.TITLE}=?",
+                arrayOf(cleanTitle)
+            )
+        } catch (e: Exception) {
+            Log.d("RingtoneHelper", "Skipping delete of existing MediaStore entry: ${e.message}")
+        }
 
-                val relativePath = when (ringtoneType) {
-                    RingtoneType.RINGTONE -> android.os.Environment.DIRECTORY_RINGTONES
-                    RingtoneType.NOTIFICATION -> android.os.Environment.DIRECTORY_NOTIFICATIONS
-                    RingtoneType.ALARM -> android.os.Environment.DIRECTORY_ALARMS
-                }
+        val uniqueDisplayName = "${safeFileName}_${System.currentTimeMillis() % 100000}.$ext"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val relativePath = when (ringtoneType) {
+                RingtoneType.RINGTONE -> android.os.Environment.DIRECTORY_RINGTONES
+                RingtoneType.NOTIFICATION -> android.os.Environment.DIRECTORY_NOTIFICATIONS
+                RingtoneType.ALARM -> android.os.Environment.DIRECTORY_ALARMS
+            }
+
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.TITLE, cleanTitle)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, uniqueDisplayName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.Audio.Media.IS_RINGTONE, if (ringtoneType == RingtoneType.RINGTONE) 1 else 0)
+                put(MediaStore.Audio.Media.IS_NOTIFICATION, if (ringtoneType == RingtoneType.NOTIFICATION) 1 else 0)
+                put(MediaStore.Audio.Media.IS_ALARM, if (ringtoneType == RingtoneType.ALARM) 1 else 0)
+                put(MediaStore.Audio.Media.IS_MUSIC, 0)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
 
-            val newUri = context.contentResolver.insert(uri, values)
+            val newUri = context.contentResolver.insert(collectionUri, values)
             if (newUri != null) {
                 try {
                     var copySucceeded = false
@@ -431,7 +532,7 @@ class RingtoneHelper(private val context: Context) {
                     return null
                 }
             }
-            return newUri
+            return null
         } else {
             val dirName = when (ringtoneType) {
                 RingtoneType.RINGTONE -> android.os.Environment.DIRECTORY_RINGTONES
@@ -442,7 +543,7 @@ class RingtoneHelper(private val context: Context) {
             if (!externalDir.exists()) {
                 externalDir.mkdirs()
             }
-            val destFile = File(externalDir, "$title.$ext")
+            val destFile = File(externalDir, uniqueDisplayName)
             try {
                 file.copyTo(destFile, overwrite = true)
             } catch (e: Exception) {
@@ -452,16 +553,16 @@ class RingtoneHelper(private val context: Context) {
 
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DATA, destFile.absolutePath)
-                put(MediaStore.MediaColumns.TITLE, title)
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.$ext")
+                put(MediaStore.MediaColumns.TITLE, cleanTitle)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, uniqueDisplayName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(MediaStore.Audio.Media.IS_RINGTONE, ringtoneType == RingtoneType.RINGTONE)
-                put(MediaStore.Audio.Media.IS_NOTIFICATION, ringtoneType == RingtoneType.NOTIFICATION)
-                put(MediaStore.Audio.Media.IS_ALARM, ringtoneType == RingtoneType.ALARM)
-                put(MediaStore.Audio.Media.IS_MUSIC, false)
+                put(MediaStore.Audio.Media.IS_RINGTONE, if (ringtoneType == RingtoneType.RINGTONE) 1 else 0)
+                put(MediaStore.Audio.Media.IS_NOTIFICATION, if (ringtoneType == RingtoneType.NOTIFICATION) 1 else 0)
+                put(MediaStore.Audio.Media.IS_ALARM, if (ringtoneType == RingtoneType.ALARM) 1 else 0)
+                put(MediaStore.Audio.Media.IS_MUSIC, 0)
             }
 
-            return context.contentResolver.insert(uri, values)
+            return context.contentResolver.insert(collectionUri, values)
         }
     }
 }

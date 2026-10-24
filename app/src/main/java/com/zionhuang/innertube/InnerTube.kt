@@ -84,14 +84,15 @@ class InnerTube {
             append("X-Goog-Api-Format-Version", "1")
             append("X-YouTube-Client-Name", client.clientId /* Not a typo. The Client-Name header does contain the client id. */)
             append("X-YouTube-Client-Version", client.clientVersion)
-            append("X-Origin", YouTubeClient.ORIGIN_YOUTUBE_MUSIC)
-            append("Referer", YouTubeClient.REFERER_YOUTUBE_MUSIC)
+            client.origin?.let { append("X-Origin", it) }
+            client.referer?.let { append("Referer", it) }
             if (setLogin && client.loginSupported) {
                 cookie?.let { cookie ->
                     append("cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = System.currentTimeMillis() / 1000
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} ${YouTubeClient.ORIGIN_YOUTUBE_MUSIC}")
+                    val originForHash = client.origin ?: YouTubeClient.ORIGIN_YOUTUBE_MUSIC
+                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} $originForHash")
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash} SAPISID1PHASH ${currentTime}_${sapisidHash} SAPISID3PHASH ${currentTime}_${sapisidHash}")
                 }
             }
@@ -132,7 +133,7 @@ class InnerTube {
         playlistId: String?,
         signatureTimestamp: Int?,
         webPlayerPot: String?,
-    ) = httpClient.post("player") {
+    ) = httpClient.post("${client.apiUrl}player") {
         ytClient(client, setLogin = true)
         setBody(
             PlayerBody(

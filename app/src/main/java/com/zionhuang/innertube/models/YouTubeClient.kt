@@ -17,8 +17,9 @@ data class YouTubeClient(
     val useSignatureTimestamp: Boolean = false,
     val useWebPoTokens: Boolean = false,
     val isEmbedded: Boolean = false,
-    // val origin: String? = null,
-    // val referer: String? = null,
+    val apiUrl: String = API_URL_YOUTUBE_MUSIC,
+    val origin: String? = ORIGIN_YOUTUBE_MUSIC,
+    val referer: String? = REFERER_YOUTUBE_MUSIC,
 ) {
     fun toContext(locale: YouTubeLocale, visitorData: String?, dataSyncId: String?) = Context(
         client = Context.Client(
@@ -47,11 +48,18 @@ data class YouTubeClient(
         const val REFERER_YOUTUBE_MUSIC = "$ORIGIN_YOUTUBE_MUSIC/"
         const val API_URL_YOUTUBE_MUSIC = "$ORIGIN_YOUTUBE_MUSIC/youtubei/v1/"
 
+        const val ORIGIN_YOUTUBE = "https://www.youtube.com"
+        const val REFERER_YOUTUBE = "$ORIGIN_YOUTUBE/"
+        const val API_URL_YOUTUBE = "$ORIGIN_YOUTUBE/youtubei/v1/"
+
         val WEB = YouTubeClient(
             clientName = "WEB",
             clientVersion = "2.20260530.01.00",
             clientId = "1",
             userAgent = USER_AGENT_WEB,
+            apiUrl = API_URL_YOUTUBE,
+            origin = ORIGIN_YOUTUBE,
+            referer = REFERER_YOUTUBE,
         )
 
         val WEB_REMIX = YouTubeClient(
@@ -62,6 +70,9 @@ data class YouTubeClient(
             loginSupported = true,
             useSignatureTimestamp = true,
             useWebPoTokens = true,
+            apiUrl = API_URL_YOUTUBE_MUSIC,
+            origin = ORIGIN_YOUTUBE_MUSIC,
+            referer = REFERER_YOUTUBE_MUSIC,
         )
 
         val WEB_CREATOR = YouTubeClient(
@@ -72,6 +83,9 @@ data class YouTubeClient(
             loginSupported = true,
             loginRequired = true,
             useSignatureTimestamp = true,
+            apiUrl = API_URL_YOUTUBE,
+            origin = ORIGIN_YOUTUBE,
+            referer = REFERER_YOUTUBE,
         )
 
         val TVHTML5 = YouTubeClient(
@@ -80,8 +94,11 @@ data class YouTubeClient(
             clientId = "7",
             userAgent = "Mozilla/5.0(SMART-TV; Linux; Tizen 4.0.0.2) AppleWebkit/605.1.15 (KHTML, like Gecko) SamsungBrowser/9.2 TV Safari/605.1.15",
             loginSupported = true,
-            loginRequired = true,
-            useSignatureTimestamp = true
+            loginRequired = false,
+            useSignatureTimestamp = true,
+            apiUrl = API_URL_YOUTUBE,
+            origin = ORIGIN_YOUTUBE,
+            referer = REFERER_YOUTUBE,
         )
 
         val TVHTML5_SIMPLY_EMBEDDED_PLAYER = YouTubeClient(
@@ -90,9 +107,12 @@ data class YouTubeClient(
             clientId = "85",
             userAgent = "Mozilla/5.0 (PlayStation; PlayStation 4/12.02) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15",
             loginSupported = true,
-            loginRequired = true,
+            loginRequired = false,
             useSignatureTimestamp = true,
             isEmbedded = true,
+            apiUrl = API_URL_YOUTUBE,
+            origin = ORIGIN_YOUTUBE,
+            referer = REFERER_YOUTUBE,
         )
 
         val IOS = YouTubeClient(
@@ -101,6 +121,12 @@ data class YouTubeClient(
             clientId = "5",
             userAgent = "com.google.ios.youtube/20.22.3 (iPhone16,2; U; CPU iOS 18_5 like Mac OS X;)",
             osVersion = "18.5.0.22F76",
+            deviceMake = "Apple",
+            deviceModel = "iPhone16,2",
+            osName = "iOS",
+            apiUrl = API_URL_YOUTUBE,
+            origin = null,
+            referer = null,
         )
 
         val VISIONOS = YouTubeClient(
@@ -112,6 +138,9 @@ data class YouTubeClient(
             osVersion = "26.5.23O471",
             deviceMake = "Apple",
             deviceModel = "RealityDevice17,1",
+            apiUrl = API_URL_YOUTUBE,
+            origin = null,
+            referer = null,
         )
 
         val ANDROID = YouTubeClient(
@@ -119,8 +148,13 @@ data class YouTubeClient(
             clientVersion = "20.22.38",
             clientId = "3",
             userAgent = "com.google.android.youtube/20.22.38 (Linux; U; Android 14) gzip",
+            osName = "Android",
+            osVersion = "14",
             loginSupported = true,
-            useSignatureTimestamp = true
+            useSignatureTimestamp = false,
+            apiUrl = API_URL_YOUTUBE,
+            origin = null,
+            referer = null,
         )
 
         val ANDROID_VR_NO_AUTH = YouTubeClient(
@@ -128,8 +162,15 @@ data class YouTubeClient(
             clientVersion = "1.62.27",
             clientId = "28",
             userAgent = "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12; en_US; Oculus Quest 3; Build/SQ3A.220605.009.A1; Cronet/136.0.7103.2)",
+            osName = "Android",
+            osVersion = "12",
+            deviceMake = "Oculus",
+            deviceModel = "Quest 3",
             loginSupported = false,
-            useSignatureTimestamp = false
+            useSignatureTimestamp = false,
+            apiUrl = API_URL_YOUTUBE,
+            origin = null,
+            referer = null,
         )
     }
 }

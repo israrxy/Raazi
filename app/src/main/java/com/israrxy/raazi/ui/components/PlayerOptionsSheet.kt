@@ -155,18 +155,6 @@ fun PlayerOptionsSheet(
 
         Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
 
-        // --- Audio source ---
-        SheetOption(
-            icon = Icons.Default.HighQuality,
-            title = "Audio source",
-            subtitle = "Current: $audioSourceLabel",
-            onClick = {
-                viewModel.toggleAudioSource()
-            }
-        )
-
-        Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
-
         // --- Scrollable list options ---
         SheetOption(
             icon = Icons.Outlined.Radio,

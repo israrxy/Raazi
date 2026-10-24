@@ -1,11 +1,14 @@
 package com.israrxy.raazi.player.potoken
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.annotation.MainThread
 import androidx.collection.ArrayMap
 import androidx.webkit.WebSettingsCompat
@@ -25,6 +28,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -36,12 +40,14 @@ class PoTokenWebView private constructor(
 ) {
     private val webView = WebView(context)
     private val scope = MainScope()
+    private val initCompleted = AtomicBoolean(false)
+    private val isClosed = AtomicBoolean(false)
     private val poTokenContinuations =
         Collections.synchronizedMap(ArrayMap<String, Continuation<String>>())
     private val exceptionHandler = CoroutineExceptionHandler { _, t ->
         onInitializationErrorCloseAndCancel(t)
     }
-    private lateinit var expirationInstant: Instant
+    private var expirationInstant: Instant = Instant.MIN
 
     //region Initialization
     init {
@@ -58,20 +64,38 @@ class PoTokenWebView private constructor(
         // so that we can run async functions and get back the result
         webView.addJavascriptInterface(this, JS_INTERFACE)
 
+        webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?
+            ): Boolean {
+                val didCrash = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    detail?.didCrash() == true
+                } else {
+                    true
+                }
+                val exception = PoTokenException("WebView renderer process gone (didCrash=$didCrash)")
+                Log.w(TAG, "PoToken WebView renderer process exited (didCrash=$didCrash), cleaning up safely")
+                expirationInstant = Instant.MIN
+                onInitializationErrorCloseAndCancel(exception)
+                popAllPoTokenContinuations().forEach { (_, cont) ->
+                    runCatching { cont.resumeWithException(exception) }
+                }
+                return true
+            }
+        }
+
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 if (m.message().contains("Uncaught")) {
-                    // There should not be any uncaught errors while executing the code, because
-                    // everything that can fail is guarded by try-catch. Therefore, this likely
-                    // indicates that that there was a syntax error in the code, i.e. the WebView only
-                    // supports a really old version of JS.
-
                     val fmt = "\"${m.message()}\", source: ${m.sourceId()} (${m.lineNumber()})"
                     val exception = BadWebViewException(fmt)
                     Log.e(TAG, "This WebView implementation is broken: $fmt")
 
                     onInitializationErrorCloseAndCancel(exception)
-                    popAllPoTokenContinuations().forEach { (_, cont) -> cont.resumeWithException(exception) }
+                    popAllPoTokenContinuations().forEach { (_, cont) ->
+                        runCatching { cont.resumeWithException(exception) }
+                    }
                 }
                 return super.onConsoleMessage(m)
             }
@@ -158,7 +182,9 @@ class PoTokenWebView private constructor(
 
             webView.evaluateJavascript("this.integrityToken = $integrityToken") {
                 Log.d(TAG, "initialization finished, expiration=${expirationTimeInSeconds}s")
-                continuation.resume(this)
+                if (initCompleted.compareAndSet(false, true)) {
+                    continuation.resume(this)
+                }
             }
         }
     }
@@ -168,6 +194,10 @@ class PoTokenWebView private constructor(
     suspend fun generatePoToken(identifier: String): String {
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
+                if (isClosed.get()) {
+                    cont.resumeWithException(PoTokenException("PoTokenWebView is already closed"))
+                    return@suspendCancellableCoroutine
+                }
                 Log.d(TAG, "generatePoToken() called with identifier $identifier")
                 addPoTokenEmitter(identifier, cont)
                 webView.evaluateJavascript(
@@ -217,7 +247,7 @@ class PoTokenWebView private constructor(
     }
 
     val isExpired: Boolean
-        get() = Instant.now().isAfter(expirationInstant)
+        get() = isClosed.get() || Instant.now().isAfter(expirationInstant)
     //endregion
 
     //region Handling multiple emitters
@@ -295,8 +325,12 @@ class PoTokenWebView private constructor(
      * to [continuation].
      */
     private fun onInitializationErrorCloseAndCancel(error: Throwable) {
-        close()
-        continuation.resumeWithException(error)
+        scope.launch(Dispatchers.Main.immediate) {
+            close()
+        }
+        if (initCompleted.compareAndSet(false, true)) {
+            runCatching { continuation.resumeWithException(error) }
+        }
     }
 
     /**
@@ -304,18 +338,17 @@ class PoTokenWebView private constructor(
      */
     @MainThread
     fun close() {
+        if (!isClosed.compareAndSet(false, true)) return
         scope.cancel()
-
-        webView.clearHistory()
-        // clears RAM cache and disk cache (globally for all WebViews)
-        webView.clearCache(true)
-
-        // ensures that the WebView isn't doing anything when destroying it
-        webView.loadUrl("about:blank")
-
-        webView.onPause()
-        webView.removeAllViews()
-        webView.destroy()
+        runCatching {
+            webView.stopLoading()
+            webView.clearHistory()
+            webView.clearCache(true)
+            webView.loadUrl("about:blank")
+            webView.onPause()
+            webView.removeAllViews()
+            webView.destroy()
+        }
     }
     //endregion
 

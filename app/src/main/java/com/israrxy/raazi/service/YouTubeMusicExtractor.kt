@@ -420,30 +420,11 @@ class YouTubeMusicExtractor private constructor() {
     suspend fun getAudioStreamUrl(videoUrl: String): String = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Extracting audio URL for: $videoUrl")
-            
-            // Convert video ID to full URL if needed
-            val fullUrl = if (videoUrl.startsWith("http")) {
-                videoUrl
-            } else {
-                "https://www.youtube.com/watch?v=$videoUrl"
+            val resolved = com.israrxy.raazi.player.StreamResolver.resolveStreamUrl(videoUrl)
+            if (resolved.url.isNotBlank()) {
+                return@withContext resolved.url
             }
-            
-            val service = ServiceList.YouTube
-            val streamInfo = StreamInfo.getInfo(service, fullUrl)
-            
-            // Get the best audio stream
-            val audioStreams = streamInfo.audioStreams
-            Log.d(TAG, "Found ${audioStreams.size} audio streams")
-            
-            if (audioStreams.isNotEmpty()) {
-                val bestStream = audioStreams.maxByOrNull { it.averageBitrate }
-                val url = bestStream?.url ?: ""
-                Log.d(TAG, "Selected audio stream URL: ${url.take(100)}...")
-                return@withContext url
-            } else {
-                Log.e(TAG, "No audio streams available for: $videoUrl")
-                ""
-            }
+            ""
         } catch (e: Exception) {
             Log.e(TAG, "Failed to extract audio URL for: $videoUrl", e)
             ""
@@ -564,27 +545,48 @@ class YouTubeMusicExtractor private constructor() {
     
     suspend fun getUpNext(videoId: String): List<MusicItem> = withContext(Dispatchers.IO) {
         try {
-            val service = ServiceList.YouTube
-            // StreamInfo.getInfo expects a URL, not just ID, and positional args
-            val url = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId" 
-            val streamInfo = StreamInfo.getInfo(service, url)
-            
-            return@withContext streamInfo.relatedItems
-                .filterIsInstance<StreamInfoItem>()
-                .map { item ->
-                    MusicItem(
-                        id = item.getUrl(),
-                        title = item.name,
-                        artist = item.uploaderName ?: "Unknown",
-                        duration = item.duration * 1000,
-                        thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                        audioUrl = "",
-                        videoUrl = item.getUrl(),
-                        isLive = false
-                    )
+            val cleanId = videoId.trim().let { raw ->
+                when {
+                    raw.matches(Regex("^[a-zA-Z0-9_-]{11}$")) -> raw
+                    raw.contains("v=") -> raw.substringAfter("v=").substringBefore("&").take(11)
+                    raw.contains("youtu.be/") -> raw.substringAfter("youtu.be/").substringBefore("?").take(11)
+                    else -> raw
                 }
+            }
+
+            // Primary: InnerTube YouTube.next (works reliably without triggering /player bot blocks)
+            val nextResult = com.zionhuang.innertube.YouTube.next(
+                com.zionhuang.innertube.models.WatchEndpoint(
+                    videoId = cleanId,
+                    playlistId = "RDAMVM$cleanId"
+                )
+            ).getOrNull() ?: com.zionhuang.innertube.YouTube.next(
+                com.zionhuang.innertube.models.WatchEndpoint(videoId = cleanId)
+            ).getOrNull()
+
+            if (nextResult != null && nextResult.items.isNotEmpty()) {
+                val mapped = nextResult.items
+                    .mapNotNull { mapYTItemToMusicItem(it) }
+                    .filter { it.id != cleanId }
+                if (mapped.isNotEmpty()) {
+                    return@withContext mapped
+                }
+            }
+
+            // Secondary fallback: search related tracks via InnerTube if next items were empty
+            val currentSongTitle = nextResult?.items?.firstOrNull()?.title
+            val currentSongArtist = nextResult?.items?.firstOrNull()?.artists?.firstOrNull()?.name
+            if (!currentSongTitle.isNullOrBlank()) {
+                val query = listOfNotNull(currentSongArtist, currentSongTitle, "mix").joinToString(" ")
+                val searchRes = searchMusic(query).items.filter { it.id != cleanId }
+                if (searchRes.isNotEmpty()) {
+                    return@withContext searchRes
+                }
+            }
+
+            emptyList()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch Up Next for $videoId", e)
+            Log.w(TAG, "Failed to fetch Up Next for $videoId: ${e.message}")
             emptyList()
         }
     }

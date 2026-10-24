@@ -72,7 +72,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
+import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.utils.ConnectivityObserver
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -209,8 +212,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     val ringtoneState by viewModel.ringtoneState.collectAsStateWithLifecycle()
-    val connectivityObserver = remember { ConnectivityObserver(context) }
-    val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(initialValue = true)
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
+    val justReconnected by viewModel.justReconnected.collectAsStateWithLifecycle()
 
     LaunchedEffect(ringtoneState) {
         val isIdle = ringtoneState is MusicPlayerViewModel.RingtoneState.Idle
@@ -452,36 +455,67 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             }
         }
 
-        if (!isOnline) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+        AnimatedVisibility(
+            visible = !isOnline || justReconnected,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(220)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            val containerColor = if (isOnline) {
+                Emerald500.copy(alpha = 0.95f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)
+            }
+            val contentColor = if (isOnline) {
+                Color.Black
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+
+            Surface(
+                color = containerColor,
+                contentColor = contentColor,
+                shape = RoundedCornerShape(20.dp),
+                tonalElevation = 8.dp,
+                shadowElevation = 10.dp
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    shape = RoundedCornerShape(14.dp),
-                    tonalElevation = 6.dp,
-                    shadowElevation = 8.dp
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Icon(
+                        imageVector = if (isOnline) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = if (isOnline) Color.Black else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (isOnline) {
+                            "Back online • Refreshing music feed..."
+                        } else {
+                            "Offline mode • Playing from downloads & cache"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!isOnline && currentDestination?.route != "downloads") {
                         Text(
-                            text = "You're offline — downloads still work",
+                            text = "Downloads",
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { navController.navigate("downloads") }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }

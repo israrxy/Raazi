@@ -7,32 +7,29 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Loop
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Loop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +39,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -69,8 +69,14 @@ fun RingtoneTrimmerScreen(
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    // Remember the last Ready state so permission prompts or recoverable errors don't lose the trimmer UI
+    var lastReadyState by remember { mutableStateOf<MusicPlayerViewModel.RingtoneState.Ready?>(null) }
+
     LaunchedEffect(state) {
         when (val s = state) {
+            is MusicPlayerViewModel.RingtoneState.Ready -> {
+                lastReadyState = s
+            }
             is MusicPlayerViewModel.RingtoneState.Done -> {
                 showSuccessDialog = true
                 successMessage = s.message
@@ -85,8 +91,10 @@ fun RingtoneTrimmerScreen(
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 runCatching { context.startActivity(intent) }
-                showErrorDialog = true
-                errorMessage = "Raazi needs permission to modify system settings. Grant it and try again."
+                // Restore Ready state if available so the user stays on the trimmer screen when returning from Settings
+                lastReadyState?.let { ready ->
+                    viewModel.restoreRingtoneReadyState(ready.filePath, ready.durationMs)
+                }
             }
             else -> {}
         }
@@ -97,6 +105,7 @@ fun RingtoneTrimmerScreen(
             onDismissRequest = {
                 showSuccessDialog = false
                 viewModel.resetRingtoneState()
+                onClose()
             },
             icon = {
                 Icon(
@@ -106,7 +115,7 @@ fun RingtoneTrimmerScreen(
                     modifier = Modifier.size(48.dp)
                 )
             },
-            title = { Text("Success!", textAlign = TextAlign.Center) },
+            title = { Text("Ringtone Ready!", textAlign = TextAlign.Center) },
             text = {
                 Text(
                     successMessage,
@@ -118,6 +127,7 @@ fun RingtoneTrimmerScreen(
                     onClick = {
                         showSuccessDialog = false
                         viewModel.resetRingtoneState()
+                        onClose()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
@@ -132,7 +142,13 @@ fun RingtoneTrimmerScreen(
         AlertDialog(
             onDismissRequest = {
                 showErrorDialog = false
-                viewModel.resetRingtoneState()
+                val ready = lastReadyState
+                if (ready != null) {
+                    viewModel.restoreRingtoneReadyState(ready.filePath, ready.durationMs)
+                } else {
+                    viewModel.resetRingtoneState()
+                    onClose()
+                }
             },
             icon = {
                 Icon(
@@ -142,7 +158,7 @@ fun RingtoneTrimmerScreen(
                     modifier = Modifier.size(48.dp)
                 )
             },
-            title = { Text("Error", textAlign = TextAlign.Center) },
+            title = { Text("Couldn't Set Ringtone", textAlign = TextAlign.Center) },
             text = {
                 Text(
                     errorMessage,
@@ -153,7 +169,13 @@ fun RingtoneTrimmerScreen(
                 Button(
                     onClick = {
                         showErrorDialog = false
-                        viewModel.resetRingtoneState()
+                        val ready = lastReadyState
+                        if (ready != null) {
+                            viewModel.restoreRingtoneReadyState(ready.filePath, ready.durationMs)
+                        } else {
+                            viewModel.resetRingtoneState()
+                            onClose()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -161,7 +183,7 @@ fun RingtoneTrimmerScreen(
                         containerColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Close")
+                    Text(if (lastReadyState != null) "Try Again" else "Close")
                 }
             }
         )
@@ -172,12 +194,18 @@ fun RingtoneTrimmerScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Set Ringtone", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Set Ringtone",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                         if (track != null) {
                             Text(
-                                track!!.title,
+                                "${track!!.title} • ${track!!.artist}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -185,6 +213,7 @@ fun RingtoneTrimmerScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         viewModel.resetRingtoneState()
+                        onClose()
                     }) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
@@ -199,6 +228,7 @@ fun RingtoneTrimmerScreen(
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
+            val activeReady = (state as? MusicPlayerViewModel.RingtoneState.Ready) ?: lastReadyState
             when (val currentState = state) {
                 is MusicPlayerViewModel.RingtoneState.Downloading -> {
                     DownloadingContent(currentState.progress)
@@ -207,24 +237,27 @@ fun RingtoneTrimmerScreen(
                 is MusicPlayerViewModel.RingtoneState.Setting -> {
                     ProcessingContent(state is MusicPlayerViewModel.RingtoneState.Setting)
                 }
-                is MusicPlayerViewModel.RingtoneState.Ready -> {
-                    TrimmerContent(
-                        trackTitle = track?.title ?: "Unknown",
-                        filePath = currentState.filePath,
-                        durationMs = currentState.durationMs,
-                        ringtoneType = ringtoneType,
-                        onRingtoneTypeChange = { viewModel.setRingtoneType(it) },
-                        onSetRingtone = { startMs, endMs ->
-                            viewModel.setAsRingtone(currentState.filePath, startMs, endMs)
-                        },
-                        onRequestPermission = {
-                            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-                                data = Uri.parse("package:${context.packageName}")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                is MusicPlayerViewModel.RingtoneState.Ready,
+                is MusicPlayerViewModel.RingtoneState.NeedsPermission -> {
+                    if (activeReady != null) {
+                        TrimmerContent(
+                            trackTitle = track?.title ?: "Unknown",
+                            filePath = activeReady.filePath,
+                            durationMs = activeReady.durationMs,
+                            ringtoneType = ringtoneType,
+                            onRingtoneTypeChange = { viewModel.setRingtoneType(it) },
+                            onSetRingtone = { startMs, endMs ->
+                                viewModel.setAsRingtone(activeReady.filePath, startMs, endMs)
+                            },
+                            onRequestPermission = {
+                                val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(intent) }
                             }
-                            runCatching { context.startActivity(intent) }
-                        }
-                    )
+                        )
+                    }
                 }
                 else -> {}
             }
@@ -242,16 +275,23 @@ private fun DownloadingContent(progress: Int) {
         CircularProgressIndicator(modifier = Modifier.size(64.dp))
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            "Downloading track...",
+            "Preparing audio for trimming...",
             style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            if (progress > 0) "$progress% downloaded" else "Resolving high-compatibility stream...",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (progress > 0) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress = { progress / 100f },
                 modifier = Modifier
-                    .fillMaxWidth(0.6f)
+                    .fillMaxWidth(0.65f)
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
             )
@@ -269,15 +309,16 @@ private fun ProcessingContent(isSetting: Boolean) {
         CircularProgressIndicator(modifier = Modifier.size(64.dp))
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            if (isSetting) "Setting ringtone..." else "Trimming audio...",
+            if (isSetting) "Applying system ringtone..." else "Trimming audio selection...",
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Please wait a moment",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
 }
@@ -293,11 +334,14 @@ private fun TrimmerContent(
     onRequestPermission: () -> Unit
 ) {
     val maxDuration = 30_000L
-    var sliderRange by remember {
-        mutableStateOf(0f..minOf(durationMs.toFloat(), maxDuration.toFloat()))
+    var effectiveDurationMs by remember(durationMs) {
+        mutableLongStateOf(if (durationMs >= 2000L) durationMs else 30_000L)
+    }
+    var sliderRange by remember(effectiveDurationMs) {
+        mutableStateOf(0f..minOf(effectiveDurationMs.toFloat(), maxDuration.toFloat()))
     }
     var isPlaying by remember { mutableStateOf(false) }
-    var currentPlaybackMs by remember { mutableStateOf(0f) }
+    var currentPlaybackMs by remember { mutableFloatStateOf(0f) }
     var isLooping by remember { mutableStateOf(true) }
     var isPrepared by remember { mutableStateOf(false) }
 
@@ -307,17 +351,24 @@ private fun TrimmerContent(
     }
 
     DisposableEffect(filePath) {
-        val mediaItem = MediaItem.fromUri(Uri.parse("file://$filePath"))
+        val mediaItem = MediaItem.fromUri(Uri.fromFile(java.io.File(filePath)))
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
-        exoPlayer.addListener(object : Player.Listener {
+        val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     isPrepared = true
+                    val playerDur = exoPlayer.duration
+                    if (playerDur > 1000L && (durationMs <= 1000L || kotlin.math.abs(playerDur - effectiveDurationMs) > 2000L)) {
+                        effectiveDurationMs = playerDur
+                        sliderRange = 0f..minOf(playerDur.toFloat(), maxDuration.toFloat())
+                    }
                 }
             }
-        })
+        }
+        exoPlayer.addListener(listener)
         onDispose {
+            exoPlayer.removeListener(listener)
             exoPlayer.release()
             isPrepared = false
         }
@@ -325,20 +376,27 @@ private fun TrimmerContent(
 
     var hasWriteSettings by remember { mutableStateOf(Settings.System.canWrite(context)) }
 
-    // Re-check permission periodically (so it updates after returning from system settings)
+    // Immediately re-check permission when user returns from system settings
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        hasWriteSettings = Settings.System.canWrite(context)
+    }
+
+    // Also poll periodically in case activity lifecycle doesn't pause on overlay settings
     LaunchedEffect(Unit) {
         while (true) {
-            delay(2000)
+            delay(1000)
             val current = Settings.System.canWrite(context)
             if (current != hasWriteSettings) hasWriteSettings = current
         }
     }
 
-    LaunchedEffect(isPlaying, sliderRange.start) {
+    LaunchedEffect(isPlaying, isPrepared, sliderRange.start, sliderRange.endInclusive) {
         if (isPlaying && isPrepared) {
-            exoPlayer.seekTo(sliderRange.start.toLong())
+            if (exoPlayer.currentPosition < sliderRange.start.toLong() || exoPlayer.currentPosition >= sliderRange.endInclusive.toLong()) {
+                exoPlayer.seekTo(sliderRange.start.toLong())
+                currentPlaybackMs = sliderRange.start
+            }
             exoPlayer.play()
-            currentPlaybackMs = sliderRange.start
             while (isPlaying) {
                 delay(50)
                 val pos = exoPlayer.currentPosition.toFloat()
@@ -355,7 +413,15 @@ private fun TrimmerContent(
                         break
                     }
                 }
-                if (!exoPlayer.isPlaying) break
+                if (!exoPlayer.isPlaying && exoPlayer.playbackState == Player.STATE_ENDED) {
+                    if (isLooping) {
+                        exoPlayer.seekTo(sliderRange.start.toLong())
+                        exoPlayer.play()
+                    } else {
+                        isPlaying = false
+                        break
+                    }
+                }
             }
         } else if (!isPlaying) {
             exoPlayer.pause()
@@ -369,12 +435,12 @@ private fun TrimmerContent(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (!hasWriteSettings) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
@@ -400,9 +466,9 @@ private fun TrimmerContent(
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            "Raazi needs permission to modify system settings to set ringtones.",
+                            "Allow Raazi to modify system settings so it can set your ringtone.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
                         )
                     }
                 }
@@ -412,7 +478,7 @@ private fun TrimmerContent(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     )
@@ -427,8 +493,9 @@ private fun TrimmerContent(
 
         // --- Ringtone Type Selector ---
         Text(
-            "Ringtone Type",
+            "Assign To",
             style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth()
         )
@@ -442,7 +509,7 @@ private fun TrimmerContent(
 
         // --- Waveform Visualizer ---
         AnimatedWaveform(
-            durationMs = durationMs,
+            durationMs = effectiveDurationMs,
             sliderRange = sliderRange,
             currentPlaybackMs = currentPlaybackMs,
             isPlaying = isPlaying,
@@ -454,27 +521,28 @@ private fun TrimmerContent(
         Spacer(modifier = Modifier.height(12.dp))
 
         // --- Range Slider ---
+        val safeValueRange = 0f..effectiveDurationMs.toFloat().coerceAtLeast(1000f)
         RangeSlider(
-            value = sliderRange,
+            value = sliderRange.start.coerceIn(safeValueRange)..sliderRange.endInclusive.coerceIn(safeValueRange),
             onValueChange = { range ->
                 val diff = range.endInclusive - range.start
                 if (diff <= maxDuration) {
                     sliderRange = range
                 } else {
                     if (range.start != sliderRange.start) {
-                        sliderRange = range.start..(range.start + maxDuration)
+                        sliderRange = range.start..(range.start + maxDuration).coerceAtMost(safeValueRange.endInclusive)
                     } else {
-                        sliderRange = (range.endInclusive - maxDuration)..range.endInclusive
+                        sliderRange = (range.endInclusive - maxDuration).coerceAtLeast(0f)..range.endInclusive
                     }
                 }
             },
-            valueRange = 0f..durationMs.toFloat(),
+            valueRange = safeValueRange,
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
-            thumbColor = MaterialTheme.colorScheme.primary,
-            activeTrackColor = MaterialTheme.colorScheme.primary,
-            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         )
 
         // --- Time Labels ---
@@ -487,29 +555,37 @@ private fun TrimmerContent(
                 label = "Start",
                 timeMs = sliderRange.start.toLong(),
                 onIncrease = {
-                    val newStart = (sliderRange.start + 100).coerceAtMost(sliderRange.endInclusive - 1000)
+                    val newStart = (sliderRange.start + 500f).coerceAtMost(sliderRange.endInclusive - 1000f)
                     sliderRange = newStart..sliderRange.endInclusive
                 },
                 onDecrease = {
-                    val newStart = (sliderRange.start - 100).coerceAtLeast(0f)
+                    val newStart = (sliderRange.start - 500f).coerceAtLeast(0f)
                     sliderRange = newStart..sliderRange.endInclusive
                 }
             )
-            Text(
-                formatDuration((sliderRange.endInclusive - sliderRange.start).toLong()),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Clip Length",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    formatDuration((sliderRange.endInclusive - sliderRange.start).toLong()),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             TimeControl(
                 label = "End",
                 timeMs = sliderRange.endInclusive.toLong(),
                 onIncrease = {
-                    val newEnd = (sliderRange.endInclusive + 100).coerceAtMost(durationMs.toFloat())
+                    val maxEnd = minOf(effectiveDurationMs.toFloat(), sliderRange.start + maxDuration)
+                    val newEnd = (sliderRange.endInclusive + 500f).coerceAtMost(maxEnd)
                     sliderRange = sliderRange.start..newEnd
                 },
                 onDecrease = {
-                    val newEnd = (sliderRange.endInclusive - 100).coerceAtLeast(sliderRange.start + 1000)
+                    val newEnd = (sliderRange.endInclusive - 500f).coerceAtLeast(sliderRange.start + 1000f)
                     sliderRange = sliderRange.start..newEnd
                 }
             )
@@ -522,12 +598,12 @@ private fun TrimmerContent(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                formatDuration(sliderRange.start.toLong()),
+                "0:00",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                formatDuration(sliderRange.endInclusive.toLong()),
+                "Max 30s clip • Total ${formatDuration(effectiveDurationMs)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -579,10 +655,12 @@ private fun TrimmerContent(
 
             // Reset to default selection
             IconButton(onClick = {
-                if (!isPlaying) {
-                    sliderRange = 0f..minOf(durationMs.toFloat(), maxDuration.toFloat())
-                    currentPlaybackMs = sliderRange.start
+                if (isPlaying) {
+                    exoPlayer.pause()
+                    isPlaying = false
                 }
+                sliderRange = 0f..minOf(effectiveDurationMs.toFloat(), maxDuration.toFloat())
+                currentPlaybackMs = sliderRange.start
             }) {
                 Icon(
                     Icons.Default.Replay,
@@ -595,16 +673,15 @@ private fun TrimmerContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            if (isPlaying) "Previewing selection" else "Preview your ringtone",
+            if (isPlaying) "Previewing ${formatDuration(currentPlaybackMs.toLong())}" else "Tap play to preview selected clip",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         // --- Set Button ---
         val isSelectionValid = (sliderRange.endInclusive - sliderRange.start) >= 1000f
-        val canSet = hasWriteSettings && isSelectionValid
         Button(
             onClick = {
                 if (!hasWriteSettings) {
@@ -617,7 +694,7 @@ private fun TrimmerContent(
                 }
                 onSetRingtone(sliderRange.start.toLong(), sliderRange.endInclusive.toLong())
             },
-            enabled = canSet,
+            enabled = isSelectionValid,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
@@ -645,7 +722,7 @@ private fun TrimmerContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
@@ -669,10 +746,8 @@ private fun RingtoneTypeSelector(
             Card(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onSelect(type) },
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onSelect(type) },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected)
@@ -687,7 +762,7 @@ private fun RingtoneTypeSelector(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
@@ -719,8 +794,9 @@ private fun AnimatedWaveform(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val safeDuration = durationMs.coerceAtLeast(1000L)
     val barCount = 60
-    val barHeights = remember(durationMs) {
+    val barHeights = remember(safeDuration) {
         val random = Random(42)
         List(barCount) { random.nextFloat() * 0.8f + 0.2f }
     }
@@ -736,20 +812,19 @@ private fun AnimatedWaveform(
         label = "pulse"
     )
 
-    val playbackBarIndex by remember {
+    val playbackBarIndex by remember(currentPlaybackMs, safeDuration) {
         derivedStateOf {
-            ((currentPlaybackMs / durationMs) * barCount).roundToInt().coerceIn(0, barCount - 1)
+            ((currentPlaybackMs / safeDuration) * barCount).roundToInt().coerceIn(0, barCount - 1)
         }
     }
 
     val tintPrimary = MaterialTheme.colorScheme.primary
     val tintTertiary = MaterialTheme.colorScheme.tertiary
     val tintOnSurface = MaterialTheme.colorScheme.onSurface
-    val tintSurfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val bgColor = Color.Black.copy(alpha = 0.08f)
-    val baselineColor = Color.Black.copy(alpha = 0.1f)
+    val bgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
 
-    Canvas(modifier = modifier.clip(RoundedCornerShape(12.dp))) {
+    Canvas(modifier = modifier.clip(RoundedCornerShape(14.dp))) {
         val canvasWidth = size.width
         val canvasHeight = size.height
         val barWidth = canvasWidth / barCount * 0.6f
@@ -758,7 +833,7 @@ private fun AnimatedWaveform(
         // Draw background
         drawRoundRect(
             color = bgColor,
-            cornerRadius = CornerRadius(12.dp.toPx())
+            cornerRadius = CornerRadius(14.dp.toPx())
         )
 
         // Draw baseline
@@ -772,17 +847,16 @@ private fun AnimatedWaveform(
         barHeights.forEachIndexed { index, height ->
             val barX = index * (barWidth + gap) + gap / 2
             val barHeight = canvasHeight * height * 0.8f
-            val barY = (canvasHeight - barHeight) / 2
 
-            val barStartMs = (index.toFloat() / barCount) * durationMs
-            val barEndMs = ((index + 1).toFloat() / barCount) * durationMs
+            val barStartMs = (index.toFloat() / barCount) * safeDuration
+            val barEndMs = ((index + 1).toFloat() / barCount) * safeDuration
             val isInRange = barEndMs >= sliderRange.start && barStartMs <= sliderRange.endInclusive
             val isActive = isPlaying && index == playbackBarIndex
 
             val color = when {
                 isActive -> tintTertiary
                 isInRange -> tintPrimary
-                else -> tintOnSurface.copy(alpha = 0.15f)
+                else -> tintOnSurface.copy(alpha = 0.18f)
             }
 
             val animatedHeight = if (isPlaying && index <= playbackBarIndex && isInRange) {
@@ -802,17 +876,17 @@ private fun AnimatedWaveform(
         }
 
         // Draw range indicator lines
-        val startX = (sliderRange.start / durationMs) * canvasWidth
-        val endX = (sliderRange.endInclusive / durationMs) * canvasWidth
+        val startX = ((sliderRange.start / safeDuration) * canvasWidth).coerceIn(0f, canvasWidth)
+        val endX = ((sliderRange.endInclusive / safeDuration) * canvasWidth).coerceIn(0f, canvasWidth)
 
         drawLine(
-            color = tintPrimary.copy(alpha = 0.5f),
+            color = tintPrimary.copy(alpha = 0.65f),
             start = Offset(startX, 0f),
             end = Offset(startX, canvasHeight),
             strokeWidth = 2.dp.toPx()
         )
         drawLine(
-            color = tintPrimary.copy(alpha = 0.5f),
+            color = tintPrimary.copy(alpha = 0.65f),
             start = Offset(endX, 0f),
             end = Offset(endX, canvasHeight),
             strokeWidth = 2.dp.toPx()
@@ -820,7 +894,7 @@ private fun AnimatedWaveform(
 
         // Draw playback position indicator
         if (isPlaying) {
-            val playX = (currentPlaybackMs / durationMs) * canvasWidth
+            val playX = ((currentPlaybackMs / safeDuration) * canvasWidth).coerceIn(0f, canvasWidth)
             drawLine(
                 color = tintTertiary,
                 start = Offset(playX, 0f),
@@ -846,6 +920,7 @@ private fun TimeControl(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(2.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -859,7 +934,7 @@ private fun TimeControl(
             ) {
                 Icon(
                     Icons.Default.Remove,
-                    contentDescription = "Decrease",
+                    contentDescription = "Decrease $label",
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -879,7 +954,7 @@ private fun TimeControl(
             ) {
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = "Increase",
+                    contentDescription = "Increase $label",
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -888,7 +963,7 @@ private fun TimeControl(
 }
 
 private fun formatDuration(ms: Long): String {
-    val totalSeconds = (ms / 1000).toInt()
+    val totalSeconds = (ms.coerceAtLeast(0L) / 1000L).toInt()
     val m = totalSeconds / 60
     val s = totalSeconds % 60
     return String.format("%d:%02d", m, s)
