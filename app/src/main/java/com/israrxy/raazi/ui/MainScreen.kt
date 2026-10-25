@@ -214,6 +214,38 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val ringtoneState by viewModel.ringtoneState.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val justReconnected by viewModel.justReconnected.collectAsStateWithLifecycle()
+    val pendingDeepLinkEvent by viewModel.pendingDeepLinkEvent.collectAsStateWithLifecycle()
+
+    LaunchedEffect(pendingDeepLinkEvent, currentTrack) {
+        when (val event = pendingDeepLinkEvent) {
+            is MusicPlayerViewModel.DeepLinkEvent.ExpandPlayer -> {
+                if (currentTrack != null) {
+                    isLyricsModeOpen = false
+                    sheetState.expand()
+                    viewModel.consumeDeepLinkEvent()
+                }
+            }
+            is MusicPlayerViewModel.DeepLinkEvent.OpenPlaylist -> {
+                isLyricsModeOpen = false
+                if (sheetState.currentValue == SheetValue.Expanded) {
+                    sheetState.partialExpand()
+                }
+                navController.navigateToPlaylist(event.playlistId)
+                viewModel.consumeDeepLinkEvent()
+            }
+            is MusicPlayerViewModel.DeepLinkEvent.OpenArtist -> {
+                isLyricsModeOpen = false
+                if (sheetState.currentValue == SheetValue.Expanded) {
+                    sheetState.partialExpand()
+                }
+                val encodedId = Uri.encode(event.artistId)
+                val encodedName = Uri.encode(event.artistName ?: event.artistId)
+                navController.navigate("artist/$encodedId?name=$encodedName")
+                viewModel.consumeDeepLinkEvent()
+            }
+            null -> Unit
+        }
+    }
 
     LaunchedEffect(ringtoneState) {
         val isIdle = ringtoneState is MusicPlayerViewModel.RingtoneState.Idle

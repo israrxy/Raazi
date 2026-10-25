@@ -38,6 +38,8 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
 
 
+    private val incomingDeepLinkUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
+
     // Permission launcher for Android 13+ notifications
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -50,10 +52,12 @@ class MainActivity : FragmentActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         enableEdgeToEdge()
 
+        if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
+            incomingDeepLinkUri.value = intent?.data
+        }
+
         // Request permissions
         requestPermissions()
-
-        bootstrapPoToken()
 
         setContent {
             val context = LocalContext.current
@@ -140,14 +144,17 @@ class MainActivity : FragmentActivity() {
                             factory = MusicPlayerViewModel.provideFactory(this.application)
                         )
 
-                        var showSplash by remember { mutableStateOf(true) }
+                        val pendingUri by incomingDeepLinkUri.collectAsStateWithLifecycle()
+                        var showSplash by remember { mutableStateOf(incomingDeepLinkUri.value == null) }
 
-                        // Handle deep link intent
-                        LaunchedEffect(Unit) {
-                            val uri = intent?.data
+                        // Handle both cold-start and warm onNewIntent deep links
+                        LaunchedEffect(pendingUri) {
+                            val uri = pendingUri
                             if (uri != null) {
+                                showSplash = false
                                 viewModel.handleDeepLink(uri)
-                                intent = null
+                                incomingDeepLinkUri.value = null
+                                intent?.data = null
                             }
                         }
 
@@ -190,25 +197,15 @@ class MainActivity : FragmentActivity() {
             }
         }
     }
-    
-    private fun bootstrapPoToken() {
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val sessionId = com.zionhuang.innertube.YouTube.dataSyncId
-                    ?: com.zionhuang.innertube.YouTube.visitorData
-                    ?: "anonymous"
-                val pot = com.israrxy.raazi.player.potoken.PoTokenGenerator.getInstance()
-                    .getWebClientPoToken("bootstrap", sessionId)
-                if (pot != null) {
-                    com.zionhuang.innertube.YouTube.webPoToken = pot.streamingDataPoToken
-                    android.util.Log.d("MainActivity", "PoToken bootstrap ok (${pot.streamingDataPoToken.length} chars)")
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("MainActivity", "PoToken bootstrap failed", e)
-            }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            incomingDeepLinkUri.value = intent.data
         }
     }
-
+    
     private fun requestPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 

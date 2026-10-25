@@ -3080,36 +3080,116 @@ class MusicPlayerViewModel(
         }
     }
 
+    sealed interface DeepLinkEvent {
+        data object ExpandPlayer : DeepLinkEvent
+        data class OpenPlaylist(val playlistId: String) : DeepLinkEvent
+        data class OpenArtist(val artistId: String, val artistName: String?) : DeepLinkEvent
+    }
+
+    private val _pendingDeepLinkEvent = MutableStateFlow<DeepLinkEvent?>(null)
+    val pendingDeepLinkEvent: StateFlow<DeepLinkEvent?> = _pendingDeepLinkEvent.asStateFlow()
+
+    fun consumeDeepLinkEvent() {
+        _pendingDeepLinkEvent.value = null
+    }
+
     fun getShareLink(): String? {
         val track = playbackState.value.currentTrack ?: return null
-        return "https://raazi.app/play?id=${track.id}"
+        return "https://raazi.pages.dev/play?id=${track.id}"
     }
 
     fun handleDeepLink(uri: android.net.Uri) {
-        val videoId = uri.getQueryParameter("id") ?: return
+        val scheme = uri.scheme?.lowercase().orEmpty()
+        val host = uri.host?.lowercase().orEmpty()
+        val pathSegments = uri.pathSegments.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
+
+        // Determine route type from either custom scheme (raazi://play?id=...) or https://raazi.pages.dev/<route>
+        val routeType = if (scheme == "raazi") {
+            host
+        } else {
+            pathSegments.firstOrNull()?.lowercase().orEmpty()
+        }
+
+        val secondSegment = if (scheme == "raazi") {
+            pathSegments.firstOrNull()
+        } else {
+            pathSegments.getOrNull(1)
+        }
+
+        when (routeType) {
+            "playlist", "album" -> {
+                val rawPlaylistId = uri.getQueryParameter("list")
+                    ?: uri.getQueryParameter("id")
+                    ?: secondSegment
+                val cleanId = rawPlaylistId?.trim()?.removePrefix("VL")
+                if (!cleanId.isNullOrBlank()) {
+                    _pendingDeepLinkEvent.value = DeepLinkEvent.OpenPlaylist(cleanId)
+                    return
+                }
+            }
+            "artist" -> {
+                val rawArtistId = uri.getQueryParameter("id")
+                    ?: uri.getQueryParameter("channelId")
+                    ?: secondSegment
+                val artistName = uri.getQueryParameter("name")
+                if (!rawArtistId.isNullOrBlank()) {
+                    _pendingDeepLinkEvent.value = DeepLinkEvent.OpenArtist(rawArtistId.trim(), artistName)
+                    return
+                }
+            }
+        }
+
+        // Default / Song handling: supports /play?id=, /watch?v=, /song/{id}, and ?list= if watch URL has a playlist without a video
+        val videoId = uri.getQueryParameter("id")
+            ?: uri.getQueryParameter("v")
+            ?: (if (routeType == "song" || routeType == "play" || routeType == "watch") secondSegment else null)
+
+        if (videoId.isNullOrBlank()) {
+            val fallbackListId = uri.getQueryParameter("list")?.trim()?.removePrefix("VL")
+            if (!fallbackListId.isNullOrBlank()) {
+                _pendingDeepLinkEvent.value = DeepLinkEvent.OpenPlaylist(fallbackListId)
+            }
+            return
+        }
+
+        val cleanVideoId = videoId.trim()
         viewModelScope.launch {
             try {
                 val songs = com.zionhuang.innertube.YouTube.queue(
-                    videoIds = listOf(videoId)
+                    videoIds = listOf(cleanVideoId)
                 ).getOrNull()
                 val item = songs?.firstOrNull()
-                if (item != null) {
-                    val musicItem = MusicItem(
+                val musicItem = if (item != null) {
+                    MusicItem(
                         id = item.id,
                         title = item.title,
                         artist = item.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
+                        artistId = item.artists?.firstOrNull()?.id,
                         duration = (item.duration?.toLong() ?: 0) * 1000L,
-                        thumbnailUrl = item.thumbnail ?: "",
+                        thumbnailUrl = item.thumbnail ?: "https://i.ytimg.com/vi/${item.id}/hqdefault.jpg",
                         audioUrl = "",
                         videoUrl = item.id,
                         isLive = false,
                         contentType = MusicContentType.SONG,
                         setVideoId = item.setVideoId
                     )
-                    playMusic(musicItem)
+                } else {
+                    MusicItem(
+                        id = cleanVideoId,
+                        title = uri.getQueryParameter("title")?.takeIf { it.isNotBlank() } ?: "Loading track...",
+                        artist = uri.getQueryParameter("artist")?.takeIf { it.isNotBlank() } ?: "YouTube Music",
+                        duration = 0L,
+                        thumbnailUrl = "https://i.ytimg.com/vi/$cleanVideoId/hqdefault.jpg",
+                        audioUrl = "",
+                        videoUrl = cleanVideoId,
+                        isLive = false,
+                        contentType = MusicContentType.SONG
+                    )
                 }
+                playMusic(musicItem)
+                _pendingDeepLinkEvent.value = DeepLinkEvent.ExpandPlayer
             } catch (e: Exception) {
-                Log.e("MusicVM", "Error handling deep link: $videoId", e)
+                Log.e("MusicVM", "Error handling deep link: $cleanVideoId", e)
             }
         }
     }

@@ -37,28 +37,55 @@
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
             android:theme="@style/Theme.Raazi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
+
+            <!-- Verified Android App Links for raazi.pages.dev -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="raazi.app"
-                    android:pathPrefix="/play" />
+                <data android:scheme="https" />
+                <data android:host="raazi.pages.dev" />
+                <data android:pathPrefix="/play" />
+                <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/song" />
+                <data android:pathPrefix="/playlist" />
+                <data android:pathPrefix="/album" />
+                <data android:pathPrefix="/artist" />
             </intent-filter>
+
+            <!-- Legacy / fallback domain compatibility -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="raazi"
-                    android:host="play" />
+                <data android:scheme="https" />
+                <data android:host="raazi.app" />
+                <data android:pathPrefix="/play" />
+                <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/song" />
+                <data android:pathPrefix="/playlist" />
+                <data android:pathPrefix="/album" />
+                <data android:pathPrefix="/artist" />
+            </intent-filter>
+
+            <!-- Custom URI scheme raazi:// for instant opening from web landing page -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="raazi" android:host="play" />
+                <data android:scheme="raazi" android:host="watch" />
+                <data android:scheme="raazi" android:host="song" />
+                <data android:scheme="raazi" android:host="playlist" />
+                <data android:scheme="raazi" android:host="album" />
+                <data android:scheme="raazi" android:host="artist" />
             </intent-filter>
         </activity>
         

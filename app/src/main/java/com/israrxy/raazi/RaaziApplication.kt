@@ -52,6 +52,11 @@ class RaaziApplication : Application() {
 
         MainScope().launch(Dispatchers.IO) {
             try {
+                com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
+            } catch (e: Exception) {
+                android.util.Log.e("RaaziApp", "NewPipe extractor init failed", e)
+            }
+            try {
                 YouTubeAccountSession.bootstrap(SettingsDataStore(applicationContext))
             } catch (e: Exception) {
                 android.util.Log.e("RaaziApp", "YouTube account bootstrap failed", e)

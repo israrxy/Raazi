@@ -81,6 +81,12 @@ class MusicPlaybackService : Service() {
     private var videoQuality = com.israrxy.raazi.model.PlaybackVideoQuality.AUTO
     private var videoSurface: android.view.Surface? = null
     private var isVideoAvailable = false
+    private var currentStreamHasVideo = false
+    private var activeTrackId: String? = null
+    @Volatile private var transitionTargetPositionMs: Long? = null
+    @Volatile private var transitionTrackId: String? = null
+    @Volatile private var lastKnownDurationMs: Long = 0L
+    @Volatile private var lastKnownDurationTrackId: String? = null
     
     // Position update job for continuous timeline updates
     private var positionUpdateJob: kotlinx.coroutines.Job? = null
@@ -218,12 +224,20 @@ class MusicPlaybackService : Service() {
                     currentTrackRetryCount = 0
                     val tag = mediaItem.localConfiguration?.tag
                     if (tag is MusicItem) {
-                         currentAlbumArt = null
-                         pendingNotificationTrackId = tag.id
-                         // Load album art for notification
-                         loadAlbumArt(tag.thumbnailUrl)
-                         // Notify track changed
-                         notifyTrackChanged(tag)
+                        val isSameTrack = tag.id == activeTrackId
+                        activeTrackId = tag.id
+                        if (!isSameTrack) {
+                            currentStreamHasVideo = false
+                            isVideoAvailable = false
+                            transitionTargetPositionMs = null
+                            transitionTrackId = null
+                            currentAlbumArt = null
+                            pendingNotificationTrackId = tag.id
+                            // Load album art for notification
+                            loadAlbumArt(tag.thumbnailUrl)
+                            // Notify track changed
+                            notifyTrackChanged(tag)
+                        }
                     }
                     updateMediaSessionState()
                     notifyPlaybackState(refreshNotification = true)
@@ -233,8 +247,27 @@ class MusicPlaybackService : Service() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     currentTrackRetryCount = 0
+                    val currentTrackId = getCurrentTrack()?.id
+                    val dur = exoPlayer.duration
+                    if (dur > 0L) {
+                        lastKnownDurationMs = dur
+                        lastKnownDurationTrackId = currentTrackId
+                    }
+                    val targetPos = transitionTargetPositionMs?.takeIf { transitionTrackId == currentTrackId }
+                    if (targetPos != null) {
+                        transitionTargetPositionMs = null
+                        transitionTrackId = null
+                        val actualPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                        if (dur > 0L && targetPos >= dur - 1500L) {
+                            exoPlayer.seekTo(0L)
+                        } else if (targetPos > 1500L && kotlin.math.abs(actualPos - targetPos) > 2000L) {
+                            exoPlayer.seekTo(targetPos)
+                        }
+                    }
                     preloadAdjacentTracks(currentIndex)
                 } else if (playbackState == Player.STATE_ENDED) {
+                    transitionTargetPositionMs = null
+                    transitionTrackId = null
                     // Playlist ended
                     notifyPlaybackState()
                 }
@@ -928,6 +961,10 @@ class MusicPlaybackService : Service() {
             android.util.Log.d(TAG, "Setting playlist of ${playlist.size} items, starting at $safeStartIndex")
             currentTrackRetryCount = 0
             currentIndex = safeStartIndex
+            currentStreamHasVideo = false
+            isVideoAvailable = false
+            transitionTargetPositionMs = null
+            transitionTrackId = null
             
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
@@ -1081,12 +1118,48 @@ class MusicPlaybackService : Service() {
 
     fun seekTo(position: Long) {
         if (isDestroyed) return
-        try { exoPlayer.seekTo(position) } catch (e: Exception) { android.util.Log.e(TAG, "Error seeking", e) }
+        val safePos = position.coerceAtLeast(0L)
+        if (transitionTargetPositionMs != null) {
+            transitionTargetPositionMs = safePos
+        }
+        try {
+            exoPlayer.seekTo(safePos)
+            notifyPlaybackState()
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error seeking", e)
+        }
     }
 
-    fun getCurrentPosition(): Long = try { if (::exoPlayer.isInitialized) exoPlayer.currentPosition else 0L } catch (_: Exception) { 0L }
+    fun getCurrentPosition(): Long {
+        val currentTrackId = getCurrentTrack()?.id
+        val pendingPos = transitionTargetPositionMs?.takeIf { transitionTrackId != null && transitionTrackId == currentTrackId }
+        val rawPos = try {
+            if (::exoPlayer.isInitialized) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L
+        } catch (_: Exception) { 0L }
+        if (pendingPos != null) {
+            val state = try { if (::exoPlayer.isInitialized) exoPlayer.playbackState else Player.STATE_IDLE } catch (_: Exception) { Player.STATE_IDLE }
+            if (state != Player.STATE_READY || (rawPos < 1000L && pendingPos > 1500L)) {
+                return pendingPos
+            }
+        }
+        return rawPos
+    }
 
-    fun getDuration(): Long = try { if (::exoPlayer.isInitialized) exoPlayer.duration.coerceAtLeast(0L) else 0L } catch (_: Exception) { 0L }
+    fun getDuration(): Long {
+        val playerDur = try {
+            if (::exoPlayer.isInitialized) exoPlayer.duration else 0L
+        } catch (_: Exception) { 0L }
+        val activeTrack = getCurrentTrack()
+        if (playerDur > 0L) {
+            lastKnownDurationMs = playerDur
+            lastKnownDurationTrackId = activeTrack?.id
+            return playerDur
+        }
+        if (activeTrack != null && activeTrack.id == lastKnownDurationTrackId && lastKnownDurationMs > 0L) {
+            return lastKnownDurationMs
+        }
+        return (activeTrack?.duration ?: 0L).coerceAtLeast(0L)
+    }
 
     fun isPlaying(): Boolean = try { if (::exoPlayer.isInitialized) exoPlayer.isPlaying else false } catch (_: Exception) { false }
 
@@ -1136,27 +1209,71 @@ class MusicPlaybackService : Service() {
         }
         mediaMode = mode
         currentTrackRetryCount = 0
-        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
-            && videoSurface != null && ::exoPlayer.isInitialized) {
+
+        if (!::exoPlayer.isInitialized || currentIndex !in currentPlaylist.indices) {
+            notifyPlaybackState()
+            return true
+        }
+
+        // Fast path: if the active stream in ExoPlayer already contains both video and audio
+        // (e.g. switching VIDEO -> AUDIO or AUDIO -> VIDEO after video stream is loaded),
+        // toggle the video surface directly without re-preparing or interrupting playback!
+        val playerReadyOrBuffering = exoPlayer.playbackState == Player.STATE_READY ||
+            exoPlayer.playbackState == Player.STATE_BUFFERING
+        if (currentStreamHasVideo && playerReadyOrBuffering) {
+            if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO) {
+                isVideoAvailable = true
+                if (videoSurface != null) {
+                    exoPlayer.setVideoSurface(videoSurface)
+                }
+            } else {
+                isVideoAvailable = false
+                exoPlayer.clearVideoSurface()
+            }
+            replaceUpcomingMediaItemsForCurrentMode()
+            notifyPlaybackState(isLoading = false)
+            return true
+        }
+
+        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && videoSurface != null) {
             exoPlayer.setVideoSurface(videoSurface)
-        } else if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO && ::exoPlayer.isInitialized) {
+        } else if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO) {
             isVideoAvailable = false
             exoPlayer.clearVideoSurface()
         }
-        if (currentIndex >= 0 && currentIndex < currentPlaylist.size && ::exoPlayer.isInitialized) {
-            val rawPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val dur = exoPlayer.duration
-            val safePos = if (
-                exoPlayer.playbackState == androidx.media3.common.Player.STATE_ENDED ||
-                (dur > 0 && rawPos >= dur - 2000L) ||
-                rawPos >= 25_000L
-            ) 0L else rawPos
-            notifyPlaybackState(isLoading = true)
-            syncPlaylistQueue(currentIndex, safePos, shouldPlay = true, forceRePrepare = true)
-        } else {
-            notifyPlaybackState()
+
+        val activeTrack = getCurrentTrack()
+        val rawPos = getCurrentPosition()
+        val dur = getDuration()
+        val safePos = if (
+            exoPlayer.playbackState == Player.STATE_ENDED ||
+            (dur > 0L && rawPos >= dur - 1500L)
+        ) 0L else rawPos
+
+        if (dur > 0L && activeTrack != null) {
+            lastKnownDurationMs = dur
+            lastKnownDurationTrackId = activeTrack.id
         }
+        transitionTargetPositionMs = safePos
+        transitionTrackId = activeTrack?.id
+        val shouldPlay = exoPlayer.playWhenReady || exoPlayer.isPlaying || true
+
+        notifyPlaybackState(isLoading = true)
+        syncPlaylistQueue(currentIndex, safePos, shouldPlay = shouldPlay, forceRePrepare = true)
         return true
+    }
+
+    private fun replaceUpcomingMediaItemsForCurrentMode() {
+        if (!::exoPlayer.isInitialized) return
+        val count = exoPlayer.mediaItemCount
+        if (count != currentPlaylist.size) return
+        for (i in currentPlaylist.indices) {
+            if (i != currentIndex) {
+                try {
+                    exoPlayer.replaceMediaItem(i, createMediaItem(currentPlaylist[i]))
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun setVideoSurface(surface: android.view.Surface?) {
@@ -1176,11 +1293,24 @@ class MusicPlaybackService : Service() {
     }
 
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
+        if (videoQuality == quality) {
+            notifyPlaybackState()
+            return true
+        }
         videoQuality = quality
         currentTrackRetryCount = 0
-        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-            val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val isPlaying = exoPlayer.playWhenReady
+        if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && currentIndex >= 0 && currentIndex < currentPlaylist.size && ::exoPlayer.isInitialized) {
+            val activeTrack = getCurrentTrack()
+            val currentPos = getCurrentPosition()
+            val dur = getDuration()
+            if (dur > 0L && activeTrack != null) {
+                lastKnownDurationMs = dur
+                lastKnownDurationTrackId = activeTrack.id
+            }
+            transitionTargetPositionMs = currentPos
+            transitionTrackId = activeTrack?.id
+            currentStreamHasVideo = false
+            val isPlaying = exoPlayer.playWhenReady || exoPlayer.isPlaying
             notifyPlaybackState(isLoading = true)
             syncPlaylistQueue(currentIndex, currentPos, isPlaying, forceRePrepare = true)
         } else {
@@ -1191,19 +1321,13 @@ class MusicPlaybackService : Service() {
 
     fun getPlaybackState(): PlaybackState {
         var playing = false
-        var position = 0L
-        var duration = 0L
         var buffering = false
         var speed = 1.0f
         try {
             playing = if (::exoPlayer.isInitialized) exoPlayer.isPlaying else false
         } catch (_: Exception) { playing = false }
-        try {
-            position = if (::exoPlayer.isInitialized) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L
-        } catch (_: Exception) { position = 0L }
-        try {
-            duration = if (::exoPlayer.isInitialized) exoPlayer.duration.coerceAtLeast(0L) else 0L
-        } catch (_: Exception) { duration = 0L }
+        val position = getCurrentPosition()
+        val duration = getDuration()
         try {
             buffering = if (::exoPlayer.isInitialized)
                 exoPlayer.playbackState == androidx.media3.common.Player.STATE_BUFFERING
@@ -1268,13 +1392,13 @@ class MusicPlaybackService : Service() {
         }
     }
     
-    // Continuously update position while playing (every 200ms for responsive lyrics sync)
+    // Continuously update position while playing (every 100ms for smooth timeline & lyrics sync)
     private fun startPositionUpdates() {
         stopPositionUpdates() // Cancel any existing job
         positionUpdateJob = serviceScope.launch {
             while (isPlaying()) {
                 notifyPlaybackState()
-                kotlinx.coroutines.delay(200L) // Update every 200ms
+                kotlinx.coroutines.delay(100L) // Update every 100ms
             }
         }
     }
@@ -1293,13 +1417,12 @@ class MusicPlaybackService : Service() {
         if (targetIndex !in currentPlaylist.indices) return
 
         val mediaItems = currentPlaylist.map { createMediaItem(it) }
-        if (forceRePrepare && exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE) {
-            exoPlayer.stop()
-        }
-        val alreadyPrepared = exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE
+        val wasIdle = exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE
         exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
-        if (!alreadyPrepared || forceRePrepare) {
-            exoPlayer.prepare()
+        if (wasIdle || forceRePrepare) {
+            if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                exoPlayer.prepare()
+            }
         }
         applyRepeatModeToPlayer()
         exoPlayer.playWhenReady = shouldPlay
@@ -1312,6 +1435,11 @@ class MusicPlaybackService : Service() {
 
     private fun skipToPlaylistIndex(targetIndex: Int) {
         if (targetIndex !in currentPlaylist.indices) return
+
+        currentStreamHasVideo = false
+        isVideoAvailable = false
+        transitionTargetPositionMs = null
+        transitionTrackId = null
 
         if (exoPlayer.mediaItemCount != currentPlaylist.size) {
             currentIndex = targetIndex
@@ -1745,8 +1873,9 @@ class MusicPlaybackService : Service() {
                     if (isActiveTrack) {
                         serviceScope.launch(Dispatchers.Main) {
                             if (!isDestroyed) {
-                                isVideoAvailable = result.hasVideo
-                                if (result.hasVideo && effectiveMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && videoSurface != null && ::exoPlayer.isInitialized) {
+                                currentStreamHasVideo = result.hasVideo
+                                isVideoAvailable = result.hasVideo && mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
+                                if (result.hasVideo && mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && videoSurface != null && ::exoPlayer.isInitialized) {
                                     exoPlayer.setVideoSurface(videoSurface)
                                 }
                                 notifyPlaybackState()
@@ -1783,9 +1912,12 @@ class MusicPlaybackService : Service() {
                          val isrc = dataSpec.uri.getQueryParameter("isrc")
                          val result = StreamResolver.resolveStreamUrl(extractedId, title, artist, mediaMode, videoQuality, isrc = isrc)
                          
-                         serviceScope.launch {
-                             isVideoAvailable = result.hasVideo
-                             notifyPlaybackState()
+                         serviceScope.launch(Dispatchers.Main) {
+                             if (!isDestroyed) {
+                                 currentStreamHasVideo = result.hasVideo
+                                 isVideoAvailable = result.hasVideo && mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
+                                 notifyPlaybackState()
+                             }
                          }
                          
                          val headers = HashMap(dataSpec.httpRequestHeaders)

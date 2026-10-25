@@ -1238,7 +1238,7 @@ private fun SpotifyYoutubeLyricItem(
             }
         }
 
-        // Timestamp pill during manual scroll OR subtle share button on active line
+        // Timestamp pill during manual scroll
         if (showTimestampBadge) {
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
@@ -1251,18 +1251,6 @@ private fun SpotifyYoutubeLyricItem(
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White.copy(alpha = 0.9f),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        } else if (isCurrent) {
-            IconButton(
-                onClick = onShareLine,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "Share lyric line",
-                    tint = Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(16.dp)
                 )
             }
         }

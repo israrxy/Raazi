@@ -119,8 +119,26 @@ fun PlayerScreen(
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val currentTrack = playbackState.currentTrack
     val isPlaying = playbackState.isPlaying
-    val progress = playbackState.currentPosition
+    val rawProgress = playbackState.currentPosition
     val duration = playbackState.duration
+    var isDraggingSlider by remember(currentTrack?.id) { mutableStateOf(false) }
+    var dragFraction by remember(currentTrack?.id) { mutableFloatStateOf(0f) }
+    var pendingSeekPositionMs by remember(currentTrack?.id) { mutableStateOf<Long?>(null) }
+    var pendingSeekTimestampMs by remember(currentTrack?.id) { mutableLongStateOf(0L) }
+
+    LaunchedEffect(rawProgress, pendingSeekPositionMs) {
+        val target = pendingSeekPositionMs ?: return@LaunchedEffect
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (kotlin.math.abs(rawProgress - target) <= 1_200L || (now - pendingSeekTimestampMs) > 2_500L) {
+            pendingSeekPositionMs = null
+        }
+    }
+
+    val progress = when {
+        isDraggingSlider && duration > 0L -> (dragFraction * duration).toLong()
+        pendingSeekPositionMs != null -> pendingSeekPositionMs!!
+        else -> rawProgress
+    }
     val currentTrackRelated by viewModel.currentTrackRelated.collectAsStateWithLifecycle()
     val currentArtistSongs by viewModel.currentArtistSongs.collectAsStateWithLifecycle()
     val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
@@ -516,6 +534,7 @@ fun PlayerScreen(
                     var activeSurface by remember { mutableStateOf<android.view.Surface?>(null) }
                     var activeTextureView by remember { mutableStateOf<android.view.TextureView?>(null) }
                     var videoRatio by remember(track.id) { mutableFloatStateOf(16f / 9f) }
+                    var hasRenderedFrame by remember(track.id) { mutableStateOf(false) }
 
                     fun applyVideoTransform(textureView: android.view.TextureView?, ratio: Float) {
                         val view = textureView ?: return
@@ -545,6 +564,7 @@ fun PlayerScreen(
                         val initialSize = player?.videoSize
                         if (initialSize != null && initialSize.width > 0 && initialSize.height > 0) {
                             videoRatio = (initialSize.width.toFloat() * initialSize.pixelWidthHeightRatio) / initialSize.height.toFloat()
+                            hasRenderedFrame = true
                             applyVideoTransform(activeTextureView, videoRatio)
                         }
                         val listener = object : androidx.media3.common.Player.Listener {
@@ -553,6 +573,11 @@ fun PlayerScreen(
                                     videoRatio = (videoSize.width.toFloat() * videoSize.pixelWidthHeightRatio) / videoSize.height.toFloat()
                                     applyVideoTransform(activeTextureView, videoRatio)
                                 }
+                            }
+
+                            override fun onRenderedFirstFrame() {
+                                hasRenderedFrame = true
+                                applyVideoTransform(activeTextureView, videoRatio)
                             }
                         }
                         player?.addListener(listener)
@@ -578,13 +603,14 @@ fun PlayerScreen(
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        // High-resolution 16:9 widescreen visual backdrop while buffering
+                        val showVideoFrame = playbackState.isVideoAvailable && hasRenderedFrame
+                        // High-resolution 16:9 widescreen visual backdrop until the first video frame renders
                         AsyncImage(
                             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
                             contentDescription = track.title,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .alpha(if (playbackState.isLoading || !playbackState.isVideoAvailable) 0.65f else 0f),
+                                .alpha(if (showVideoFrame) 0f else 0.72f),
                             contentScale = ContentScale.Crop
                         )
 
@@ -626,7 +652,11 @@ fun PlayerScreen(
 
                                         override fun onSurfaceTextureUpdated(
                                             surfaceTexture: android.graphics.SurfaceTexture
-                                        ) {}
+                                        ) {
+                                            if (!hasRenderedFrame) {
+                                                hasRenderedFrame = true
+                                            }
+                                        }
                                     }
                                     // If surfaceTexture is already available on attach
                                     surfaceTexture?.let { st ->
@@ -647,14 +677,14 @@ fun PlayerScreen(
                             },
                             modifier = Modifier
                                 .fillMaxSize()
-                                .alpha(if (playbackState.isVideoAvailable && !playbackState.isLoading) 1f else 0.01f)
+                                .alpha(if (showVideoFrame) 1f else 0.01f)
                         )
 
                         if (playbackState.isLoading || playbackState.isBuffering) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                    .background(Color.Black.copy(alpha = if (showVideoFrame) 0.22f else 0.35f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(
@@ -673,7 +703,7 @@ fun PlayerScreen(
                         },
                         label = "AlbumArtTransition"
                     ) { targetTrack ->
-                        if (!playbackState.isLoading && targetTrack != null) {
+                        if (targetTrack != null) {
                             AsyncImage(
                                 model = ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl),
                                 contentDescription = "Album Art",
@@ -756,12 +786,25 @@ fun PlayerScreen(
             
             // PROGRESS BAR
             Column(modifier = Modifier.fillMaxWidth()) {
+                val sliderFraction = when {
+                    isDraggingSlider -> dragFraction
+                    duration > 0L -> (progress.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                    else -> 0f
+                }
                 Slider(
-                    value = if (duration > 0) progress.toFloat() / duration.toFloat() else 0f,
+                    value = sliderFraction,
                     onValueChange = { fraction ->
-                        // Calculate seek position and tell ViewModel to seek
-                        val seekPosition = (fraction * duration).toLong()
-                        viewModel.seekTo(seekPosition)
+                        isDraggingSlider = true
+                        dragFraction = fraction.coerceIn(0f, 1f)
+                    },
+                    onValueChangeFinished = {
+                        if (duration > 0L) {
+                            val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                            pendingSeekPositionMs = seekPosition
+                            pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                            viewModel.seekTo(seekPosition)
+                        }
+                        isDraggingSlider = false
                     },
                     colors = SliderDefaults.colors(
                         thumbColor = Color.White,

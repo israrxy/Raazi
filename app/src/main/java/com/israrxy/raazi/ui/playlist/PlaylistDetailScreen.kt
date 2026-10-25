@@ -444,13 +444,13 @@ fun PlaylistDetailScreen(
                             onSharePlaylistClick = {
                                 showHeaderMenu = false
                                 val shareUrl = if (!isLocalPlaylist || isSyncedWithYouTube) {
-                                    "https://music.youtube.com/playlist?list=${playlist.id.removePrefix("VL")}"
+                                    "https://raazi.pages.dev/playlist?list=${playlist.id.removePrefix("VL")}"
                                 } else {
                                     "${playlist.title} (${items.size} tracks)"
                                 }
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "Check out ${playlist.title}: $shareUrl")
+                                    putExtra(Intent.EXTRA_TEXT, "Check out ${playlist.title} on Raazi: $shareUrl")
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, "Share Playlist"))
                             }
@@ -567,7 +567,7 @@ fun PlaylistDetailScreen(
                                     Toast.makeText(context, "Downloading ${item.title}", Toast.LENGTH_SHORT).show()
                                 },
                                 onShareTrack = {
-                                    val shareText = "${item.title} - ${item.artist}\nhttps://music.youtube.com/watch?v=${item.id}"
+                                    val shareText = "${item.title} - ${item.artist}\nhttps://raazi.pages.dev/play?id=${item.id}"
                                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, shareText)

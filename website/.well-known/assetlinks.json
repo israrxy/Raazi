@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.israrxy.raazi",
+      "sha256_cert_fingerprints": [
+        "ED:7F:7A:7E:25:46:13:40:20:F6:C9:BA:81:CE:86:7B:00:E7:1C:77:E3:90:C3:0A:05:FD:2F:B0:9B:1A:8D:65"
+      ]
+    }
+  }
+]

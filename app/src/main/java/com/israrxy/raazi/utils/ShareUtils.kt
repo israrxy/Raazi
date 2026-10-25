@@ -8,17 +8,30 @@ import com.israrxy.raazi.model.MusicItem
  * Helpers for sharing tracks via the Android Sharesheet.
  */
 object ShareUtils {
+    const val BASE_DOMAIN = "https://raazi.pages.dev"
 
-    /** Build a shareable YouTube link for a track id, when the id looks like a video id. */
-    private fun buildLink(item: MusicItem): String? {
-        val id = item.id
-        if (id.isBlank()) return null
-        // YouTube video ids are 11 chars; treat those as watchable links.
-        return if (id.length == 11) "https://music.youtube.com/watch?v=$id" else null
+    /** Build a shareable Raazi deep link for a track id. */
+    fun buildTrackLink(trackId: String): String? {
+        val cleanId = trackId.trim()
+        if (cleanId.isBlank()) return null
+        return "$BASE_DOMAIN/play?id=${android.net.Uri.encode(cleanId)}"
+    }
+
+    fun buildPlaylistLink(playlistId: String): String? {
+        val cleanId = playlistId.trim().removePrefix("VL")
+        if (cleanId.isBlank()) return null
+        return "$BASE_DOMAIN/playlist?list=${android.net.Uri.encode(cleanId)}"
+    }
+
+    fun buildArtistLink(artistId: String, artistName: String? = null): String? {
+        val cleanId = artistId.trim()
+        if (cleanId.isBlank()) return null
+        val nameParam = if (!artistName.isNullOrBlank()) "&name=${android.net.Uri.encode(artistName)}" else ""
+        return "$BASE_DOMAIN/artist?id=${android.net.Uri.encode(cleanId)}$nameParam"
     }
 
     fun shareTrack(context: Context, item: MusicItem) {
-        val link = buildLink(item)
+        val link = buildTrackLink(item.id)
         val title = item.title.ifBlank { "this song" }
         val artist = item.artist.trim()
         val text = buildString {
