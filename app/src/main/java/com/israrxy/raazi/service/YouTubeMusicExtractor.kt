@@ -1,32 +1,20 @@
 package com.israrxy.raazi.service
 
+import android.util.Log
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.model.SearchResult
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
-import org.schabi.newpipe.extractor.NewPipe
+import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import org.schabi.newpipe.extractor.search.SearchInfo
-import org.schabi.newpipe.extractor.stream.StreamInfo
-import org.schabi.newpipe.extractor.stream.StreamInfoItem
-import android.util.Log
-import okhttp3.RequestBody.Companion.toRequestBody
 
 private const val TAG = "YouTubeMusicExtractor"
 
 class YouTubeMusicExtractor private constructor() {
-    private val client: okhttp3.OkHttpClient
-
-    private fun normalizePlaylistId(playlistIdOrUrl: String): String {
-        val trimmed = playlistIdOrUrl.trim()
-        val listId = Regex("[?&]list=([^&#]+)").find(trimmed)?.groupValues?.getOrNull(1)
-        return listId?.let { java.net.URLDecoder.decode(it, java.nio.charset.StandardCharsets.UTF_8.name()) }
-            ?: trimmed.removePrefix("VL")
-    }
+    private val client: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder().build()
 
     companion object {
         @Volatile
@@ -40,71 +28,14 @@ class YouTubeMusicExtractor private constructor() {
     }
 
     init {
-        client = okhttp3.OkHttpClient.Builder().build()
-        
-        val country = java.util.Locale.getDefault().country
-        val language = java.util.Locale.getDefault().language
-        val localization = org.schabi.newpipe.extractor.localization.Localization(country, language)
-        val contentCountry = org.schabi.newpipe.extractor.localization.ContentCountry(country)
-
-        try {
-            NewPipe.init(
-                object : org.schabi.newpipe.extractor.downloader.Downloader() {
-                    override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response {
-                        val httpMethod = request.httpMethod()
-                        val url = request.url()
-                        val headers = request.headers()
-                        val dataToSend = request.dataToSend()
-                        
-                        val requestBuilder = okhttp3.Request.Builder()
-                            .url(url)
-                            .method(httpMethod, dataToSend?.toRequestBody(null))
-
-                        headers.forEach { (key, values) ->
-                            values.forEach { value ->
-                                requestBuilder.addHeader(key, value)
-                            }
-                        }
-                        
-                        if (headers["User-Agent"].isNullOrEmpty()) {
-                            requestBuilder.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-                        }
-
-                        val response = client.newCall(requestBuilder.build()).execute()
-                        val responseBody = response.body?.string() ?: ""
-                        val responseHeaders = response.headers.toMultimap()
-                        val responseCode = response.code
-                        val responseMessage = response.message
-                        val latestUrl = response.request.url.toString()
-                        
-                        return org.schabi.newpipe.extractor.downloader.Response(
-                            responseCode,
-                            responseMessage,
-                            responseHeaders,
-                            responseBody,
-                            latestUrl
-                        )
-                    }
-                },
-                localization,
-                contentCountry
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "NewPipe may already be initialized", e)
-        }
-        
-        // Set InnerTube Locale for Home Feed
-        com.zionhuang.innertube.YouTube.locale = com.zionhuang.innertube.models.YouTubeLocale(
-            gl = country,
-            hl = language
-        )
+        initializeNewPipeAndLocale(client)
     }
 
     suspend fun getSearchSuggestions(query: String): List<String> = withContext(Dispatchers.IO) {
         try {
             val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
             val url = "http://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=$encodedQuery"
-            
+
             val request = okhttp3.Request.Builder()
                 .url(url)
                 .build()
@@ -115,7 +46,7 @@ class YouTubeMusicExtractor private constructor() {
             if (response.isSuccessful && !body.isNullOrEmpty()) {
                 val start = body.indexOf("[", body.indexOf("[") + 1)
                 val end = body.lastIndexOf("]")
-                
+
                 if (start != -1 && end != -1) {
                     val arrayString = body.substring(start, end + 1)
                     return@withContext arrayString
@@ -133,122 +64,6 @@ class YouTubeMusicExtractor private constructor() {
         }
     }
 
-    private fun runNewPipeSearch(query: String, serviceId: Int): SearchResult {
-        // 0 = YouTube, 1 = SoundCloud, 2 = Bandcamp
-        val service = when (serviceId) {
-            1 -> ServiceList.SoundCloud
-            2 -> ServiceList.Bandcamp
-            else -> ServiceList.YouTube
-        }
-
-        Log.d(TAG, "NewPipe searching for: $query on ${service.serviceInfo.name}")
-        val searchResult = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query))
-        Log.d(TAG, "NewPipe search finished, processing results")
-
-        val results = searchResult.relatedItems
-            .mapNotNull { item ->
-                when (item) {
-                    is StreamInfoItem -> {
-                        if (item.streamType == org.schabi.newpipe.extractor.stream.StreamType.AUDIO_STREAM ||
-                            item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM ||
-                            serviceId == 1 || serviceId == 2
-                        ) {
-                            val url = item.getUrl()
-                            Log.d(TAG, "Processing search item: ${item.name}, URL: $url")
-
-                            if (url.isNullOrEmpty()) {
-                                Log.w(TAG, "Skipping empty URL item: ${item.name}")
-                                return@mapNotNull null
-                            }
-
-                            val (itemId, videoUrl) = when {
-                                serviceId == 1 || serviceId == 2 -> {
-                                    Pair(url, url)
-                                }
-                                url.contains("youtube.com") || url.contains("youtu.be") -> {
-                                    val extractedId = when {
-                                        url.contains("v=") -> url.substringAfter("v=").substringBefore("&")
-                                        url.contains("youtu.be/") -> url.substringAfter("youtu.be/").substringBefore("?")
-                                        else -> null
-                                    }
-
-                                    if (extractedId.isNullOrEmpty()) {
-                                        Log.w(TAG, "Skipping YouTube item with no extractable ID: $url")
-                                        return@mapNotNull null
-                                    }
-
-                                    Log.d(TAG, "Extracted YouTube ID: $extractedId from $url")
-                                    Pair(extractedId, extractedId)
-                                }
-                                else -> {
-                                    Pair(url, url)
-                                }
-                            }
-                            val contentType = when {
-                                serviceId == 1 || serviceId == 2 -> MusicContentType.SONG
-                                item.streamType == org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM -> MusicContentType.VIDEO
-                                else -> MusicContentType.SONG
-                            }
-
-                            MusicItem(
-                                id = itemId,
-                                title = item.name,
-                                artist = item.uploaderName ?: "Unknown Artist",
-                                duration = item.duration * 1000,
-                                thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                                audioUrl = "",
-                                videoUrl = videoUrl,
-                                isLive = false,
-                                isPlaylist = false,
-                                contentType = contentType
-                            )
-                        } else null
-                    }
-                    is org.schabi.newpipe.extractor.playlist.PlaylistInfoItem -> {
-                        MusicItem(
-                            id = item.url,
-                            title = item.name,
-                            artist = item.uploaderName ?: "Unknown",
-                            duration = 0,
-                            thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                            audioUrl = "",
-                            videoUrl = item.url,
-                            isLive = false,
-                            isPlaylist = true,
-                            contentType = MusicContentType.PLAYLIST
-                        )
-                    }
-                    is org.schabi.newpipe.extractor.channel.ChannelInfoItem -> {
-                        val url = item.url
-                        val id = when {
-                            url.contains("/channel/") -> url.substringAfter("/channel/")
-                            url.contains("/user/") -> url.substringAfter("/user/")
-                            url.contains("/c/") -> url.substringAfter("/c/")
-                            else -> url
-                        }
-
-                        MusicItem(
-                            id = id,
-                            title = item.name,
-                            artist = "Artist",
-                            duration = 0,
-                            thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                            audioUrl = "",
-                            videoUrl = item.url,
-                            isLive = false,
-                            isPlaylist = false,
-                            artistId = id,
-                            contentType = MusicContentType.ARTIST
-                        )
-                    }
-                    else -> null
-                }
-            }
-
-        Log.d(TAG, "NewPipe found ${results.size} results")
-        return SearchResult(query, results)
-    }
-
     suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
             if (serviceId == 0) {
@@ -260,28 +75,28 @@ class YouTubeMusicExtractor private constructor() {
                         query,
                         filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
                     ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG) }
+                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG) }
                 }
                 val videoResults = async {
                     com.zionhuang.innertube.YouTube.search(
                         query,
                         filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_VIDEO
                     ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.VIDEO) }
+                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.VIDEO) }
                 }
                 val artistResults = async {
                     com.zionhuang.innertube.YouTube.search(
                         query,
                         filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ARTIST
                     ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.ARTIST) }
+                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ARTIST) }
                 }
                 val albumResults = async {
                     com.zionhuang.innertube.YouTube.search(
                         query,
                         filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ALBUM
                     ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.ALBUM) }
+                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ALBUM) }
                 }
                 val playlistResults = async {
                     (
@@ -294,7 +109,7 @@ class YouTubeMusicExtractor private constructor() {
                                 filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
                             ).getOrNull()?.items.orEmpty()
                         )
-                        .mapNotNull { mapYTItemToMusicItem(it, overrideContentType = MusicContentType.PLAYLIST) }
+                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.PLAYLIST) }
                         .distinctBy { it.id }
                 }
 
@@ -316,14 +131,14 @@ class YouTubeMusicExtractor private constructor() {
                         }
 
                         val mappedItems = section.items.mapNotNull { ytItem ->
-                            mapYTItemToMusicItem(ytItem, overrideContentType = overrideType)
+                            convertYTItemToMusicItem(ytItem, overrideContentType = overrideType)
                         }
 
-                        // Collect authentic top tracks from Top result and Songs shelves
                         if (isTopResultSection || isSongsSection) {
                             mappedItems.forEach { item ->
                                 if (item.contentType == MusicContentType.SONG ||
-                                    (item.contentType == MusicContentType.UNKNOWN && !item.isPlaylist)) {
+                                    (item.contentType == MusicContentType.UNKNOWN && !item.isPlaylist)
+                                ) {
                                     summaryTopTracks.add(item)
                                 }
                             }
@@ -339,11 +154,9 @@ class YouTubeMusicExtractor private constructor() {
                 val typedAlbums = albumResults.await()
                 val typedPlaylists = playlistResults.await()
 
-                // Authentic top tracks prioritized from searchSummary, fallback to first typed songs
                 val finalTopTracks = (summaryTopTracks.ifEmpty { typedSongs.take(10) })
                     .distinctBy { it.id }
 
-                // Relevance-ordered items: YouTube Music native summary first, then enrich with typed results
                 val combinedResults = (summaryAllItems + typedSongs + typedVideos + typedArtists + typedAlbums + typedPlaylists)
                     .distinctBy { "${it.contentType}:${it.id}" }
 
@@ -356,17 +169,14 @@ class YouTubeMusicExtractor private constructor() {
                     )
                 }
 
-                // Fallback: InnerTube search returned nothing (common when anonymous or client stale).
-                // Try NewPipe's search which uses its own clients and historical home feed.
                 Log.w(TAG, "InnerTube search empty for '$query', falling back to NewPipe")
-                val newpipeResults = runNewPipeSearch(query, serviceId)
+                val newpipeResults = executeNewPipeSearch(query, serviceId)
                 if (newpipeResults.items.isNotEmpty()) {
                     return@withContext newpipeResults
                 }
             }
 
-            // For non-YouTube services (or final fallback), use NewPipe directly
-            runNewPipeSearch(query, serviceId)
+            executeNewPipeSearch(query, serviceId)
         } catch (e: Exception) {
             Log.e(TAG, "Search failed", e)
             SearchResult(query, emptyList())
@@ -374,11 +184,9 @@ class YouTubeMusicExtractor private constructor() {
     }
 
     suspend fun getPlaylist(playlistId: String): Playlist = withContext(Dispatchers.IO) {
-        val normalizedPlaylistId = normalizePlaylistId(playlistId)
-        // Try InnerTube first
+        val normalizedPlaylistId = normalizeYouTubePlaylistId(playlistId)
         try {
             if (normalizedPlaylistId.startsWith("MPREb")) {
-                // It's an Album
                 val album = com.zionhuang.innertube.YouTube.album(normalizedPlaylistId).getOrThrow()
                 val items = album.songs.mapNotNull { song ->
                     MusicItem(
@@ -394,74 +202,30 @@ class YouTubeMusicExtractor private constructor() {
                 }
                 return@withContext Playlist(
                     id = normalizedPlaylistId,
-                    title = items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album", // Fallback to artist name or generic
-                    description = "", // Description unavailable in this version of model
+                    title = items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album",
+                    description = "",
                     thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
                 )
-            } else if (normalizedPlaylistId.startsWith("PL") || normalizedPlaylistId.startsWith("OLAK") || normalizedPlaylistId.startsWith("UU") || normalizedPlaylistId.startsWith("FL") || normalizedPlaylistId.startsWith("RD")) {
-                 // It's a Playlist
-                 val playlist = com.zionhuang.innertube.YouTube.playlist(normalizedPlaylistId).getOrThrow()
-                 // Try 'songs' instead of 'items'
-                 val items = playlist.songs.mapNotNull { item ->
-                    mapYTItemToMusicItem(item)
-                 }
-                 return@withContext Playlist(
+            } else if (normalizedPlaylistId.startsWith("PL") || normalizedPlaylistId.startsWith("OLAK") ||
+                normalizedPlaylistId.startsWith("UU") || normalizedPlaylistId.startsWith("FL") ||
+                normalizedPlaylistId.startsWith("RD")
+            ) {
+                val playlist = com.zionhuang.innertube.YouTube.playlist(normalizedPlaylistId).getOrThrow()
+                val items = playlist.songs.mapNotNull { convertYTItemToMusicItem(it) }
+                return@withContext Playlist(
                     id = normalizedPlaylistId,
-                    title = "Playlist", // innerTube playlist model missing title/name property in this version
-                    description = "", // Author unavailable
+                    title = "Playlist",
+                    description = "",
                     thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
-                 )
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "InnerTube failed for $normalizedPlaylistId", e)
         }
 
-        // Fallback to NewPipe
-        try {
-            val service = ServiceList.YouTube
-            val playlistUrl = "https://www.youtube.com/playlist?list=$normalizedPlaylistId"
-            val playlistInfo = PlaylistInfo.getInfo(service, playlistUrl)
-            
-            val items = playlistInfo.relatedItems
-                .filterIsInstance<StreamInfoItem>()
-                .filter { item ->
-                    val url = item.getUrl()
-                    // Filter out invalid URLs that caused crashes
-                    !url.equals("https://www.youtube.com/watch", ignoreCase = true) &&
-                    !url.equals("https://m.youtube.com/watch", ignoreCase = true) &&
-                    url.length > 25 // Basic length check for a valid watch URL
-                }
-                .map { streamItem ->
-                    MusicItem(
-                        id = streamItem.getUrl(),
-                        title = streamItem.name,
-                        artist = streamItem.uploaderName ?: "Unknown Artist",
-                        duration = streamItem.duration * 1000,
-                        thumbnailUrl = streamItem.thumbnails.firstOrNull()?.getUrl() ?: "",
-                        audioUrl = "",
-                        videoUrl = streamItem.getUrl(),
-                        isLive = false // Placeholder
-                    )
-                }
-            
-            Playlist(
-                id = normalizedPlaylistId,
-                title = playlistInfo.name,
-                description = playlistInfo.description?.content ?: "",
-                thumbnailUrl = playlistInfo.thumbnails.firstOrNull()?.url ?: "",
-                items = items
-            )
-        } catch (e: Exception) {
-            Playlist(
-                id = normalizedPlaylistId,
-                title = "Error Playlist",
-                description = "Could not load playlist: ${e.message}",
-                thumbnailUrl = "",
-                items = emptyList()
-            )
-        }
+        fetchNewPipePlaylistFallback(normalizedPlaylistId)
     }
 
     suspend fun getAudioStreamUrl(videoUrl: String): String = withContext(Dispatchers.IO) {
@@ -480,10 +244,8 @@ class YouTubeMusicExtractor private constructor() {
 
     suspend fun getTopSongs(): SearchResult = withContext(Dispatchers.IO) {
         try {
-            // Global Top Songs Playlist
-            val playlistId = "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i" 
+            val playlistId = "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i"
             val playlist = getPlaylist(playlistId)
-            
             if (playlist.items.isNotEmpty()) {
                 return@withContext SearchResult("Top Songs Global", playlist.items, topTracks = playlist.items)
             }
@@ -491,39 +253,33 @@ class YouTubeMusicExtractor private constructor() {
         } catch (e: Exception) {
             Log.w(TAG, "Top Songs fetch failed, trying fallback", e)
             try {
-                return@withContext searchMusic("Top 100 Songs Global")
-            } catch (e2: Exception) {
-                 return@withContext SearchResult("Top Songs Global", emptyList())
+                searchMusic("Top 100 Songs Global")
+            } catch (_: Exception) {
+                SearchResult("Top Songs Global", emptyList())
             }
         }
     }
 
     suspend fun getTrendingVideos(): SearchResult = withContext(Dispatchers.IO) {
         try {
-            // Trending Music Videos Playlist
-            val playlistId = "PL4fGSI1pDJn3-A5n37Ua2u14s141v09fG" 
+            val playlistId = "PL4fGSI1pDJn3-A5n37Ua2u14s141v09fG"
             val playlist = getPlaylist(playlistId)
-            
             if (playlist.items.isNotEmpty()) {
                 return@withContext SearchResult("Trending Music Videos", playlist.items)
             }
             throw Exception("Empty Trending playlist")
         } catch (e: Exception) {
-             Log.w(TAG, "Trending fetch failed, trying fallback", e)
+            Log.w(TAG, "Trending fetch failed, trying fallback", e)
             try {
-                return@withContext searchMusic("Trending Music Videos")
-            } catch (e2: Exception) {
-                 return@withContext SearchResult("Trending Music Videos", emptyList())
+                searchMusic("Trending Music Videos")
+            } catch (_: Exception) {
+                SearchResult("Trending Music Videos", emptyList())
             }
         }
     }
 
-    // Deprecated wrapper, points to Top Songs
-    suspend fun getTrending(): SearchResult {
-        return getTopSongs()
-    }
-    
-    // Moods
+    suspend fun getTrending(): SearchResult = getTopSongs()
+
     suspend fun getMoodPlaylists(mood: String): List<Playlist> = withContext(Dispatchers.IO) {
         val query = when (mood.lowercase()) {
             "relax" -> "Relaxing music playlist"
@@ -536,41 +292,35 @@ class YouTubeMusicExtractor private constructor() {
             "sleep" -> "Sleep music playlist"
             else -> "$mood music playlist"
         }
-        
-        // 1. Try generic search for playlists
+
         try {
             val service = ServiceList.YouTube
             val search = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery(query))
-            
-            // Get top 5 playlists
-            val playlists = search.relatedItems
+
+            return@withContext search.relatedItems
                 .filterIsInstance<org.schabi.newpipe.extractor.playlist.PlaylistInfoItem>()
                 .take(5)
                 .map { item ->
-                     // Convert to light Playlist object (without tracks initially to save bandwidth)
-                     Playlist(
-                        id = normalizePlaylistId(item.url),
+                    Playlist(
+                        id = normalizeYouTubePlaylistId(item.url),
                         title = item.name,
                         description = "By ${item.uploaderName}",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.getUrl() ?: "",
-                        items = emptyList() // Will be loaded when clicked
-                     )
+                        items = emptyList()
+                    )
                 }
-            
-            return@withContext playlists
-        } catch(e: Exception) {
-             Log.e(TAG, "Mood search failed for $mood", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Mood search failed for $mood", e)
+            emptyList()
         }
-        return@withContext emptyList()
     }
-    
+
     suspend fun getNewReleaseAlbums(): List<Playlist> = withContext(Dispatchers.IO) {
         try {
             val service = ServiceList.YouTube
-            // Search for "New Music Albums" to simulate "Albums for you"
             val search = SearchInfo.getInfo(service, service.getSearchQHFactory().fromQuery("New Music Albums"))
-            
-            return@withContext search.relatedItems
+
+            search.relatedItems
                 .filterIsInstance<org.schabi.newpipe.extractor.playlist.PlaylistInfoItem>()
                 .take(10)
                 .map { item ->
@@ -587,7 +337,7 @@ class YouTubeMusicExtractor private constructor() {
             emptyList()
         }
     }
-    
+
     suspend fun getUpNext(videoId: String): List<MusicItem> = withContext(Dispatchers.IO) {
         try {
             val cleanId = videoId.trim().let { raw ->
@@ -599,7 +349,6 @@ class YouTubeMusicExtractor private constructor() {
                 }
             }
 
-            // Primary: InnerTube YouTube.next (works reliably without triggering /player bot blocks)
             val nextResult = com.zionhuang.innertube.YouTube.next(
                 com.zionhuang.innertube.models.WatchEndpoint(
                     videoId = cleanId,
@@ -611,14 +360,13 @@ class YouTubeMusicExtractor private constructor() {
 
             if (nextResult != null && nextResult.items.isNotEmpty()) {
                 val mapped = nextResult.items
-                    .mapNotNull { mapYTItemToMusicItem(it) }
+                    .mapNotNull { convertYTItemToMusicItem(it) }
                     .filter { it.id != cleanId }
                 if (mapped.isNotEmpty()) {
                     return@withContext mapped
                 }
             }
 
-            // Secondary fallback: search related tracks via InnerTube if next items were empty
             val currentSongTitle = nextResult?.items?.firstOrNull()?.title
             val currentSongArtist = nextResult?.items?.firstOrNull()?.artists?.firstOrNull()?.name
             if (!currentSongTitle.isNullOrBlank()) {
@@ -636,130 +384,28 @@ class YouTubeMusicExtractor private constructor() {
         }
     }
 
-    // Alias for backward compatibility if needed, or remove
-    suspend fun getGenrePlaylists(genre: String): List<Playlist> {
-        return getMoodPlaylists(genre)
-    }
-
-    // ============================================================================================
-    // Real Home Feed Integration (InnerTube)
-    // ============================================================================================
+    suspend fun getGenrePlaylists(genre: String): List<Playlist> = getMoodPlaylists(genre)
 
     suspend fun getHomeSections(): List<SearchResult> = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Fetching Home Feed via InnerTube...")
-            
-            // Fetch from InnerTube (like OuterTune does)
             val homePage = com.zionhuang.innertube.YouTube.home().getOrNull()
-            
             if (homePage == null) {
                 Log.e(TAG, "InnerTube.home() returned null")
                 return@withContext emptyList()
             }
-            
-            Log.d(TAG, "InnerTube returned ${homePage.sections.size} sections")
-            
-            // Map all sections to SearchResult
-            val sections = homePage.sections.mapNotNull { section ->
-                val items = section.items.mapNotNull { mapYTItemToMusicItem(it) }
+
+            homePage.sections.mapNotNull { section ->
+                val items = section.items.mapNotNull { convertYTItemToMusicItem(it) }
                 if (items.isNotEmpty()) {
                     SearchResult(section.title, items)
                 } else {
                     null
                 }
             }
-            
-            Log.d(TAG, "Returning ${sections.size} non-empty sections")
-            sections
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching home sections", e)
             emptyList()
-        }
-    }
-
-    private fun mapYTItemToMusicItem(
-        item: com.zionhuang.innertube.models.YTItem,
-        overrideContentType: MusicContentType? = null
-    ): MusicItem? {
-        // Import models locally or use fully qualified names if conflicts exist
-        return when (item) {
-            is com.zionhuang.innertube.models.SongItem -> {
-                var id = item.id ?: return null
-                // Strict validation for IDs
-                if (id.startsWith("http") || 
-                    id.contains("youtube.com") || 
-                    id.contains("/watch") || 
-                    item.title.equals("Start Radio", ignoreCase = true)
-                ) {
-                    // Attempt to rescue ID from thumbnail
-                    val thumbnail = item.thumbnail
-                    var rescuedId: String? = null
-                    if (thumbnail != null && thumbnail.contains("/vi/")) {
-                        val pattern = "vi/([a-zA-Z0-9_-]{11})".toRegex()
-                        val match = pattern.find(thumbnail)
-                        if (match != null) {
-                            rescuedId = match.groupValues[1]
-                            Log.i(TAG, "Rescued invalid ID '$id' using thumbnail: $rescuedId")
-                            id = rescuedId
-                        }
-                    }
-
-                    if (rescuedId == null) {
-                        Log.w(TAG, "Filtered out invalid SongItem: id=$id, title=${item.title}")
-                        return null
-                    }
-                }
-                MusicItem(
-                    id = id,
-                    title = item.title ?: "Unknown",
-                    artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
-                    duration = (item.duration?.toLong() ?: 0) * 1000L,
-                    thumbnailUrl = item.thumbnail ?: "",
-                    audioUrl = "",
-                    videoUrl = id,
-                    isLive = false,
-                    contentType = overrideContentType ?: MusicContentType.SONG,
-                    setVideoId = item.setVideoId
-                )
-            }
-            is com.zionhuang.innertube.models.AlbumItem -> MusicItem(
-                id = item.browseId ?: return null,
-                title = item.title ?: "Unknown",
-                artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown",
-                duration = 0,
-                thumbnailUrl = item.thumbnail ?: "",
-                audioUrl = "",
-                videoUrl = item.browseId ?: return null,
-                isLive = false,
-                isPlaylist = true,
-                contentType = overrideContentType ?: MusicContentType.ALBUM
-            )
-            is com.zionhuang.innertube.models.PlaylistItem -> MusicItem(
-                id = item.id ?: return null,
-                title = item.title ?: "Unknown",
-                artist = item.author?.name ?: "Unknown",
-                duration = 0,
-                thumbnailUrl = item.thumbnail ?: "",
-                audioUrl = "",
-                videoUrl = item.id ?: return null,
-                isLive = false,
-                isPlaylist = true,
-                contentType = overrideContentType ?: MusicContentType.PLAYLIST
-            )
-            is com.zionhuang.innertube.models.ArtistItem -> MusicItem(
-                id = item.id,
-                title = item.title,
-                artist = "Artist",
-                duration = 0L,
-                thumbnailUrl = item.thumbnail ?: "",
-                audioUrl = "",
-                videoUrl = item.shareLink,
-                isLive = false,
-                isPlaylist = false,
-                artistId = item.id,
-                contentType = overrideContentType ?: MusicContentType.ARTIST
-            )
-            else -> null
         }
     }
 }

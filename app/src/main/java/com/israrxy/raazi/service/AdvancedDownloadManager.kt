@@ -1,10 +1,7 @@
 package com.israrxy.raazi.service
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Environment
-import android.os.StatFs
 import android.util.Log
 import com.israrxy.raazi.data.db.DownloadEntity
 import com.israrxy.raazi.data.db.MusicDao
@@ -13,16 +10,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
-import java.io.FileOutputStream
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * High-performance download manager using OkHttp direct streaming.
- * Downloads complete in seconds instead of minutes by bypassing
- * Android's throttled system DownloadManager.
  */
 class AdvancedDownloadManager(
     private val context: Context,
@@ -32,13 +25,10 @@ class AdvancedDownloadManager(
     companion object {
         private const val TAG = "AdvancedDownloadMgr"
         private const val MAX_RETRIES = 3
-        private const val DOWNLOAD_DIR = "Raazi"
-        private const val BUFFER_SIZE = 8192
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // OkHttp client optimized for large downloads
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -47,7 +37,6 @@ class AdvancedDownloadManager(
         .followSslRedirects(true)
         .build()
 
-    // Concurrency control
     private var downloadSemaphore = Semaphore(2)
     var maxConcurrentDownloads = 2
         set(value) {
@@ -56,18 +45,15 @@ class AdvancedDownloadManager(
         }
     var wifiOnly = false
 
-    // Active download jobs for cancellation
     private val activeJobs = ConcurrentHashMap<String, Job>()
     @Volatile private var isDestroyed = false
 
-    // Observable state from DB
     val activeDownloads: Flow<List<DownloadEntity>> = musicDao.getActiveDownloads()
     val completedDownloads: Flow<List<DownloadEntity>> = musicDao.getCompletedDownloads()
     val failedDownloads: Flow<List<DownloadEntity>> = musicDao.getFailedDownloads()
     val allDownloads: Flow<List<DownloadEntity>> = musicDao.getAllDownloads()
     val activeDownloadCount: Flow<Int> = musicDao.getActiveDownloadCount()
 
-    // Events
     private val _downloadEvents = MutableSharedFlow<DownloadEvent>(extraBufferCapacity = 20)
     val downloadEvents: SharedFlow<DownloadEvent> = _downloadEvents.asSharedFlow()
 
@@ -79,10 +65,6 @@ class AdvancedDownloadManager(
         data class Queued(val trackId: String, val title: String) : DownloadEvent()
     }
 
-    /**
-     * Download a single track using OkHttp direct streaming.
-     * Resolves stream URL, then streams bytes directly to disk with real-time progress.
-     */
     fun downloadTrack(track: MusicItem) {
         if (isDestroyed) {
             Log.w(TAG, "Download manager destroyed, ignoring download for ${track.title}")
@@ -90,7 +72,6 @@ class AdvancedDownloadManager(
         }
         val job = scope.launch {
             try {
-                // Check duplicate
                 val existing = musicDao.getDownloadByTrackId(track.id)
                 if (existing != null) {
                     when (existing.status) {
@@ -111,19 +92,16 @@ class AdvancedDownloadManager(
                     }
                 }
 
-                // Check WiFi-only
-                if (wifiOnly && !isOnWifi()) {
+                if (wifiOnly && !isDeviceConnectedToWifi(context)) {
                     insertFailedDownload(track, "WiFi-only mode enabled. Connect to WiFi to download.")
                     return@launch
                 }
 
-                // Check storage
-                if (!hasEnoughStorage()) {
+                if (getAvailableStorage() <= 50L * 1024 * 1024) {
                     insertFailedDownload(track, "Not enough storage space")
                     return@launch
                 }
 
-                // Insert as pending
                 val downloadEntity = DownloadEntity(
                     trackId = track.id,
                     title = track.title,
@@ -137,11 +115,9 @@ class AdvancedDownloadManager(
                 musicDao.insertDownload(downloadEntity)
                 _downloadEvents.emit(DownloadEvent.Queued(track.id, track.title))
 
-                // Wait for semaphore slot (concurrency control)
                 downloadSemaphore.acquire()
 
                 try {
-                    // Resolve audio stream URL
                     musicDao.updateDownloadStatus(track.id, DownloadEntity.STATUS_DOWNLOADING)
                     _downloadEvents.emit(DownloadEvent.Started(track.id, track.title))
 
@@ -178,21 +154,39 @@ class AdvancedDownloadManager(
                         return@launch
                     }
 
-                    // Specify range parameter to bypass YouTube throttling
                     var downloadUrl = audioUrl
                     if ((downloadUrl.contains("youtube.com") || downloadUrl.contains("googlevideo.com")) && !downloadUrl.contains("&range=")) {
                         val format = musicDao.getFormat(track.id)
                         val length = if (format != null && format.contentLength > 0L) {
                             format.contentLength
                         } else {
-                            50_000_000L // 50MB default — covers most tracks
+                            50_000_000L
                         }
                         downloadUrl += "&range=0-$length"
                         Log.d(TAG, "Bypassing YouTube throttling for ${track.title} with range=0-$length")
                     }
 
-                    // Direct OkHttp download with streaming
-                    streamDownload(track, downloadUrl)
+                    val outputFile = withContext(Dispatchers.IO) {
+                        streamTrackToFile(
+                            context = context,
+                            httpClient = httpClient,
+                            track = track,
+                            audioUrl = downloadUrl,
+                            onProgress = { progress, downloadedBytes ->
+                                musicDao.updateDownloadProgress(track.id, progress, downloadedBytes)
+                            }
+                        )
+                    }
+
+                    val filePath = outputFile.absolutePath
+                    musicDao.updateDownloadStatus(
+                        trackId = track.id,
+                        status = DownloadEntity.STATUS_COMPLETED,
+                        filePath = filePath,
+                        completedAt = System.currentTimeMillis()
+                    )
+                    musicDao.updateTrackLocalPath(track.id, filePath)
+                    _downloadEvents.emit(DownloadEvent.Completed(track.id, track.title))
 
                 } finally {
                     downloadSemaphore.release()
@@ -215,129 +209,24 @@ class AdvancedDownloadManager(
         activeJobs[track.id] = job
     }
 
-    /**
-     * Stream bytes directly from URL to disk using OkHttp.
-     * Progress is emitted per chunk for real-time UI updates.
-     */
-    private suspend fun streamDownload(track: MusicItem, audioUrl: String) {
-        withContext(Dispatchers.IO) {
-            // Ensure download directory exists
-            val downloadDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-                DOWNLOAD_DIR
-            )
-            if (!downloadDir.exists()) downloadDir.mkdirs()
-
-            val fileName = buildFileName(track)
-            val outputFile = File(downloadDir, fileName)
-            val tempFile = File(downloadDir, "$fileName.tmp")
-
-            val request = Request.Builder()
-                .url(audioUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
-                .build()
-
-            Log.d(TAG, "Starting OkHttp download for ${track.title}")
-            val startTime = System.currentTimeMillis()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw IllegalStateException("HTTP ${response.code}: ${response.message}")
-                }
-
-                val body = response.body ?: throw IllegalStateException("Empty response body")
-                val contentLength = body.contentLength()
-                var downloaded = 0L
-                var lastProgressUpdate = 0L
-                var lastEmittedProgress = -1
-
-                body.byteStream().use { inputStream ->
-                    FileOutputStream(tempFile).use { outputStream ->
-                        val buffer = ByteArray(BUFFER_SIZE)
-                        var bytesRead: Int
-
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            // Check for cancellation
-                            ensureActive()
-
-                            outputStream.write(buffer, 0, bytesRead)
-                            downloaded += bytesRead
-
-                            val progress = if (contentLength > 0) {
-                                (downloaded * 100 / contentLength).toInt()
-                            } else 0
-                            val now = System.currentTimeMillis()
-                            if (progress > lastEmittedProgress || now - lastProgressUpdate > 500 || downloaded == contentLength) {
-                                musicDao.updateDownloadProgress(track.id, progress, downloaded)
-                                lastProgressUpdate = now
-                                lastEmittedProgress = progress
-                            }
-                        }
-                    }
-                }
-
-                // Rename temp file to final — handle silent failure
-                if (tempFile.exists()) {
-                    if (outputFile.exists()) outputFile.delete()
-                    val renamed = tempFile.renameTo(outputFile)
-                    if (!renamed) {
-                        // Fallback: copy then delete temp
-                        try {
-                            tempFile.copyTo(outputFile, overwrite = true)
-                            tempFile.delete()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "File rename AND copy failed for ${track.title}", e)
-                            throw e
-                        }
-                    }
-                }
-
-                val elapsed = System.currentTimeMillis() - startTime
-                val speedKBps = if (elapsed > 0) (downloaded / 1024) / (elapsed / 1000.0) else 0.0
-                Log.i(TAG, "Download complete: ${track.title} | ${downloaded/1024}KB in ${elapsed}ms (${String.format("%.1f", speedKBps)} KB/s)")
-
-                val filePath = outputFile.absolutePath
-                musicDao.updateDownloadStatus(
-                    trackId = track.id,
-                    status = DownloadEntity.STATUS_COMPLETED,
-                    filePath = filePath,
-                    completedAt = System.currentTimeMillis()
-                )
-                musicDao.updateTrackLocalPath(track.id, filePath)
-                _downloadEvents.emit(DownloadEvent.Completed(track.id, track.title))
-            }
-        }
-    }
-
-    /**
-     * Download multiple tracks (batch/playlist download).
-     */
     fun downloadPlaylist(tracks: List<MusicItem>) {
         tracks.forEach { downloadTrack(it) }
     }
 
-    /**
-     * Cancel an active download.
-     */
     fun cancelDownload(trackId: String) {
         scope.launch {
-            // Cancel the job first
             activeJobs[trackId]?.cancel()
             activeJobs.remove(trackId)
 
-            // Clean up temp file
             val download = musicDao.getDownloadByTrackId(trackId)
             if (download != null) {
-                cleanupTempFile(download)
+                cleanupTempDownloadFile(context, download)
                 musicDao.deleteDownloadByTrackId(trackId)
                 _downloadEvents.emit(DownloadEvent.Cancelled(trackId, download.title))
             }
         }
     }
 
-    /**
-     * Retry a failed download.
-     */
     fun retryDownload(trackId: String) {
         scope.launch {
             val download = musicDao.getDownloadByTrackId(trackId) ?: return@launch
@@ -361,9 +250,6 @@ class AdvancedDownloadManager(
         }
     }
 
-    /**
-     * Delete a completed download (removes file + DB entry).
-     */
     fun deleteDownloadedFile(trackId: String) {
         scope.launch {
             val download = musicDao.getDownloadByTrackId(trackId) ?: return@launch
@@ -379,9 +265,6 @@ class AdvancedDownloadManager(
         }
     }
 
-    /**
-     * Check if a track is already downloaded and available.
-     */
     fun isTrackDownloaded(trackId: String): Boolean {
         val download = musicDao.getDownloadByTrackId(trackId) ?: return false
         return download.status == DownloadEntity.STATUS_COMPLETED &&
@@ -389,46 +272,20 @@ class AdvancedDownloadManager(
                 File(download.filePath).exists()
     }
 
-    /**
-     * Get download state for a specific track.
-     */
-    fun getDownloadState(trackId: String): DownloadEntity? {
-        return musicDao.getDownloadByTrackId(trackId)
-    }
+    fun getDownloadState(trackId: String): DownloadEntity? = musicDao.getDownloadByTrackId(trackId)
 
-    /**
-     * Get total storage used by downloads.
-     */
-    fun getDownloadStorageUsed(): Long {
-        val downloadDir = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-            DOWNLOAD_DIR
-        )
-        if (!downloadDir.exists()) return 0L
-        return downloadDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-    }
+    fun getDownloadStorageUsed(): Long = calculateDownloadStorageUsed(context)
 
-    /**
-     * Get available storage space.
-     */
-    fun getAvailableStorage(): Long {
-        val appDir = context.getExternalFilesDir(null) ?: return 0L
-        val stat = StatFs(appDir.path)
-        return stat.availableBlocksLong * stat.blockSizeLong
-    }
+    fun getAvailableStorage(): Long = calculateAvailableStorage(context)
 
-    /**
-     * Delete all downloaded files and clear DB entries.
-     */
     fun deleteAllDownloads() {
         scope.launch {
-            // Cancel all active downloads
             activeJobs.values.forEach { it.cancel() }
             activeJobs.clear()
 
             val downloadDir = File(
                 context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-                DOWNLOAD_DIR
+                RAAZI_DOWNLOAD_DIR
             )
             downloadDir.deleteRecursively()
             val all = musicDao.getAllDownloads().first()
@@ -438,8 +295,6 @@ class AdvancedDownloadManager(
             }
         }
     }
-
-    // ─── Private Helpers ──────────────────────────────────────
 
     private fun insertFailedDownload(track: MusicItem, error: String) {
         val entity = DownloadEntity(
@@ -457,38 +312,6 @@ class AdvancedDownloadManager(
         scope.launch {
             _downloadEvents.emit(DownloadEvent.Failed(track.id, track.title, error))
         }
-    }
-
-    private fun buildFileName(track: MusicItem): String {
-        val sanitizedTitle = track.title.replace(Regex("[^a-zA-Z0-9._\\- ]"), "_").take(60)
-        val sanitizedId = track.id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        return "${sanitizedTitle}_${sanitizedId}.m4a"
-    }
-
-    private fun cleanupTempFile(download: DownloadEntity) {
-        try {
-            val downloadDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-                DOWNLOAD_DIR
-            )
-            val tempFiles = downloadDir.listFiles()?.filter {
-                it.name.contains(download.trackId.replace(Regex("[^a-zA-Z0-9._-]"), "_")) && it.name.endsWith(".tmp")
-            }
-            tempFiles?.forEach { it.delete() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to cleanup temp files", e)
-        }
-    }
-
-    private fun isOnWifi(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return false
-        val capabilities = cm.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-    }
-
-    private fun hasEnoughStorage(minBytes: Long = 50 * 1024 * 1024): Boolean {
-        return getAvailableStorage() > minBytes
     }
 
     fun destroy() {
