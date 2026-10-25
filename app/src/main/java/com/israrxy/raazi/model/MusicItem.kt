@@ -46,7 +46,8 @@ data class SavedCollectionItem(
 
 data class SearchResult(
     val query: String,
-    val items: List<MusicItem>
+    val items: List<MusicItem>,
+    val topTracks: List<MusicItem> = emptyList()
 )
 
 fun savedCollectionId(type: MusicContentType, sourceId: String): String = "${type.name}:$sourceId"

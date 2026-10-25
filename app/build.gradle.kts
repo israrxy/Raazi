@@ -34,10 +34,22 @@ android {
 
     signingConfigs {
         create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            val storePath = System.getenv("SIGNING_STORE_PATH")
+                ?: keystoreProps.getProperty("storeFile")
+            if (!storePath.isNullOrBlank()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                    ?: keystoreProps.getProperty("storePassword")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                    ?: keystoreProps.getProperty("keyAlias")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                    ?: keystoreProps.getProperty("keyPassword")
+            } else {
+                storeFile = file("${rootDir}/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
         create("release") {
             val storePath = System.getenv("SIGNING_STORE_PATH")

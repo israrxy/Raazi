@@ -106,8 +106,13 @@ fun SearchScreen(
             visibleSections.filter { it.type.name == selectedFilter }
         }
     }
-    val playableItems = remember(searchItems) {
-        searchItems.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
+    val playableItems = remember(searchItems, searchResults) {
+        val ytTopTracks = searchResults?.topTracks.orEmpty()
+        if (ytTopTracks.isNotEmpty()) {
+            ytTopTracks.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
+        } else {
+            searchItems.filter { it.isPlayableSearchItem() }.distinctBy { it.id }.take(15)
+        }
     }
     val currentPlayableItems = remember(filteredSections, selectedFilter, playableItems) {
         if (selectedFilter == "Personalized") {
@@ -288,7 +293,8 @@ fun SearchScreen(
                                     query = searchQuery,
                                     selectedFilter = selectedFilter,
                                     onSelectFilter = { selectedFilter = it },
-                                    sections = visibleSections
+                                    sections = visibleSections,
+                                    topTracksCount = playableItems.size
                                 )
                             }
 
@@ -498,12 +504,29 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        if (topResults.isNotEmpty()) {
-                            val previewResults = topResults.distinctBy { it.id }.take(8)
-                            val playableTopItems = previewResults.filter { it.isPlayableSearchItem() }
+                        val firstSuggestions = searchSuggestions.take(3)
+                        val remainingSuggestions = searchSuggestions.drop(3)
+                        val previewResults = topResults.distinctBy { it.id }.take(8)
 
-                            item(key = "top_results_header") {
-                                SearchSectionTitle(title = "Top results")
+                        // 1. First 3 search suggestions on top
+                        if (firstSuggestions.isNotEmpty()) {
+                            items(firstSuggestions, key = { "suggestion_top_$it" }) { suggestion ->
+                                SuggestionItem(
+                                    text = suggestion,
+                                    onClick = {
+                                        searchQuery = suggestion
+                                        searchViewModel.performSearch(suggestion)
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                    }
+                                )
+                            }
+                        }
+
+                        // 2. Below that: Suggested tracks (entity cards)
+                        if (previewResults.isNotEmpty()) {
+                            item(key = "suggested_tracks_header") {
+                                SearchSectionTitle(title = "Suggested tracks")
                             }
 
                             items(previewResults, key = { item -> "top_result_${item.contentType}_${item.id}" }) { musicItem ->
@@ -532,6 +555,22 @@ fun SearchScreen(
                             }
                         }
 
+                        // 3. Below that: Remaining suggestions
+                        if (remainingSuggestions.isNotEmpty()) {
+                            items(remainingSuggestions.take(8), key = { "suggestion_rem_$it" }) { suggestion ->
+                                SuggestionItem(
+                                    text = suggestion,
+                                    onClick = {
+                                        searchQuery = suggestion
+                                        searchViewModel.performSearch(suggestion)
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                    }
+                                )
+                            }
+                        }
+
+                        // 4. Search action row
                         item(key = "search_action") {
                             SearchActionRow(
                                 query = normalizedSearchQuery,
@@ -543,6 +582,7 @@ fun SearchScreen(
                             )
                         }
 
+                        // 5. Recent searches matching query
                         if (searchHistory.isNotEmpty()) {
                             item(key = "recent_matches_header") {
                                 SearchSectionTitle(title = "Recent searches")
@@ -558,24 +598,6 @@ fun SearchScreen(
                                         focusManager.clearFocus()
                                     },
                                     onDelete = { searchViewModel.deleteSearchHistory(history) }
-                                )
-                            }
-                        }
-
-                        if (searchSuggestions.isNotEmpty()) {
-                            item(key = "suggestions_header") {
-                                SearchSectionTitle(title = "Suggested searches")
-                            }
-
-                            items(searchSuggestions.take(8), key = { "suggestion_$it" }) { suggestion ->
-                                SuggestionItem(
-                                    text = suggestion,
-                                    onClick = {
-                                        searchQuery = suggestion
-                                        searchViewModel.performSearch(suggestion)
-                                        keyboardController?.hide()
-                                        focusManager.clearFocus()
-                                    }
                                 )
                             }
                         }
@@ -739,7 +761,8 @@ private fun SearchResultsHeader(
     query: String,
     selectedFilter: String,
     onSelectFilter: (String) -> Unit,
-    sections: List<SearchSectionUiModel>
+    sections: List<SearchSectionUiModel>,
+    topTracksCount: Int = 0
 ) {
     Column(
         modifier = Modifier
@@ -764,7 +787,7 @@ private fun SearchResultsHeader(
             FilterChip(
                 selected = selectedFilter == "Personalized",
                 onClick = { onSelectFilter("Personalized") },
-                label = { Text("Top Tracks") }
+                label = { Text(if (topTracksCount > 0) "Top Tracks ($topTracksCount)" else "Top Tracks") }
             )
             FilterChip(
                 selected = selectedFilter == "All",

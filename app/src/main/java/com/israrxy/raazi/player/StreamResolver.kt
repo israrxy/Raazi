@@ -606,7 +606,7 @@ object StreamResolver {
 
                         val candidateFormats: List<PlayerResponse.StreamingData.Format> = when (mode) {
                             PlaybackMediaMode.AUDIO -> {
-                                audioFormats.sortedByDescending { format ->
+                                val sortedAudio = audioFormats.sortedByDescending { format ->
                                     var score = format.bitrate.toLong()
                                     if (preferAac) {
                                         if (format.mimeType.contains("mp4") || format.mimeType.contains("aac")) {
@@ -619,6 +619,8 @@ object StreamResolver {
                                     }
                                     score
                                 }
+                                // Include muxed progressive formats as reliable fallback since they contain AAC audio
+                                sortedAudio + muxedVideoFormats
                             }
                             PlaybackMediaMode.VIDEO -> {
                                 listOfNotNull(
@@ -631,7 +633,14 @@ object StreamResolver {
                         }.distinct()
 
                         var verifiedPair: Pair<PlayerResponse.StreamingData.Format, String>? = null
-                        for (candidate in candidateFormats.take(3)) {
+                        val formatsToTry = if (mode == PlaybackMediaMode.AUDIO) {
+                            candidateFormats.filter { it.mimeType.startsWith("audio/") }.take(4) +
+                                candidateFormats.filter { !it.mimeType.startsWith("audio/") }.take(2)
+                        } else {
+                            candidateFormats.take(4)
+                        }
+
+                        for (candidate in formatsToTry) {
                             val candidateUrl = resolveFormatStreamUrl(
                                 format = candidate,
                                 videoId = videoId,
@@ -759,6 +768,24 @@ object StreamResolver {
         } catch (e: Exception) {
             Log.e(TAG, "Fallback audio CDN resolution also failed for $videoId", e)
             lastError = e
+        }
+
+        // Final safety net: if audio CDN failed, use progressive video stream for audio playback
+        if (mode == PlaybackMediaMode.AUDIO) {
+            try {
+                val fallbackVideoAsAudio = resolveFallbackVideoStream(
+                    videoId = videoId,
+                    titleInput = title,
+                    artistInput = artist,
+                    allowYouTubeSearch = botBlockedCount == 0,
+                    updateQualityState = updateQualityState
+                )
+                if (fallbackVideoAsAudio != null) {
+                    return fallbackVideoAsAudio.copy(mode = PlaybackMediaMode.AUDIO)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Fallback video-as-audio resolution failed for $videoId: ${e.message}")
+            }
         }
 
         Log.e(TAG, "CRITICAL: All resolution methods failed for $videoId", lastError)

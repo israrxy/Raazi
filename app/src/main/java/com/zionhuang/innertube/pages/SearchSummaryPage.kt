@@ -30,19 +30,19 @@ data class SearchSummaryPage(
                     SongItem(
                         id = renderer.onTap.watchEndpoint.videoId ?: return null,
                         title = renderer.title.runs?.firstOrNull()?.text ?: return null,
-                        artists = subtitle?.getOrNull(1)?.oddElements()?.map {
+                        artists = (subtitle?.getOrNull(1) ?: subtitle?.firstOrNull())?.oddElements()?.map {
                             Artist(
                                 name = it.text,
                                 id = it.navigationEndpoint?.browseEndpoint?.browseId
                             )
-                        } ?: return null,
-                        album = subtitle.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
+                        } ?: emptyList(),
+                        album = subtitle?.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
                             Album(
                                 name = it.text,
                                 id = it.navigationEndpoint?.browseEndpoint?.browseId!!
                             )
                         },
-                        duration = subtitle.lastOrNull()?.firstOrNull()?.text?.parseTime(),
+                        duration = subtitle?.lastOrNull()?.firstOrNull()?.text?.parseTime(),
                         thumbnail = renderer.thumbnail.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                         explicit = renderer.subtitleBadges?.find {
                             it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
@@ -118,8 +118,12 @@ data class SearchSummaryPage(
             val listRun = (secondaryLine + thirdLine).clean()
             return when {
                 renderer.isSong -> {
+                    val songId = renderer.playlistItemData?.videoId
+                        ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                        ?: renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId
+                        ?: return null
                     SongItem(
-                        id = renderer.playlistItemData?.videoId ?: return null,
+                        id = songId,
                         title = renderer.flexColumns.firstOrNull()
                             ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs
                             ?.firstOrNull()?.text ?: return null,

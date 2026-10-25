@@ -29,8 +29,8 @@ class YouTubeChartsExtractor {
     private val CLIENT_VERSION = "1.20260530.01.00" // From OuterTune
     
     // Official Chart Playlist IDs (Fallback)
-    private val PL_GLOBAL_TOP_SONGS = "VLPL4fGSI1pDJn69On1fCwI33tF3oqSHqKBV"
-    private val PL_GLOBAL_TOP_VIDEOS = "VLPL4fGSI1pDJn67l9H4E8v4x99-b1d5L3y"
+    private val PL_GLOBAL_TOP_SONGS = "VLPL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i"
+    private val PL_GLOBAL_TOP_VIDEOS = "VLPL4fGSI1pDJn3-A5n37Ua2u14s141v09fG"
     private val PL_TRENDING = "FEmusic_trending" // Or FEmusic_explore
     
     suspend fun getCharts(): Map<String, List<MusicItem>> = withContext(Dispatchers.IO) {
@@ -73,18 +73,29 @@ class YouTubeChartsExtractor {
                  "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0"
             )
 
+            val countryCode = Locale.getDefault().country.takeIf { it.isNotBlank() } ?: "US"
+            val languageCode = Locale.getDefault().toLanguageTag().takeIf { it.isNotBlank() } ?: "en-US"
+
             // Context Payload
             val context = JsonObject()
             val clientObj = JsonObject()
             clientObj.addProperty("clientName", CLIENT_NAME)
             clientObj.addProperty("clientVersion", CLIENT_VERSION)
-            clientObj.addProperty("gl", Locale.getDefault().country)
-            clientObj.addProperty("hl", Locale.getDefault().toLanguageTag())
+            clientObj.addProperty("gl", countryCode)
+            clientObj.addProperty("hl", languageCode)
             context.add("client", clientObj)
 
             val payload = JsonObject()
             payload.add("context", context)
             payload.addProperty("browseId", browseId)
+
+            if (browseId == "FEmusic_charts") {
+                val formData = JsonObject()
+                val selectedValues = JsonArray()
+                selectedValues.add(countryCode)
+                formData.add("selectedValues", selectedValues)
+                payload.add("formData", formData)
+            }
 
             val requestBody = payload.toString().toRequestBody("application/json".toMediaType())
 
@@ -127,18 +138,26 @@ class YouTubeChartsExtractor {
             contents?.forEach { sectionElement ->
                 val section = sectionElement.asJsonObject
                 val shelf = section.getAsJsonObject("musicCarouselShelfRenderer")
+                    ?: section.getAsJsonObject("musicShelfRenderer")
                 if (shelf != null) {
                     val title = shelf.getAsJsonObject("header")
                         ?.getAsJsonObject("musicCarouselShelfBasicHeaderRenderer")
                         ?.getAsJsonObject("title")
                         ?.getAsJsonArray("runs")
                         ?.get(0)?.asJsonObject
-                        ?.get("text")?.asString ?: "Unknown"
+                        ?.get("text")?.asString
+                        ?: shelf.getAsJsonObject("title")
+                            ?.getAsJsonArray("runs")
+                            ?.get(0)?.asJsonObject
+                            ?.get("text")?.asString
+                        ?: "Unknown"
 
                     val items = shelf.getAsJsonArray("contents")
-                    val parsedItems = parseItems(items)
-                    if (parsedItems.isNotEmpty()) {
-                        results[title] = parsedItems
+                    if (items != null) {
+                        val parsedItems = parseItems(items)
+                        if (parsedItems.isNotEmpty()) {
+                            results[title] = parsedItems
+                        }
                     }
                 }
             }

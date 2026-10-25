@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -526,11 +527,21 @@ fun PlayerScreen(
                     }
                     Box(
                         modifier = Modifier
+                            .layout { measurable, constraints ->
+                                val horizontalPaddingPx = 24.dp.roundToPx()
+                                val placeable = measurable.measure(
+                                    constraints.copy(
+                                        minWidth = constraints.maxWidth + horizontalPaddingPx * 2,
+                                        maxWidth = constraints.maxWidth + horizontalPaddingPx * 2
+                                    )
+                                )
+                                layout(placeable.width, placeable.height) {
+                                    placeable.placeRelative(-horizontalPaddingPx, 0)
+                                }
+                            }
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)
-                            .shadow(16.dp, RoundedCornerShape(18.dp))
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Zinc900),
+                            .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
                         // High-resolution 16:9 widescreen visual backdrop so it never flashes a black box

@@ -252,6 +252,9 @@ class YouTubeMusicExtractor private constructor() {
     suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
             if (serviceId == 0) {
+                val summaryJob = async {
+                    com.zionhuang.innertube.YouTube.searchSummary(query).getOrNull()
+                }
                 val songResults = async {
                     com.zionhuang.innertube.YouTube.search(
                         query,
@@ -295,18 +298,62 @@ class YouTubeMusicExtractor private constructor() {
                         .distinctBy { it.id }
                 }
 
-                val results = (
-                    songResults.await() +
-                        videoResults.await() +
-                        artistResults.await() +
-                        albumResults.await() +
-                        playlistResults.await()
-                    )
+                val summary = summaryJob.await()
+                val summaryTopTracks = mutableListOf<MusicItem>()
+                val summaryAllItems = mutableListOf<MusicItem>()
+
+                if (summary != null) {
+                    summary.summaries.forEach { section ->
+                        val isSongsSection = section.title.equals("Songs", ignoreCase = true)
+                        val isTopResultSection = section.title.contains("Top result", ignoreCase = true)
+                        val overrideType = when {
+                            isSongsSection -> MusicContentType.SONG
+                            section.title.equals("Videos", ignoreCase = true) -> MusicContentType.VIDEO
+                            section.title.equals("Artists", ignoreCase = true) -> MusicContentType.ARTIST
+                            section.title.equals("Albums", ignoreCase = true) -> MusicContentType.ALBUM
+                            section.title.contains("playlist", ignoreCase = true) -> MusicContentType.PLAYLIST
+                            else -> null
+                        }
+
+                        val mappedItems = section.items.mapNotNull { ytItem ->
+                            mapYTItemToMusicItem(ytItem, overrideContentType = overrideType)
+                        }
+
+                        // Collect authentic top tracks from Top result and Songs shelves
+                        if (isTopResultSection || isSongsSection) {
+                            mappedItems.forEach { item ->
+                                if (item.contentType == MusicContentType.SONG ||
+                                    (item.contentType == MusicContentType.UNKNOWN && !item.isPlaylist)) {
+                                    summaryTopTracks.add(item)
+                                }
+                            }
+                        }
+
+                        summaryAllItems.addAll(mappedItems)
+                    }
+                }
+
+                val typedSongs = songResults.await()
+                val typedVideos = videoResults.await()
+                val typedArtists = artistResults.await()
+                val typedAlbums = albumResults.await()
+                val typedPlaylists = playlistResults.await()
+
+                // Authentic top tracks prioritized from searchSummary, fallback to first typed songs
+                val finalTopTracks = (summaryTopTracks.ifEmpty { typedSongs.take(10) })
+                    .distinctBy { it.id }
+
+                // Relevance-ordered items: YouTube Music native summary first, then enrich with typed results
+                val combinedResults = (summaryAllItems + typedSongs + typedVideos + typedArtists + typedAlbums + typedPlaylists)
                     .distinctBy { "${it.contentType}:${it.id}" }
 
-                Log.d(TAG, "InnerTube typed search returned ${results.size} results")
-                if (results.isNotEmpty()) {
-                    return@withContext SearchResult(query, results)
+                Log.d(TAG, "InnerTube search returned ${combinedResults.size} results, ${finalTopTracks.size} top tracks")
+                if (combinedResults.isNotEmpty()) {
+                    return@withContext SearchResult(
+                        query = query,
+                        items = combinedResults,
+                        topTracks = finalTopTracks
+                    )
                 }
 
                 // Fallback: InnerTube search returned nothing (common when anonymous or client stale).
@@ -434,11 +481,11 @@ class YouTubeMusicExtractor private constructor() {
     suspend fun getTopSongs(): SearchResult = withContext(Dispatchers.IO) {
         try {
             // Global Top Songs Playlist
-            val playlistId = "PL4fGSI1pDJn69On1fCwI33tF3oqSHqKBV" 
+            val playlistId = "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i" 
             val playlist = getPlaylist(playlistId)
             
             if (playlist.items.isNotEmpty()) {
-                return@withContext SearchResult("Top Songs Global", playlist.items)
+                return@withContext SearchResult("Top Songs Global", playlist.items, topTracks = playlist.items)
             }
             throw Exception("Empty Top Songs playlist")
         } catch (e: Exception) {
@@ -454,9 +501,7 @@ class YouTubeMusicExtractor private constructor() {
     suspend fun getTrendingVideos(): SearchResult = withContext(Dispatchers.IO) {
         try {
             // Trending Music Videos Playlist
-            // Alternative: PLrEnWoR732-BHrPp_Pm8_VleD92Pxi9vE (Trending)
-            // Or PL4fGSI1pDJn5kI81J1tGMfH_PIShG6P_m (Top Music Videos Global)
-            val playlistId = "PL4fGSI1pDJn5kI81J1tGMfH_PIShG6P_m" 
+            val playlistId = "PL4fGSI1pDJn3-A5n37Ua2u14s141v09fG" 
             val playlist = getPlaylist(playlistId)
             
             if (playlist.items.isNotEmpty()) {
