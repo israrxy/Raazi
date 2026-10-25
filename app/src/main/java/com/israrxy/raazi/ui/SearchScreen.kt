@@ -98,7 +98,7 @@ fun SearchScreen(
     val visibleSections = remember(searchSections) {
         searchSections.filter { it.items.isNotEmpty() }
     }
-    var selectedFilter by remember { mutableStateOf("Personalized") }
+    var selectedFilter by remember { mutableStateOf("All") }
     val filteredSections = remember(visibleSections, selectedFilter) {
         if (selectedFilter == "All" || selectedFilter == "Personalized") {
             visibleSections
@@ -115,10 +115,10 @@ fun SearchScreen(
         }
     }
     val currentPlayableItems = remember(filteredSections, selectedFilter, playableItems) {
-        if (selectedFilter == "Personalized") {
-            playableItems
-        } else {
-            filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
+        when (selectedFilter) {
+            "Personalized" -> playableItems
+            "All" -> (playableItems + filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }).distinctBy { it.id }
+            else -> filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
         }
     }
     var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
@@ -144,10 +144,10 @@ fun SearchScreen(
 
     LaunchedEffect(searchQuery, visibleSections) {
         if (selectedFilter != "Personalized" && selectedFilter != "All" && visibleSections.none { it.type.name == selectedFilter }) {
-            selectedFilter = "Personalized"
+            selectedFilter = "All"
         }
         if (searchViewModel.submittedQuery != searchQuery) {
-            selectedFilter = "Personalized"
+            selectedFilter = "All"
         }
     }
 
@@ -279,7 +279,7 @@ fun SearchScreen(
                         )
                     }
 
-                    visibleSections.isEmpty() -> {
+                    visibleSections.isEmpty() && playableItems.isEmpty() -> {
                         SearchEmptyState(query = searchQuery)
                     }
 
@@ -298,7 +298,17 @@ fun SearchScreen(
                                 )
                             }
 
-                            if (selectedFilter == "Personalized") {
+                            if ((selectedFilter == "All" || selectedFilter == "Personalized") && playableItems.isNotEmpty()) {
+                                if (selectedFilter == "All") {
+                                    item(key = "header_TOP_TRACKS") {
+                                        SearchSectionHeader(
+                                            title = "Top Tracks",
+                                            count = playableItems.size,
+                                            subtitle = "Top matches for your search"
+                                        )
+                                    }
+                                }
+
                                 items(playableItems, key = { item -> "personalized_${item.id}" }) { musicItem ->
                                     val isPlayable = musicItem.isPlayableSearchItem()
                                     val isLiked = favoriteTracks.any { it.id == musicItem.id }
@@ -370,7 +380,9 @@ fun SearchScreen(
                                         showMoreOptions = false
                                     )
                                 }
-                            } else {
+                            }
+
+                            if (selectedFilter != "Personalized") {
                                 filteredSections.forEach { section ->
                                     item(key = "header_${section.type.name}") {
                                         SearchSectionHeader(
@@ -785,21 +797,25 @@ private fun SearchResultsHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(
-                selected = selectedFilter == "Personalized",
-                onClick = { onSelectFilter("Personalized") },
-                label = { Text(if (topTracksCount > 0) "Top Tracks ($topTracksCount)" else "Top Tracks") }
-            )
-            FilterChip(
                 selected = selectedFilter == "All",
                 onClick = { onSelectFilter("All") },
-                label = { Text("All (${sections.sumOf { it.items.size }})") }
+                label = { Text("All (${topTracksCount + sections.sumOf { it.items.size }})") }
+            )
+            FilterChip(
+                selected = selectedFilter == "Personalized",
+                onClick = {
+                    onSelectFilter(
+                        if (selectedFilter == "Personalized") "All" else "Personalized"
+                    )
+                },
+                label = { Text(if (topTracksCount > 0) "Top Tracks ($topTracksCount)" else "Top Tracks") }
             )
             sections.forEach { section ->
                 FilterChip(
                     selected = selectedFilter == section.type.name,
                     onClick = {
                         onSelectFilter(
-                            if (selectedFilter == section.type.name) "Personalized" else section.type.name
+                            if (selectedFilter == section.type.name) "All" else section.type.name
                         )
                     },
                     label = { Text("${section.title} (${section.items.size})") }

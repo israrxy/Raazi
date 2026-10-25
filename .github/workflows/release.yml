@@ -46,6 +46,12 @@ jobs:
             exit 1
           fi
 
+      - name: Print keystore SHA-256 fingerprint
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          keytool -list -v -keystore signing/raazi-keystore.jks -storepass "$SIGNING_STORE_PASSWORD" | grep -E "Alias name:|SHA256:" || true
+
       - name: Read version
         id: version
         run: |
