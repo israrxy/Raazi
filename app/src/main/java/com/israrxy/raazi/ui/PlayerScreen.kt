@@ -415,9 +415,7 @@ fun PlayerScreen(
                                         indication = null
                                     ) {
                                         if (isLyricsVisible) onLyricsVisibilityChange(false)
-                                        if (playbackState.mediaMode != PlaybackMediaMode.AUDIO) {
-                                            viewModel.setPlaybackMediaMode(PlaybackMediaMode.AUDIO)
-                                        }
+                                        viewModel.setPlaybackMediaMode(PlaybackMediaMode.AUDIO)
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -438,9 +436,7 @@ fun PlayerScreen(
                                         indication = null
                                     ) {
                                         if (isLyricsVisible) onLyricsVisibilityChange(false)
-                                        if (playbackState.mediaMode != PlaybackMediaMode.VIDEO) {
-                                            viewModel.setPlaybackMediaMode(PlaybackMediaMode.VIDEO)
-                                        }
+                                        viewModel.setPlaybackMediaMode(PlaybackMediaMode.VIDEO)
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -518,45 +514,86 @@ fun PlayerScreen(
                 val track = currentTrack
                 if (track != null && playbackState.mediaMode == PlaybackMediaMode.VIDEO) {
                     var activeSurface by remember { mutableStateOf<android.view.Surface?>(null) }
-                    DisposableEffect(Unit) {
+                    var activeTextureView by remember { mutableStateOf<android.view.TextureView?>(null) }
+                    var videoRatio by remember(track.id) { mutableFloatStateOf(16f / 9f) }
+
+                    fun applyVideoTransform(textureView: android.view.TextureView?, ratio: Float) {
+                        val view = textureView ?: return
+                        val viewWidth = view.width.toFloat()
+                        val viewHeight = view.height.toFloat()
+                        if (viewWidth <= 0f || viewHeight <= 0f || ratio <= 0f) return
+
+                        val viewAspect = viewWidth / viewHeight
+                        // Fit video cleanly inside the 16:9 container while preserving aspect ratio
+                        val scaleX: Float
+                        val scaleY: Float
+                        if (ratio > viewAspect) {
+                            scaleX = 1f
+                            scaleY = viewAspect / ratio
+                        } else {
+                            scaleX = ratio / viewAspect
+                            scaleY = 1f
+                        }
+                        val matrix = android.graphics.Matrix()
+                        matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+                        view.setTransform(matrix)
+                        view.invalidate()
+                    }
+
+                    DisposableEffect(viewModel, track.id) {
+                        val player = viewModel.getPlayer()
+                        val initialSize = player?.videoSize
+                        if (initialSize != null && initialSize.width > 0 && initialSize.height > 0) {
+                            videoRatio = (initialSize.width.toFloat() * initialSize.pixelWidthHeightRatio) / initialSize.height.toFloat()
+                            applyVideoTransform(activeTextureView, videoRatio)
+                        }
+                        val listener = object : androidx.media3.common.Player.Listener {
+                            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                                if (videoSize.width > 0 && videoSize.height > 0) {
+                                    videoRatio = (videoSize.width.toFloat() * videoSize.pixelWidthHeightRatio) / videoSize.height.toFloat()
+                                    applyVideoTransform(activeTextureView, videoRatio)
+                                }
+                            }
+                        }
+                        player?.addListener(listener)
                         onDispose {
+                            player?.removeListener(listener)
                             viewModel.clearVideoSurface()
                             activeSurface?.release()
                             activeSurface = null
+                            activeTextureView = null
                         }
                     }
+
                     Box(
                         modifier = Modifier
-                            .layout { measurable, constraints ->
-                                val horizontalPaddingPx = 24.dp.roundToPx()
-                                val placeable = measurable.measure(
-                                    constraints.copy(
-                                        minWidth = constraints.maxWidth + horizontalPaddingPx * 2,
-                                        maxWidth = constraints.maxWidth + horizontalPaddingPx * 2
-                                    )
-                                )
-                                layout(placeable.width, placeable.height) {
-                                    placeable.placeRelative(-horizontalPaddingPx, 0)
-                                }
-                            }
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)
+                            .shadow(
+                                elevation = 20.dp,
+                                shape = RoundedCornerShape(18.dp),
+                                spotColor = Color.Black.copy(alpha = 0.45f)
+                            )
+                            .clip(RoundedCornerShape(18.dp))
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        // High-resolution 16:9 widescreen visual backdrop so it never flashes a black box
+                        // High-resolution 16:9 widescreen visual backdrop while buffering
                         AsyncImage(
                             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
                             contentDescription = track.title,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (playbackState.isLoading || !playbackState.isVideoAvailable) 0.65f else 0f),
                             contentScale = ContentScale.Crop
                         )
 
-                        // TextureView renders decoded video frames directly inside Compose with proper clipping
+                        // TextureView renders decoded video frames directly inside Compose with proper aspect-ratio centering
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = { ctx ->
                                 android.view.TextureView(ctx).apply {
                                     isOpaque = false
+                                    activeTextureView = this
                                     surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
                                         override fun onSurfaceTextureAvailable(
                                             surfaceTexture: android.graphics.SurfaceTexture,
@@ -567,13 +604,16 @@ fun PlayerScreen(
                                             val newSurface = android.view.Surface(surfaceTexture)
                                             activeSurface = newSurface
                                             viewModel.setVideoSurface(newSurface)
+                                            applyVideoTransform(this@apply, videoRatio)
                                         }
 
                                         override fun onSurfaceTextureSizeChanged(
                                             surfaceTexture: android.graphics.SurfaceTexture,
                                             width: Int,
                                             height: Int
-                                        ) {}
+                                        ) {
+                                            applyVideoTransform(this@apply, videoRatio)
+                                        }
 
                                         override fun onSurfaceTextureDestroyed(
                                             surfaceTexture: android.graphics.SurfaceTexture
@@ -594,10 +634,13 @@ fun PlayerScreen(
                                         val newSurface = android.view.Surface(st)
                                         activeSurface = newSurface
                                         viewModel.setVideoSurface(newSurface)
+                                        applyVideoTransform(this, videoRatio)
                                     }
                                 }
                             },
-                            update = {
+                            update = { view ->
+                                activeTextureView = view
+                                applyVideoTransform(view, videoRatio)
                                 if (playbackState.isVideoAvailable && activeSurface != null) {
                                     viewModel.setVideoSurface(activeSurface)
                                 }

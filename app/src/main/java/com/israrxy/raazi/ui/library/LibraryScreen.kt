@@ -121,10 +121,19 @@ fun LibraryScreen(
 
     // Library browsing: search, filter and sort
     var libraryQuery by remember { mutableStateOf("") }
-    var libraryFilter by remember { mutableStateOf("All") } // All, Playlists, Albums, Artists
+    var libraryFilter by remember { mutableStateOf("All") } // All, Songs, Playlists, Albums, Artists
     var librarySortAsc by remember { mutableStateOf(true) }
 
     val normalizedLibraryQuery = libraryQuery.trim().lowercase()
+
+    // Automatically sync YouTube Music library on first open if logged in and library is empty
+    var hasAutoSynced by remember { mutableStateOf(false) }
+    LaunchedEffect(loggedIn) {
+        if (loggedIn && !hasAutoSynced && liked.isEmpty() && playlists.isEmpty() && !syncing) {
+            hasAutoSynced = true
+            viewModel.syncYouTubeLibrary()
+        }
+    }
 
     LaunchedEffect(syncStatus) {
         val message = syncStatus ?: return@LaunchedEffect
@@ -143,12 +152,36 @@ fun LibraryScreen(
     fun List<SavedCollectionItem>.applyLibrarySort(): List<SavedCollectionItem> =
         if (librarySortAsc) sortedBy { it.title.lowercase() } else sortedByDescending { it.title.lowercase() }
 
+    fun List<MusicItem>.applyTrackQueryAndSort(): List<MusicItem> {
+        val queried = if (normalizedLibraryQuery.isBlank()) this
+        else filter {
+            it.title.lowercase().contains(normalizedLibraryQuery) ||
+                it.artist.lowercase().contains(normalizedLibraryQuery)
+        }
+        return if (librarySortAsc) queried else queried.reversed()
+    }
+
     val filteredPlaylists = savedPlaylists.applyLibraryQuery().applyLibrarySort()
     val filteredAlbums = albums.applyLibraryQuery().applyLibrarySort()
     val filteredArtists = artists.applyLibraryQuery().applyLibrarySort()
     val filteredUserPlaylists = playlists.filter {
         normalizedLibraryQuery.isBlank() || it.playlist.displayTitle.lowercase().contains(normalizedLibraryQuery)
     }.let { if (librarySortAsc) it else it.reversed() }
+
+    val filteredLikedSongs = remember(liked, normalizedLibraryQuery, librarySortAsc) {
+        liked.applyTrackQueryAndSort()
+    }
+    val filteredHistorySongs = remember(history, normalizedLibraryQuery, librarySortAsc) {
+        history.distinctBy { it.id }.applyTrackQueryAndSort()
+    }
+
+    val hasAnyLibraryContent = liked.isNotEmpty() ||
+        history.isNotEmpty() ||
+        downloads.isNotEmpty() ||
+        filteredUserPlaylists.isNotEmpty() ||
+        filteredPlaylists.isNotEmpty() ||
+        filteredAlbums.isNotEmpty() ||
+        filteredArtists.isNotEmpty()
 
     LazyColumn(
         modifier = Modifier
@@ -187,7 +220,7 @@ fun LibraryScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("All", "Playlists", "Albums", "Artists").forEach { filter ->
+                    listOf("All", "Songs", "Playlists", "Albums", "Artists").forEach { filter ->
                         FilterChip(
                             selected = libraryFilter == filter,
                             onClick = { libraryFilter = filter },
@@ -226,7 +259,7 @@ fun LibraryScreen(
             DividerInset()
         }
 
-        item { Section("Library") }
+        item { Section("Collections") }
         item {
             LibraryRow(
                 icon = Icons.Default.Favorite,
@@ -267,7 +300,7 @@ fun LibraryScreen(
 
         if ((libraryFilter == "All" || libraryFilter == "Playlists") && filteredUserPlaylists.isNotEmpty()) {
             item { Section("Playlists") }
-            items(filteredUserPlaylists, key = { it.playlist.id }) { playlist ->
+            items(filteredUserPlaylists, key = { "user_pl_${it.playlist.id}" }) { playlist ->
                 PlaylistRow(
                     playlist = playlist,
                     onClick = { onNavigateToPlaylist(playlist.playlist.id) },
@@ -286,7 +319,7 @@ fun LibraryScreen(
 
         if ((libraryFilter == "All" || libraryFilter == "Playlists") && filteredPlaylists.isNotEmpty()) {
             item { Section("Saved Playlists") }
-            items(filteredPlaylists, key = { it.id }) { item ->
+            items(filteredPlaylists, key = { "saved_pl_${it.id}" }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToPlaylist(item.sourceId) },
@@ -311,7 +344,7 @@ fun LibraryScreen(
 
         if ((libraryFilter == "All" || libraryFilter == "Albums") && filteredAlbums.isNotEmpty()) {
             item { Section("Albums") }
-            items(filteredAlbums, key = { it.id }) { item ->
+            items(filteredAlbums, key = { "album_${it.id}" }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToPlaylist(item.sourceId) },
@@ -335,7 +368,7 @@ fun LibraryScreen(
 
         if ((libraryFilter == "All" || libraryFilter == "Artists") && filteredArtists.isNotEmpty()) {
             item { Section("Artists") }
-            items(filteredArtists, key = { it.id }) { item ->
+            items(filteredArtists, key = { "artist_${it.id}" }) { item ->
                 SavedRow(
                     item = item,
                     onClick = { onNavigateToArtist(item.sourceId, item.title) },
@@ -350,7 +383,83 @@ fun LibraryScreen(
             }
         }
 
-        if (filteredUserPlaylists.isEmpty() && filteredPlaylists.isEmpty() && filteredAlbums.isEmpty() && filteredArtists.isEmpty()) {
+        if ((libraryFilter == "All" || libraryFilter == "Songs") && filteredLikedSongs.isNotEmpty()) {
+            val displayedLiked = if (libraryFilter == "Songs" || normalizedLibraryQuery.isNotBlank()) {
+                filteredLikedSongs
+            } else {
+                filteredLikedSongs.take(15)
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Section("Liked Songs")
+                    }
+                    if (filteredLikedSongs.size > 15 && libraryFilter == "All") {
+                        TextButton(onClick = { onNavigateToPlaylist("favorites") }) {
+                            Text("See all (${filteredLikedSongs.size})")
+                        }
+                    }
+                }
+            }
+            items(displayedLiked, key = { "liked_song_${it.id}" }) { track ->
+                LibraryRow(
+                    icon = Icons.Default.Favorite,
+                    title = track.title,
+                    subtitle = track.artist,
+                    thumbnailUrl = track.thumbnailUrl,
+                    showChevron = false,
+                    onClick = {
+                        viewModel.playPlaylist(filteredLikedSongs, filteredLikedSongs.indexOf(track).coerceAtLeast(0))
+                        onNavigateToPlayer()
+                    }
+                )
+            }
+        }
+
+        if ((libraryFilter == "All" || libraryFilter == "Songs") && filteredHistorySongs.isNotEmpty()) {
+            val displayedHistory = if (libraryFilter == "Songs" || normalizedLibraryQuery.isNotBlank()) {
+                filteredHistorySongs.take(30)
+            } else {
+                filteredHistorySongs.take(10)
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Section("Recently Played")
+                    }
+                    if (filteredHistorySongs.size > 10 && libraryFilter == "All") {
+                        TextButton(onClick = { onNavigateToPlaylist("history") }) {
+                            Text("See all")
+                        }
+                    }
+                }
+            }
+            items(displayedHistory, key = { "history_song_${it.id}" }) { track ->
+                LibraryRow(
+                    icon = Icons.Default.History,
+                    title = track.title,
+                    subtitle = track.artist,
+                    thumbnailUrl = track.thumbnailUrl,
+                    showChevron = false,
+                    onClick = {
+                        viewModel.playPlaylist(filteredHistorySongs, filteredHistorySongs.indexOf(track).coerceAtLeast(0))
+                        onNavigateToPlayer()
+                    }
+                )
+            }
+        }
+
+        if (!hasAnyLibraryContent) {
             item {
                 EmptyLibrary()
             }

@@ -465,6 +465,10 @@ object StreamResolver {
         }
     }
 
+    @Volatile private var youtubeBotBlockedUntilMs: Long = 0L
+    @Volatile private var pipedDeadUntilMs: Long = 0L
+    @Volatile private var hifiDeadUntilMs: Long = 0L
+
     /**
      * Resolve YouTube stream using InnerTube with timeout protection
      */
@@ -478,16 +482,11 @@ object StreamResolver {
         isrc: String? = null,
         updateQualityState: Boolean = true
     ): StreamResult {
-        val clients = if (mode == PlaybackMediaMode.VIDEO) {
-            listOf(
-                YouTubeClient.ANDROID_VR_NO_AUTH,
-                YouTubeClient.IOS,
-                YouTubeClient.ANDROID,
-                YouTubeClient.VISIONOS,
-                YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-                YouTubeClient.WEB_REMIX,
-                YouTubeClient.TVHTML5
-            )
+        val isLoggedIn = YouTube.cookie != null
+        val isRecentlyBotBlocked = !isLoggedIn && System.currentTimeMillis() < youtubeBotBlockedUntilMs
+
+        val clients = if (isRecentlyBotBlocked) {
+            listOf(YouTubeClient.ANDROID_VR_NO_AUTH)
         } else {
             listOf(
                 YouTubeClient.ANDROID_VR_NO_AUTH,
@@ -501,14 +500,14 @@ object StreamResolver {
         }
 
         var lastError: Throwable? = null
-        var botBlockedCount = 0
+        var botBlockedCount = if (isRecentlyBotBlocked) 2 else 0
 
-        Log.i(TAG, "Resolving YouTube stream for videoId: $videoId")
+        Log.i(TAG, "Resolving YouTube stream for videoId: $videoId (mode=$mode)")
 
         if (YouTube.visitorData.isNullOrBlank()) {
             runCatching {
                 runBlocking {
-                    withTimeoutOrNull(4_000L) {
+                    withTimeoutOrNull(3_000L) {
                         YouTube.visitorData().getOrNull()
                     }
                 }?.takeIf { it.isNotBlank() }?.let { fresh ->
@@ -517,7 +516,6 @@ object StreamResolver {
             }
         }
 
-        val isLoggedIn = YouTube.cookie != null
         val sessionId = if (isLoggedIn) YouTube.dataSyncId else YouTube.visitorData
 
         var cachedSignatureTimestamp: Int? = null
@@ -525,6 +523,7 @@ object StreamResolver {
 
         for (client in clients) {
             if (!isLoggedIn && botBlockedCount >= 3) {
+                youtubeBotBlockedUntilMs = System.currentTimeMillis() + 5 * 60_000L
                 Log.w(TAG, "YouTube IP bot-block detected across primary clients; skipping remaining unauthenticated YT clients")
                 break
             }
@@ -538,7 +537,7 @@ object StreamResolver {
                         // Only generate WebView PoTokens when logged in or when IP is not bot-blocked
                         if (client.useWebPoTokens && sessionId != null && (isLoggedIn || botBlockedCount == 0)) {
                             try {
-                                val potResult = withTimeoutOrNull(4_000L) {
+                                val potResult = withTimeoutOrNull(3_500L) {
                                     poTokenGenerator.getWebClientPoToken(videoId, sessionId)
                                 }
                                 if (potResult != null) {
@@ -575,9 +574,14 @@ object StreamResolver {
                             val reason = response.playabilityStatus.reason.orEmpty()
                             if (status == "LOGIN_REQUIRED" || reason.contains("not a bot", ignoreCase = true)) {
                                 botBlockedCount++
+                                if (!isLoggedIn && botBlockedCount >= 2) {
+                                    youtubeBotBlockedUntilMs = System.currentTimeMillis() + 5 * 60_000L
+                                }
                             }
                             throw Exception("Playability status not OK for ${client.clientName}: $status ($reason)")
                         }
+
+                        youtubeBotBlockedUntilMs = 0L
 
                         val streamingData = response.streamingData
                             ?: throw Exception("Missing streaming data for client ${client.clientName}")
@@ -733,9 +737,12 @@ object StreamResolver {
             }
         }
 
-        // Try exact-videoId Piped API instances before falling back to metadata search
-        resolveExactVideoIdViaPiped(videoId, mode, updateQualityState)?.let { pipedResult ->
-            return pipedResult
+        // Try exact-videoId Piped API instances if not marked unreachable
+        if (System.currentTimeMillis() >= pipedDeadUntilMs) {
+            resolveExactVideoIdViaPiped(videoId, mode, updateQualityState)?.let { pipedResult ->
+                return pipedResult
+            }
+            pipedDeadUntilMs = System.currentTimeMillis() + 10 * 60_000L
         }
 
         // If VIDEO mode was requested, resolve verified music video stream
@@ -756,7 +763,7 @@ object StreamResolver {
             }
         }
 
-        // Fallback to strictly verified high-quality audio CDN resolution (Tidal HiFi / JioSaavn)
+        // Fallback to strictly verified high-quality audio CDN resolution (JioSaavn / Apple Music / HiFi)
         try {
             return resolveFallbackAudioStream(
                 videoId = videoId,
@@ -781,7 +788,10 @@ object StreamResolver {
                     updateQualityState = updateQualityState
                 )
                 if (fallbackVideoAsAudio != null) {
-                    return fallbackVideoAsAudio.copy(mode = PlaybackMediaMode.AUDIO)
+                    return fallbackVideoAsAudio.copy(
+                        mode = PlaybackMediaMode.AUDIO,
+                        hasVideo = false
+                    )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Fallback video-as-audio resolution failed for $videoId: ${e.message}")
@@ -803,9 +813,7 @@ object StreamResolver {
     ): StreamResult? {
         if (!videoId.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) return null
         val instances = listOf(
-            "https://pipedapi.kavin.rocks",
-            "https://pipedapi.tokhmi.xyz",
-            "https://pipedapi.moomoo.me"
+            "https://pipedapi.kavin.rocks"
         )
         val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 
@@ -1023,8 +1031,10 @@ object StreamResolver {
     private data class CanonicalTrackMetadata(
         val primaryTitle: String,
         val primaryArtist: String,
+        val primarySearchArtist: String,
         val secondaryTitle: String? = null,
-        val secondaryArtist: String? = null
+        val secondaryArtist: String? = null,
+        val secondarySearchArtist: String? = null
     )
 
     /**
@@ -1037,9 +1047,12 @@ object StreamResolver {
         artistInput: String?
     ): CanonicalTrackMetadata {
         val callerTitle = titleInput?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) }
-        val callerArtist = artistInput?.takeIf {
-            it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) && !it.equals("Unknown Artist", ignoreCase = true)
-        }
+        val callerArtist = artistInput
+            ?.replace(Regex("^(?:Song|Video|Album|Single|EP)\\s*[•·-]\\s*", RegexOption.IGNORE_CASE), "")
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) && !it.equals("Unknown Artist", ignoreCase = true)
+            }
 
         var ytNextTitle: String? = null
         var ytNextArtist: String? = null
@@ -1048,13 +1061,14 @@ object StreamResolver {
             val needAuthoritativeLookup = callerTitle.isNullOrBlank() ||
                 callerArtist.isNullOrBlank() ||
                 isGenericOrChannelArtist(normalizeForComparison(callerArtist)) ||
+                callerArtist.contains(Regex("\\b(?:plays|views)\\b", RegexOption.IGNORE_CASE)) ||
                 callerTitle.contains("|") ||
                 callerTitle.contains(" - ")
 
             if (needAuthoritativeLookup) {
                 runCatching {
                     runBlocking {
-                        withTimeoutOrNull(4_500L) {
+                        withTimeoutOrNull(3_000L) {
                             val nextResult = YouTube.next(
                                 com.zionhuang.innertube.models.WatchEndpoint(
                                     videoId = videoId,
@@ -1100,23 +1114,34 @@ object StreamResolver {
         }
 
         val bestTitle = cleanMetadataForSearch(ytNextTitle ?: splitTitle ?: callerTitle ?: "")
-        val bestArtist = cleanMetadataForSearch(
-            (ytNextArtist ?: callerArtist?.takeIf { !isGenericOrChannelArtist(normalizeForComparison(it)) } ?: splitArtist ?: callerArtist ?: "")
+        val rawBestArtist = ytNextArtist
+            ?: callerArtist?.takeIf { !isGenericOrChannelArtist(normalizeForComparison(it)) }
+            ?: splitArtist
+            ?: callerArtist
+            ?: ""
+
+        // Keep full artist string (including co-artists) for scoreTrackMatch so multi-artist tracks match
+        val bestArtist = cleanMetadataForSearch(rawBestArtist)
+        val bestSearchArtist = cleanMetadataForSearch(
+            rawBestArtist
                 .substringBefore(",")
                 .substringBefore("&")
                 .substringBefore("feat")
         )
 
         val altTitle = callerTitle?.let { cleanMetadataForSearch(it) }?.takeIf { it.isNotBlank() && !it.equals(bestTitle, ignoreCase = true) }
-        val altArtist = callerArtist?.let {
+        val altArtist = callerArtist?.let { cleanMetadataForSearch(it) }?.takeIf { it.isNotBlank() }
+        val altSearchArtist = callerArtist?.let {
             cleanMetadataForSearch(it.substringBefore(",").substringBefore("&").substringBefore("feat"))
         }?.takeIf { it.isNotBlank() }
 
         return CanonicalTrackMetadata(
             primaryTitle = bestTitle.ifBlank { altTitle.orEmpty() },
             primaryArtist = bestArtist,
+            primarySearchArtist = bestSearchArtist,
             secondaryTitle = altTitle,
-            secondaryArtist = altArtist
+            secondaryArtist = altArtist,
+            secondarySearchArtist = altSearchArtist
         )
     }
 
@@ -1134,7 +1159,7 @@ object StreamResolver {
     }
 
     /**
-     * Resolves high-quality 320kbps AAC/M4A audio streams when YouTube's /player endpoint blocks
+     * Resolves high-quality AAC/M4A audio streams when YouTube's /player endpoint blocks
      * anonymous datacenter/emulator IPs with LOGIN_REQUIRED ("Sign in to confirm you're not a bot").
      * Strictly verifies candidate track title + artist before accepting any stream URL so a
      * wrong/random song is NEVER played.
@@ -1149,6 +1174,7 @@ object StreamResolver {
         val meta = resolveCanonicalMetadata(videoId, titleInput, artistInput)
         val cleanTitle = meta.primaryTitle
         val cleanArtist = meta.primaryArtist
+        val searchArtist = meta.primarySearchArtist
 
         if (cleanTitle.isBlank()) {
             throw Exception("Cannot resolve fallback stream for $videoId without track title")
@@ -1158,88 +1184,33 @@ object StreamResolver {
 
         fun evaluateScore(candTitle: String, candArtist: String): Int {
             val s1 = scoreTrackMatch(cleanTitle, cleanArtist, candTitle, candArtist)
-            val s2 = if (!meta.secondaryTitle.isNullOrBlank()) {
+            val s2 = if (searchArtist.isNotBlank() && searchArtist != cleanArtist) {
+                scoreTrackMatch(cleanTitle, searchArtist, candTitle, candArtist)
+            } else 0
+            val s3 = if (!meta.secondaryTitle.isNullOrBlank()) {
                 scoreTrackMatch(meta.secondaryTitle, meta.secondaryArtist ?: cleanArtist, candTitle, candArtist)
             } else 0
-            return maxOf(s1, s2)
+            return maxOf(s1, s2, s3)
         }
 
-        // Tier 1: Global Tidal HiFi Catalog (HifiApiClient - 320kbps AAC/M4A direct HTTP stream)
-        runCatching {
-            val hifiResult = runBlocking {
-                withTimeoutOrNull(8_000L) {
-                    var candidates = emptyList<com.israrxy.raazi.player.flac.HifiTrack>()
-                    if (!isrc.isNullOrBlank()) {
-                        candidates = com.israrxy.raazi.player.flac.HifiApiClient.searchByISRC(isrc)
-                    }
-                    if (candidates.isEmpty()) {
-                        val q = if (cleanArtist.isNotBlank() && !isGenericOrChannelArtist(normalizeForComparison(cleanArtist))) {
-                            "$cleanTitle $cleanArtist"
-                        } else {
-                            cleanTitle
-                        }
-                        candidates = com.israrxy.raazi.player.flac.HifiApiClient.searchByText(q, limit = 10)
-                    }
-
-                    val scoredCandidates = candidates
-                        .map { track ->
-                            val score = evaluateScore(track.title.orEmpty(), track.displayArtist)
-                            track to score
-                        }
-                        .filter { it.second >= 55 }
-                        .sortedByDescending { it.second }
-
-                    for ((matchedTrack, score) in scoredCandidates.take(2)) {
-                        for (tierQuality in listOf("HIGH", "LOW")) {
-                            val streamResp = com.israrxy.raazi.player.flac.HifiApiClient.getStreamUrl(matchedTrack.id, tierQuality)
-                            val directUrl = streamResp?.urls?.firstOrNull { it.isNotBlank() }
-                            if (!directUrl.isNullOrBlank() && verifyStreamUrl(directUrl, "TIDAL_ANDROID/1039 okhttp/3.14.9")) {
-                                val bitrate = if (tierQuality == "HIGH") 320000 else 96000
-                                val qualityLabel = "M4A ${bitrate / 1000}kbps"
-                                if (updateQualityState) _currentStreamQuality.value = qualityLabel
-                                runCatching {
-                                    musicDao?.upsertFormat(
-                                        FormatEntity(
-                                            id = videoId,
-                                            mimeType = "audio/mp4",
-                                            codecs = "mp4a.40.2",
-                                            bitrate = bitrate,
-                                            sampleRate = 44100,
-                                            contentLength = 0L
-                                        )
-                                    )
-                                }
-                                Log.i(
-                                    TAG,
-                                    "SUCCESS: Resolved verified HiFi AAC stream ($qualityLabel, score=$score) " +
-                                        "for '$cleanTitle' by '$cleanArtist' -> '${matchedTrack.title}' by '${matchedTrack.displayArtist}'"
-                                )
-                                return@withTimeoutOrNull StreamResult(
-                                    url = directUrl,
-                                    userAgent = "TIDAL_ANDROID/1039 okhttp/3.14.9",
-                                    quality = qualityLabel,
-                                    mode = PlaybackMediaMode.AUDIO,
-                                    hasVideo = false
-                                )
-                            }
-                        }
-                    }
-                    null
-                }
-            }
-            if (hifiResult != null) return hifiResult
+        fun evaluateTitleOnlyScore(candTitle: String): Int {
+            val t1 = scoreTrackMatch(cleanTitle, "", candTitle, "")
+            val t2 = if (!meta.secondaryTitle.isNullOrBlank()) {
+                scoreTrackMatch(meta.secondaryTitle, "", candTitle, "")
+            } else 0
+            return maxOf(t1, t2)
         }
 
         val queries = listOfNotNull(
-            if (cleanArtist.isNotBlank() && !isGenericOrChannelArtist(normalizeForComparison(cleanArtist))) "$cleanTitle $cleanArtist".trim() else null,
-            if (!meta.secondaryTitle.isNullOrBlank() && !meta.secondaryArtist.isNullOrBlank() && !isGenericOrChannelArtist(normalizeForComparison(meta.secondaryArtist))) {
-                "${meta.secondaryTitle} ${meta.secondaryArtist}".trim()
+            if (searchArtist.isNotBlank() && !isGenericOrChannelArtist(normalizeForComparison(searchArtist))) "$cleanTitle $searchArtist".trim() else null,
+            if (!meta.secondaryTitle.isNullOrBlank() && !meta.secondarySearchArtist.isNullOrBlank() && !isGenericOrChannelArtist(normalizeForComparison(meta.secondarySearchArtist))) {
+                "${meta.secondaryTitle} ${meta.secondarySearchArtist}".trim()
             } else null,
             cleanTitle,
             meta.secondaryTitle
         ).distinct()
 
-        // Tier 2: Direct JioSaavn API with JSON parsing & strict Title+Artist verification
+        // Tier 1: Direct JioSaavn API with JSON parsing & strict Title+Artist verification (320kbps AAC/M4A)
         for (query in queries) {
             try {
                 val encodedQuery = Uri.encode(query)
@@ -1262,9 +1233,10 @@ object StreamResolver {
                             val title: String,
                             val artist: String,
                             val encryptedUrl: String,
-                            val score: Int
+                            val score: Int,
+                            val titleOnlyScore: Int
                         )
-                        val verifiedCandidates = mutableListOf<SaavnCandidate>()
+                        val allCandidates = mutableListOf<SaavnCandidate>()
                         for (i in 0 until results.length()) {
                             val item = results.optJSONObject(i) ?: continue
                             val itemTitle = decodeHtmlEntities(
@@ -1293,21 +1265,24 @@ object StreamResolver {
 
                             val itemArtist = decodeHtmlEntities(artistBuilder.joinToString(", "))
                             val score = evaluateScore(itemTitle, itemArtist)
-                            if (score >= 55) {
-                                verifiedCandidates.add(
-                                    SaavnCandidate(
-                                        title = itemTitle,
-                                        artist = itemArtist,
-                                        encryptedUrl = encryptedUrl.replace("\\/", "/"),
-                                        score = score
-                                    )
+                            val titleOnlyScore = evaluateTitleOnlyScore(itemTitle)
+                            allCandidates.add(
+                                SaavnCandidate(
+                                    title = itemTitle,
+                                    artist = itemArtist,
+                                    encryptedUrl = encryptedUrl.replace("\\/", "/"),
+                                    score = score,
+                                    titleOnlyScore = titleOnlyScore
                                 )
-                            } else {
-                                Log.d(TAG, "Rejected Saavn mismatch (score=$score): '$itemTitle' by '$itemArtist' vs target '$cleanTitle' by '$cleanArtist'")
-                            }
+                            )
                         }
 
-                        for (cand in verifiedCandidates.sortedByDescending { it.score }.take(3)) {
+                        val strictMatches = allCandidates.filter { it.score >= 55 }.sortedByDescending { it.score }
+                        val exactTitleFallbacks = if (strictMatches.isEmpty()) {
+                            allCandidates.filter { it.titleOnlyScore >= 56 }.sortedByDescending { it.score }
+                        } else emptyList()
+
+                        for (cand in (strictMatches + exactTitleFallbacks).take(3)) {
                             val baseDecrypted = decryptSaavnMediaUrl(cand.encryptedUrl) ?: continue
                             val urlVariants = listOf(
                                 baseDecrypted.replace("_96.mp4", "_320.mp4").replace("_160.mp4", "_320.mp4"),
@@ -1354,11 +1329,11 @@ object StreamResolver {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Tier 2 Saavn fallback failed for query '$query': ${e.message}")
+                Log.w(TAG, "Tier 1 Saavn fallback failed for query '$query': ${e.message}")
             }
         }
 
-        // Tier 3: Saavn API Mirror (saavn.sumit.co) with JSON parsing & strict Title+Artist verification
+        // Tier 2: Saavn API Mirror (saavn.sumit.co) with JSON parsing & strict Title+Artist verification
         for (query in queries) {
             try {
                 val encodedQuery = Uri.encode(query)
@@ -1381,9 +1356,10 @@ object StreamResolver {
                             val title: String,
                             val artist: String,
                             val urls: List<String>,
-                            val score: Int
+                            val score: Int,
+                            val titleOnlyScore: Int
                         )
-                        val verifiedMirror = mutableListOf<MirrorCandidate>()
+                        val allMirror = mutableListOf<MirrorCandidate>()
                         for (i in 0 until results.length()) {
                             val item = results.optJSONObject(i) ?: continue
                             val itemTitle = decodeHtmlEntities(item.optString("name"))
@@ -1399,7 +1375,7 @@ object StreamResolver {
                             }
                             val itemArtist = decodeHtmlEntities(artistNames.joinToString(", "))
                             val score = evaluateScore(itemTitle, itemArtist)
-                            if (score < 55) continue
+                            val titleOnlyScore = evaluateTitleOnlyScore(itemTitle)
 
                             val downloadUrlArr = item.optJSONArray("downloadUrl") ?: continue
                             val extractedUrls = mutableListOf<String>()
@@ -1411,22 +1387,41 @@ object StreamResolver {
                                 extractedUrls.filter { it.contains("_160.") } +
                                 extractedUrls.reversed()
                             if (orderedUrls.isNotEmpty()) {
-                                verifiedMirror.add(
+                                allMirror.add(
                                     MirrorCandidate(
                                         title = itemTitle,
                                         artist = itemArtist,
                                         urls = orderedUrls.distinct(),
-                                        score = score
+                                        score = score,
+                                        titleOnlyScore = titleOnlyScore
                                     )
                                 )
                             }
                         }
 
-                        for (cand in verifiedMirror.sortedByDescending { it.score }.take(3)) {
+                        val strictMirror = allMirror.filter { it.score >= 55 }.sortedByDescending { it.score }
+                        val fallbackMirror = if (strictMirror.isEmpty()) {
+                            allMirror.filter { it.titleOnlyScore >= 56 }.sortedByDescending { it.score }
+                        } else emptyList()
+
+                        for (cand in (strictMirror + fallbackMirror).take(3)) {
                             for (candidateUrl in cand.urls) {
                                 if (verifyStreamUrl(candidateUrl, userAgent)) {
+                                    val bitrate = if (candidateUrl.contains("_320.")) 320000 else 160000
                                     val quality = if (candidateUrl.contains("_320.")) "M4A 320kbps" else "M4A 160kbps"
                                     if (updateQualityState) _currentStreamQuality.value = quality
+                                    runCatching {
+                                        musicDao?.upsertFormat(
+                                            FormatEntity(
+                                                id = videoId,
+                                                mimeType = "audio/mp4",
+                                                codecs = "mp4a.40.2",
+                                                bitrate = bitrate,
+                                                sampleRate = 44100,
+                                                contentLength = 0L
+                                            )
+                                        )
+                                    }
                                     Log.i(
                                         TAG,
                                         "SUCCESS: Resolved verified mirror stream ($quality, score=${cand.score}) " +
@@ -1445,7 +1440,164 @@ object StreamResolver {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Tier 3 mirror fallback failed for query '$query': ${e.message}")
+                Log.w(TAG, "Tier 2 mirror fallback failed for query '$query': ${e.message}")
+            }
+        }
+
+        // Tier 3: Global Apple Music / iTunes Audio CDN (256kbps AAC/M4A direct HTTP stream)
+        for (query in queries) {
+            try {
+                val encodedQuery = Uri.encode(query)
+                val apiUrl = "https://itunes.apple.com/search?term=$encodedQuery&entity=song&limit=10"
+                val request = okhttp3.Request.Builder()
+                    .url(apiUrl)
+                    .header("User-Agent", userAgent)
+                    .get()
+                    .build()
+
+                val body = probeHttpClient.newCall(request).execute().use { resp ->
+                    if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+                }
+
+                if (body.isNotBlank()) {
+                    val root = org.json.JSONObject(body)
+                    val results = root.optJSONArray("results")
+                    if (results != null && results.length() > 0) {
+                        data class AppleAudioCandidate(
+                            val title: String,
+                            val artist: String,
+                            val audioUrl: String,
+                            val score: Int,
+                            val titleOnlyScore: Int
+                        )
+                        val candidates = mutableListOf<AppleAudioCandidate>()
+                        for (i in 0 until results.length()) {
+                            val item = results.optJSONObject(i) ?: continue
+                            val previewUrl = item.optString("previewUrl").replace("\\/", "/")
+                            if (previewUrl.isBlank()) continue
+                            val trackName = item.optString("trackName")
+                            val artistName = item.optString("artistName")
+                            val score = evaluateScore(trackName, artistName)
+                            val titleOnlyScore = evaluateTitleOnlyScore(trackName)
+                            candidates.add(
+                                AppleAudioCandidate(
+                                    title = trackName,
+                                    artist = artistName,
+                                    audioUrl = previewUrl,
+                                    score = score,
+                                    titleOnlyScore = titleOnlyScore
+                                )
+                            )
+                        }
+
+                        val strictApple = candidates.filter { it.score >= 55 }.sortedByDescending { it.score }
+                        val fallbackApple = if (strictApple.isEmpty()) {
+                            candidates.filter { it.titleOnlyScore >= 56 }.sortedByDescending { it.score }
+                        } else emptyList()
+
+                        for (cand in (strictApple + fallbackApple).take(3)) {
+                            if (verifyStreamUrl(cand.audioUrl, userAgent)) {
+                                val quality = "AAC 256kbps"
+                                if (updateQualityState) _currentStreamQuality.value = quality
+                                runCatching {
+                                    musicDao?.upsertFormat(
+                                        FormatEntity(
+                                            id = videoId,
+                                            mimeType = "audio/mp4",
+                                            codecs = "mp4a.40.2",
+                                            bitrate = 256000,
+                                            sampleRate = 44100,
+                                            contentLength = 0L
+                                        )
+                                    )
+                                }
+                                Log.i(
+                                    TAG,
+                                    "SUCCESS: Resolved verified Apple Music audio stream ($quality, score=${cand.score}) " +
+                                        "for '$cleanTitle' -> '${cand.title}' by '${cand.artist}'"
+                                )
+                                return StreamResult(
+                                    url = cand.audioUrl,
+                                    userAgent = userAgent,
+                                    quality = quality,
+                                    mode = PlaybackMediaMode.AUDIO,
+                                    hasVideo = false
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Tier 3 Apple Music audio fallback failed for query '$query': ${e.message}")
+            }
+        }
+
+        // Tier 4: Global Tidal HiFi Catalog (with circuit-breaker protection)
+        if (System.currentTimeMillis() >= hifiDeadUntilMs) {
+            runCatching {
+                val hifiResult = runBlocking {
+                    withTimeoutOrNull(2_500L) {
+                        var candidates = emptyList<com.israrxy.raazi.player.flac.HifiTrack>()
+                        if (!isrc.isNullOrBlank()) {
+                            candidates = com.israrxy.raazi.player.flac.HifiApiClient.searchByISRC(isrc)
+                        }
+                        if (candidates.isEmpty()) {
+                            val q = if (searchArtist.isNotBlank() && !isGenericOrChannelArtist(normalizeForComparison(searchArtist))) {
+                                "$cleanTitle $searchArtist"
+                            } else {
+                                cleanTitle
+                            }
+                            candidates = com.israrxy.raazi.player.flac.HifiApiClient.searchByText(q, limit = 10)
+                        }
+
+                        if (candidates.isEmpty()) {
+                            hifiDeadUntilMs = System.currentTimeMillis() + 10 * 60_000L
+                            return@withTimeoutOrNull null
+                        }
+
+                        val scoredCandidates = candidates
+                            .map { track ->
+                                val score = evaluateScore(track.title.orEmpty(), track.displayArtist)
+                                track to score
+                            }
+                            .filter { it.second >= 55 }
+                            .sortedByDescending { it.second }
+
+                        for ((matchedTrack, score) in scoredCandidates.take(2)) {
+                            for (tierQuality in listOf("HIGH", "LOW")) {
+                                val streamResp = com.israrxy.raazi.player.flac.HifiApiClient.getStreamUrl(matchedTrack.id, tierQuality)
+                                val directUrl = streamResp?.urls?.firstOrNull { it.isNotBlank() }
+                                if (!directUrl.isNullOrBlank() && verifyStreamUrl(directUrl, "TIDAL_ANDROID/1039 okhttp/3.14.9")) {
+                                    val bitrate = if (tierQuality == "HIGH") 320000 else 96000
+                                    val qualityLabel = "M4A ${bitrate / 1000}kbps"
+                                    if (updateQualityState) _currentStreamQuality.value = qualityLabel
+                                    runCatching {
+                                        musicDao?.upsertFormat(
+                                            FormatEntity(
+                                                id = videoId,
+                                                mimeType = "audio/mp4",
+                                                codecs = "mp4a.40.2",
+                                                bitrate = bitrate,
+                                                sampleRate = 44100,
+                                                contentLength = 0L
+                                            )
+                                        )
+                                    }
+                                    return@withTimeoutOrNull StreamResult(
+                                        url = directUrl,
+                                        userAgent = "TIDAL_ANDROID/1039 okhttp/3.14.9",
+                                        quality = qualityLabel,
+                                        mode = PlaybackMediaMode.AUDIO,
+                                        hasVideo = false
+                                    )
+                                }
+                            }
+                        }
+                        null
+                    }
+                }
+                if (hifiResult != null) return hifiResult
+                hifiDeadUntilMs = System.currentTimeMillis() + 10 * 60_000L
             }
         }
 

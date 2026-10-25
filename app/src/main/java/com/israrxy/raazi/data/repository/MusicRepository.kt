@@ -404,10 +404,18 @@ class MusicRepository(
             return@withContext AccountSyncResult(likedSongs = 0, playlists = 0)
         }
 
-        val favoritePushResult = syncLocalFavoritesToYouTube()
+        val favoritePushResult = runCatching { syncLocalFavoritesToYouTube() }
+            .getOrDefault(FavoritePushResult(synced = 0, pending = 0))
+        val likedCount = runCatching { syncLikedSongsFromYouTube() }
+            .onFailure { android.util.Log.e("MusicRepository", "Failed to sync liked songs", it) }
+            .getOrDefault(0)
+        val playlistsCount = runCatching { syncPlaylistsFromYouTube() }
+            .onFailure { android.util.Log.e("MusicRepository", "Failed to sync playlists", it) }
+            .getOrDefault(0)
+
         AccountSyncResult(
-            likedSongs = syncLikedSongsFromYouTube(),
-            playlists = syncPlaylistsFromYouTube(),
+            likedSongs = likedCount,
+            playlists = playlistsCount,
             accountLikeUpdates = favoritePushResult.synced,
             pendingLikeUpdates = favoritePushResult.pending
         )

@@ -34,6 +34,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -219,52 +220,68 @@ fun LyricsScreen(
         }
     }
 
-    // Active line index
-    val activeLineIndex = remember(currentPosition, syncedLines) {
+    // Active line index (add slight 120ms lookahead so lyric highlights right on vocal onset)
+    val activeLineIndex = remember(currentPosition, syncedLines, isSynced) {
         if (!isSynced || syncedLines.isEmpty()) -1
-        else syncedLines.indexOfLast { it.timestamp <= currentPosition }
+        else syncedLines.indexOfLast { it.timestamp <= currentPosition + 120L }
     }
 
     val listState = rememberLazyListState()
+    val isDragged by listState.interactionSource.collectIsDraggedAsState()
     var isUserScrolling by remember { mutableStateOf(false) }
     var lastManualScrollTime by remember { mutableLongStateOf(0L) }
 
-    // Detect user manual scroll to pause auto-scroll & show "Re-sync" pill
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) {
+    // Detect ONLY manual user finger drags (never programmatic auto-scrolls) to pause auto-scroll & show "Sync" pill
+    LaunchedEffect(isDragged) {
+        if (isDragged) {
             isUserScrolling = true
             lastManualScrollTime = System.currentTimeMillis()
         } else if (isUserScrolling) {
             val captured = lastManualScrollTime
-            delay(4200)
-            if (lastManualScrollTime == captured && !listState.isScrollInProgress) {
+            delay(4000)
+            if (lastManualScrollTime == captured && !isDragged) {
                 isUserScrolling = false
             }
         }
     }
 
+    // Reset manual scroll lock when track changes
+    LaunchedEffect(currentTrack?.id) {
+        isUserScrolling = false
+    }
+
     // Smoothly center-top the active lyric line when not manually scrolling
     LaunchedEffect(activeLineIndex, isUserScrolling, syncedLines.size) {
         if (!isUserScrolling && activeLineIndex >= 0 && syncedLines.isNotEmpty()) {
+            val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
+            val headerOffset = if (firstLineTimestamp > 4000L) 1 else 0
+            val targetLazyIndex = (activeLineIndex + headerOffset).coerceAtLeast(0)
+
+            // Wait a frame if layout hasn't measured yet
+            if (listState.layoutInfo.totalItemsCount == 0) {
+                kotlinx.coroutines.yield()
+            }
+
             val layoutInfo = listState.layoutInfo
-            val targetItem = layoutInfo.visibleItemsInfo.find { it.index == activeLineIndex }
+            val targetItem = layoutInfo.visibleItemsInfo.find { it.index == targetLazyIndex }
             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
             if (targetItem != null && viewportHeight > 0) {
-                // Anchor active line ~30% down from top of viewport (Spotify / YT Music feel)
+                // Anchor active line ~28% down from top of viewport (Spotify / YT Music feel)
                 val desiredY = (viewportHeight * 0.28f).toInt()
                 val itemCenter = targetItem.offset + (targetItem.size / 2)
                 val diff = itemCenter - desiredY
-                if (abs(diff) > 12) {
+                if (abs(diff) > 10) {
                     listState.animateScrollBy(
                         value = diff.toFloat(),
-                        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+                        animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
                     )
                 }
             } else {
+                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.25f).toInt() else -160
                 listState.animateScrollToItem(
-                    index = activeLineIndex.coerceAtLeast(0),
-                    scrollOffset = -160
+                    index = targetLazyIndex,
+                    scrollOffset = anchorOffset
                 )
             }
         }

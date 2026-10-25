@@ -305,7 +305,7 @@ class YouTubeMusicExtractor private constructor() {
                 if (summary != null) {
                     summary.summaries.forEach { section ->
                         val isSongsSection = section.title.equals("Songs", ignoreCase = true)
-                        val isTopResultSection = section.title.contains("Top result", ignoreCase = true)
+                        val isTopResultSection = section.title.contains("Top result", ignoreCase = true) || section.title.isBlank()
                         val overrideType = when {
                             isSongsSection -> MusicContentType.SONG
                             section.title.equals("Videos", ignoreCase = true) -> MusicContentType.VIDEO

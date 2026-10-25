@@ -275,6 +275,16 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    item {
+                        DeveloperCreditsFooter(
+                            onOpenUrl = { url ->
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }
+                            }
+                        )
+                    }
                 }
             } else {
                 // Clean Category Detail Screen
@@ -700,14 +710,33 @@ fun SettingsScreen(
                                         SettingsDivider()
                                         SettingsActionItem(
                                             icon = Icons.Filled.Person,
-                                            title = "Developer",
-                                            subtitle = "@israrxy on Instagram",
+                                            title = "Instagram",
+                                            subtitle = "@israrxy",
                                             onClick = {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy"))
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))
+                                                context.startActivity(intent)
+                                            }
+                                        )
+                                        SettingsDivider()
+                                        SettingsActionItem(
+                                            icon = Icons.Filled.Language,
+                                            title = "Website",
+                                            subtitle = "israrxy.qzz.io",
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://israrxy.qzz.io"))
                                                 context.startActivity(intent)
                                             }
                                         )
                                     }
+                                }
+                                item {
+                                    DeveloperCreditsFooter(
+                                        onOpenUrl = { url ->
+                                            runCatching {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1257,3 +1286,106 @@ fun SelectionDialog(
         }
     )
 }
+
+@Composable
+private fun DeveloperCreditsFooter(
+    onOpenUrl: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "DEVELOPED BY",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.2.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = "Israr Ahamed (@israrxy)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DeveloperLinkChip(
+                    icon = Icons.Filled.Code,
+                    label = "GitHub",
+                    onClick = { onOpenUrl("https://github.com/israrxy") },
+                    modifier = Modifier.weight(1f)
+                )
+                DeveloperLinkChip(
+                    icon = Icons.Filled.AlternateEmail,
+                    label = "Instagram",
+                    onClick = { onOpenUrl("https://www.instagram.com/israrxy/") },
+                    modifier = Modifier.weight(1f)
+                )
+                DeveloperLinkChip(
+                    icon = Icons.Filled.Language,
+                    label = "Website",
+                    onClick = { onOpenUrl("https://israrxy.qzz.io") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeveloperLinkChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+

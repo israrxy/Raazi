@@ -1127,23 +1127,35 @@ class MusicPlaybackService : Service() {
 
     fun setPlaybackMediaMode(mode: com.israrxy.raazi.model.PlaybackMediaMode): Boolean {
         if (mediaMode == mode) {
-            notifyPlaybackState()
+            if (::exoPlayer.isInitialized && !exoPlayer.isPlaying && currentPlaylist.isNotEmpty()) {
+                resume()
+            } else {
+                notifyPlaybackState()
+            }
             return true
         }
         mediaMode = mode
+        currentTrackRetryCount = 0
         if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO
             && videoSurface != null && ::exoPlayer.isInitialized) {
             exoPlayer.setVideoSurface(videoSurface)
         } else if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.AUDIO && ::exoPlayer.isInitialized) {
+            isVideoAvailable = false
             exoPlayer.clearVideoSurface()
         }
-        if (currentIndex >= 0 && currentIndex < currentPlaylist.size) {
-            val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val isPlaying = exoPlayer.playWhenReady
+        if (currentIndex >= 0 && currentIndex < currentPlaylist.size && ::exoPlayer.isInitialized) {
+            val rawPos = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val dur = exoPlayer.duration
+            val safePos = if (
+                exoPlayer.playbackState == androidx.media3.common.Player.STATE_ENDED ||
+                (dur > 0 && rawPos >= dur - 2000L) ||
+                rawPos >= 25_000L
+            ) 0L else rawPos
             notifyPlaybackState(isLoading = true)
-            syncPlaylistQueue(currentIndex, currentPos, isPlaying, forceRePrepare = true)
+            syncPlaylistQueue(currentIndex, safePos, shouldPlay = true, forceRePrepare = true)
+        } else {
+            notifyPlaybackState()
         }
-        notifyPlaybackState()
         return true
     }
 
@@ -1165,13 +1177,15 @@ class MusicPlaybackService : Service() {
 
     fun setPlaybackVideoQuality(quality: com.israrxy.raazi.model.PlaybackVideoQuality): Boolean {
         videoQuality = quality
+        currentTrackRetryCount = 0
         if (mediaMode == com.israrxy.raazi.model.PlaybackMediaMode.VIDEO && currentIndex >= 0 && currentIndex < currentPlaylist.size) {
             val currentPos = exoPlayer.currentPosition.coerceAtLeast(0L)
             val isPlaying = exoPlayer.playWhenReady
             notifyPlaybackState(isLoading = true)
             syncPlaylistQueue(currentIndex, currentPos, isPlaying, forceRePrepare = true)
+        } else {
+            notifyPlaybackState()
         }
-        notifyPlaybackState()
         return true
     }
 
@@ -1254,13 +1268,13 @@ class MusicPlaybackService : Service() {
         }
     }
     
-    // Continuously update position while playing (every 500ms)
+    // Continuously update position while playing (every 200ms for responsive lyrics sync)
     private fun startPositionUpdates() {
         stopPositionUpdates() // Cancel any existing job
         positionUpdateJob = serviceScope.launch {
             while (isPlaying()) {
                 notifyPlaybackState()
-                kotlinx.coroutines.delay(500L) // Update every 500ms
+                kotlinx.coroutines.delay(200L) // Update every 200ms
             }
         }
     }
@@ -1279,6 +1293,9 @@ class MusicPlaybackService : Service() {
         if (targetIndex !in currentPlaylist.indices) return
 
         val mediaItems = currentPlaylist.map { createMediaItem(it) }
+        if (forceRePrepare && exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE) {
+            exoPlayer.stop()
+        }
         val alreadyPrepared = exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE
         exoPlayer.setMediaItems(mediaItems, targetIndex, targetPositionMs)
         if (!alreadyPrepared || forceRePrepare) {
