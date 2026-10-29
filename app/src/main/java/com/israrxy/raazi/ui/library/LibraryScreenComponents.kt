@@ -3,147 +3,144 @@ package com.israrxy.raazi.ui.library
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Album
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.QueueMusic
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.israrxy.raazi.data.db.PlaylistWithTracks
-import com.israrxy.raazi.data.playlist.isYouTubeEditablePlaylist
-import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
-import com.israrxy.raazi.model.MusicContentType
-import com.israrxy.raazi.model.SavedCollectionItem
 
+// ---------------------------------------------------------------------------------------
+// Shared building blocks used by every section of the library grid.
+// ---------------------------------------------------------------------------------------
 
-
+/** Titled section header with an optional count and a trailing action ("See all"). */
 @Composable
-internal fun Section(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-    )
-}
-
-@Composable
-internal fun PlaylistRow(
-    playlist: PlaylistWithTracks,
-    onClick: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit
+internal fun LibrarySectionHeader(
+    title: String,
+    count: Int,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    LibraryRow(
-        icon = Icons.Outlined.QueueMusic,
-        title = playlist.playlist.displayTitle,
-        subtitle = buildString {
-            if (playlist.playlist.isYouTubeSyncedPlaylist()) {
-                append("Synced playlist")
-            } else {
-                append("${playlist.tracks.size} songs")
-            }
-            if (playlist.playlist.isYouTubeSyncedPlaylist()) {
-                if (playlist.playlist.isYouTubeEditablePlaylist()) {
-                    append(" • Synced with YouTube Music")
-                } else {
-                    append(" • Saved from YouTube Music")
-                }
-            } else {
-                append(" • Local Playlist")
-            }
-        },
-        thumbnailUrl = playlist.playlist.thumbnailUrl,
-        onClick = onClick,
-        onLongClick = { showMenu = true },
-        trailing = {
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Rename") },
-                        onClick = {
-                            showMenu = false
-                            onRename()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        onClick = {
-                            showMenu = false
-                            onDelete()
-                        }
-                    )
-                }
+    Row(
+        modifier = modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        if (count > 0) {
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                )
             }
         }
-    )
-}
-
-@Composable
-internal fun SavedRow(
-    item: SavedCollectionItem,
-    onClick: () -> Unit,
-    onRemove: () -> Unit
-) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    LibraryRow(
-        icon = when (item.contentType) {
-            MusicContentType.ARTIST -> Icons.Outlined.Person
-            MusicContentType.ALBUM -> Icons.Outlined.Album
-            else -> Icons.Outlined.Bookmark
-        },
-        title = item.title,
-        subtitle = item.subtitle,
-        thumbnailUrl = item.thumbnailUrl,
-        onClick = onClick,
-        onLongClick = { showMenu = true },
-        trailing = {
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Remove from Library") },
-                        onClick = {
-                            showMenu = false
-                            onRemove()
-                        }
-                    )
-                }
+        Spacer(Modifier.weight(1f))
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) {
+                Text(actionLabel, style = MaterialTheme.typography.labelLarge)
             }
         }
-    )
+    }
 }
 
+/** Three-dot menu anchored to whatever you hand it as content. */
+@Composable
+internal fun OverflowMenuButton(
+    items: List<LibraryMenuItem>,
+    contentDescription: String = "Options",
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    scrim: Boolean = false
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = if (scrim) {
+                Modifier.size(30.dp).background(Color.Black.copy(alpha = 0.42f), CircleShape)
+            } else {
+                Modifier.size(30.dp)
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = contentDescription,
+                tint = if (scrim) Color.White else tint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = item.label,
+                            color = if (item.destructive) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        item.onClick()
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** Compact one-line row used by the list layout. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LibraryRow(
@@ -155,67 +152,39 @@ internal fun LibraryRow(
     thumbnailUrl: String? = null,
     showChevron: Boolean = true,
     onLongClick: (() -> Unit)? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     trailing: (@Composable () -> Unit)? = null
 ) {
-    val isCustomIcon = icon == Icons.Default.Favorite ||
-        icon == Icons.Default.History ||
-        icon == Icons.Default.Download ||
-        icon == Icons.Default.Add ||
-        icon == Icons.Default.CloudDownload
-
-    val iconBackgroundModifier = if (!thumbnailUrl.isNullOrBlank()) {
-        Modifier
-    } else if (isCustomIcon) {
-        val colors = when (icon) {
-            Icons.Default.Favorite -> listOf(Color(0xFFE91E63), Color(0xFF8E24AA))
-            Icons.Default.History -> listOf(Color(0xFF1E88E5), Color(0xFF1565C0))
-            Icons.Default.Download -> listOf(Color(0xFF00897B), Color(0xFF004D40))
-            Icons.Default.Add -> listOf(Color(0xFFF4511E), Color(0xFFBF360C))
-            Icons.Default.CloudDownload -> listOf(Color(0xFF1DB954), Color(0xFF191414))
-            else -> listOf(Color.Gray, Color.DarkGray)
-        }
-        Modifier.background(Brush.linearGradient(colors))
-    } else {
-        Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
-    }
-
-    val iconTint = if (isCustomIcon) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 4.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .then(iconBackgroundModifier),
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(13.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             if (!thumbnailUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = thumbnailUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Icon(icon, contentDescription = null, tint = iconTint)
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
             }
         }
 
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(13.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -232,139 +201,84 @@ internal fun LibraryRow(
 
         when {
             trailing != null -> trailing()
-            showChevron -> Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            showChevron -> Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
+/** First run / wiped library. */
 @Composable
-internal fun DividerInset() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 82.dp, end = 16.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    )
+internal fun LibraryEmptyState(actions: LibraryActions, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 44.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Bookmark,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp).padding(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = "Your library is empty",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "Like a song, save an album or create a playlist and it will show up here - " +
+                "always available, even offline.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        TextButton(onClick = actions.openSettings) {
+            Text("Connect YouTube Music")
+        }
+    }
 }
 
+/** Content exists, but the current search / filter matched nothing. */
 @Composable
-internal fun EmptyLibrary() {
+internal fun LibraryNoResultsState(query: String, actions: LibraryActions, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 56.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(Icons.Outlined.Bookmark, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Nothing saved yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text(
-            text = "Liked songs, playlists, albums, and artists will show up here.",
+            text = "No matches",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = if (query.isBlank()) {
+                "Nothing in this category yet."
+            } else {
+                "Nothing in your library matches \u201C$query\u201D."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            textAlign = TextAlign.Center
         )
+        TextButton(onClick = { actions.search("") }) {
+            Text("Clear search")
+        }
     }
 }
-
-@Composable
-internal fun CreatePlaylistDialog(
-    name: String,
-    onNameChange: (String) -> Unit,
-    createSynced: Boolean,
-    onCreateSyncedChange: (Boolean) -> Unit,
-    canCreateSynced: Boolean,
-    onDismiss: () -> Unit,
-    onCreate: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Playlist") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                TextField(
-                    value = name,
-                    onValueChange = onNameChange,
-                    placeholder = { Text("Playlist name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (canCreateSynced) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Create in YouTube Music", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                text = "Available in your account and Raazi.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(checked = createSynced, onCheckedChange = onCreateSyncedChange)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = name.isNotBlank()) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
-internal fun RenamePlaylistDialog(
-    name: String,
-    onNameChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onRename: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rename Playlist") },
-        text = {
-            TextField(
-                value = name,
-                onValueChange = onNameChange,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = onRename,
-                enabled = name.isNotBlank()
-            ) { Text("Rename") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
-internal fun DeletePlaylistDialog(
-    playlistTitle: String,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Playlist") },
-        text = { Text("Are you sure you want to delete '$playlistTitle'? This action cannot be undone.") },
-        confirmButton = {
-            Button(onClick = onDelete) { Text("Delete") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
