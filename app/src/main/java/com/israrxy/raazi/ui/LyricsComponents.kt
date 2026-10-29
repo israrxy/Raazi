@@ -36,6 +36,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import com.israrxy.raazi.data.lyrics.LyricsTextVariants
+import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.RepeatMode as PlaybackRepeatMode
 import com.israrxy.raazi.ui.theme.Emerald400
 
@@ -45,6 +50,10 @@ internal fun SpotifyYoutubeLyricItem(
     text: String,
     translation: String?,
     timestampMs: Long,
+    lineEndTimestampMs: Long = timestampMs + 3000L,
+    words: List<LyricWordSegment> = emptyList(),
+    currentPositionMs: Long = 0L,
+    selectedVariant: LyricsViewVariant = LyricsViewVariant.ORIGINAL,
     isCurrent: Boolean,
     isPassed: Boolean,
     distance: Int,
@@ -83,10 +92,15 @@ internal fun SpotifyYoutubeLyricItem(
     )
 
     val containerAlpha by animateFloatAsState(
-        targetValue = if (isCurrent) 0.10f else 0f,
+        targetValue = if (isCurrent) 0.11f else 0f,
         animationSpec = tween(260),
         label = "lyric_bg_alpha"
     )
+
+    val lineProgress = if (isCurrent) {
+        val totalSpan = (lineEndTimestampMs - timestampMs).coerceAtLeast(300L)
+        ((currentPositionMs - timestampMs).toFloat() / totalSpan.toFloat()).coerceIn(0f, 1f)
+    } else 0f
 
     Row(
         modifier = Modifier
@@ -117,24 +131,72 @@ internal fun SpotifyYoutubeLyricItem(
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .width(4.dp)
-                    .height(28.dp)
+                    .height(30.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(Emerald400)
             )
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = text.ifBlank { "♪" },
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = if (isCurrent) 26.sp else 22.sp,
-                    fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Bold,
-                    lineHeight = if (isCurrent) 34.sp else 30.sp,
-                    letterSpacing = (-0.3).sp
-                ),
-                color = Color.White.copy(alpha = animatedAlpha),
-                textAlign = TextAlign.Start
-            )
+            if (isCurrent && words.isNotEmpty()) {
+                val karaokeText = buildAnnotatedString {
+                    words.forEachIndexed { idx, word ->
+                        val transformedWord = LyricsTextVariants.transform(word.text, selectedVariant)
+                        val wordColor = when {
+                            currentPositionMs >= word.endTimeMs -> Color.White
+                            currentPositionMs >= word.startTimeMs -> Emerald400
+                            else -> Color.White.copy(alpha = 0.42f)
+                        }
+                        withStyle(SpanStyle(color = wordColor)) {
+                            append(transformedWord)
+                        }
+                        if (idx < words.lastIndex) {
+                            append(" ")
+                        }
+                    }
+                }
+                Text(
+                    text = karaokeText,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        lineHeight = 34.sp,
+                        letterSpacing = (-0.3).sp
+                    ),
+                    textAlign = TextAlign.Start
+                )
+            } else {
+                Text(
+                    text = text.ifBlank { "♪" },
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = if (isCurrent) 26.sp else 22.sp,
+                        fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Bold,
+                        lineHeight = if (isCurrent) 34.sp else 30.sp,
+                        letterSpacing = (-0.3).sp
+                    ),
+                    color = Color.White.copy(alpha = animatedAlpha),
+                    textAlign = TextAlign.Start
+                )
+            }
+
+            if (isCurrent) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.5.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.14f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(lineProgress)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Emerald400)
+                    )
+                }
+            }
 
             if (!translation.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -353,144 +415,6 @@ internal fun LyricsBottomTransport(
                     tint = if (isRepeatActive) Emerald400 else Color.White.copy(alpha = 0.55f),
                     modifier = Modifier.size(22.dp)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun LyricsLoadingPlaceholder() {
-    val infiniteTransition = rememberInfiniteTransition(label = "lyrics_shimmer")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.40f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "shimmer_alpha"
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            CircularProgressIndicator(
-                color = Emerald400,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = "Syncing lyrics...",
-                style = MaterialTheme.typography.labelLarge,
-                color = Emerald400
-            )
-        }
-
-        val widths = listOf(0.75f, 0.92f, 0.60f, 0.85f, 0.70f, 0.50f, 0.82f)
-        widths.forEach { fraction ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = alpha))
-            )
-        }
-    }
-}
-
-@Composable
-internal fun LyricsEmptyPlaceholder(
-    onSearchManually: () -> Unit,
-    onRetry: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lyrics,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(34.dp)
-                )
-            }
-
-            Text(
-                text = "Couldn't find synced lyrics",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-
-            Text(
-                text = "Search LrcLib manually to pick a matching version or retry automatic lookup.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = onSearchManually,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Search Lyrics",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onRetry,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Retry")
-                }
             }
         }
     }

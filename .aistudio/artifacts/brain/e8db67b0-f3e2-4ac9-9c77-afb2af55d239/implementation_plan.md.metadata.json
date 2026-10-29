@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan adding the complete Cloudflare Pages (raazi.pages.dev) web deep-link bundle (assetlinks.json, _redirects, and deep-link landing/redirect page) alongside the Android deep linking and lyrics share icon removal.",
-  "updatedAt":  "2026-10-25T12:13:36.176062517Z",
+  "summary":  "Implementation plan for a parallel multi-source lyrics extraction engine (Musixmatch, LRCLIB, Genius, Lyrist/Lyrica API, and YouTube Music fallback) paired with a word-by-word and line-by-line synced karaoke lyrics UI upgrade and provider switcher.",
+  "updatedAt":  "2026-10-29T09:37:57.697521760Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

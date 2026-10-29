@@ -190,7 +190,8 @@ fun PlayerScreen(
                                 isDraggingSlider = false
                             },
                             hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                            onShowQueueSheet = { showPlayNextSheet = true }
+                            onShowQueueSheet = { showPlayNextSheet = true },
+                            onShowSleepTimer = { showSleepTimer = true }
                         )
                     }
 
@@ -279,6 +280,10 @@ fun PlayerScreen(
             userPlaylists = userPlaylists,
             videoQuality = videoQuality,
             showSleepTimer = showSleepTimer,
+            onShowSleepTimer = {
+                showOptionsSheet = false
+                showSleepTimer = true
+            },
             onDismissSleepTimer = { showSleepTimer = false },
             showPlaylistDialog = showPlaylistDialog,
             onDismissPlaylistDialog = { showPlaylistDialog = false },

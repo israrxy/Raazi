@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.utils.ShareUtils
@@ -40,8 +41,6 @@ fun SearchScreen(
     val context = LocalContext.current
     val searchViewModel: SearchViewModel = viewModel()
     var searchQuery by remember { mutableStateOf("") }
-
-    // Add To Playlist Dialog State
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
 
     val searchResults by searchViewModel.searchResults.collectAsState()
@@ -56,70 +55,68 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    // Selection state
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedTracks by remember { mutableStateOf(setOf<MusicItem>()) }
 
-    // Clear search on exit
     DisposableEffect(Unit) {
-        onDispose {
-            searchViewModel.clearSearchResults()
-        }
+        onDispose { searchViewModel.clearSearchResults() }
     }
 
     val normalizedSearchQuery = searchQuery.trim()
-
-    // Track if showing results
     val showingResults = normalizedSearchQuery.isNotBlank() &&
         searchViewModel.submittedQuery == normalizedSearchQuery &&
         (isSearching || searchResults != null)
-    val searchItems = remember(searchResults) {
-        searchResults?.items ?: emptyList()
-    }
-    val searchSections = remember(searchItems) {
-        buildSearchSections(searchItems)
-    }
-    val visibleSections = remember(searchSections) {
-        searchSections.filter { it.items.isNotEmpty() }
-    }
+
+    val searchItems = remember(searchResults) { searchResults?.items ?: emptyList() }
+    val topResultItem = remember(searchResults) { searchResults?.topResult }
+    val moreFromYouTubeItems = remember(searchResults) { searchResults?.moreFromYouTube.orEmpty() }
+    val searchSections = remember(searchItems) { buildSearchSections(searchItems) }
+    val visibleSections = remember(searchSections) { searchSections.filter { it.items.isNotEmpty() } }
+
     var selectedFilter by remember { mutableStateOf("All") }
     val filteredSections = remember(visibleSections, selectedFilter) {
-        if (selectedFilter == "All" || selectedFilter == "Personalized") {
-            visibleSections
+        if (selectedFilter == "All") {
+            visibleSections.filter {
+                it.type != MusicContentType.SONG && it.type != MusicContentType.VIDEO
+            }
         } else {
             visibleSections.filter { it.type.name == selectedFilter }
         }
     }
-    val playableItems = remember(searchItems, searchResults) {
+
+    val playableItems = remember(searchItems, searchResults, topResultItem) {
         val ytTopTracks = searchResults?.topTracks.orEmpty()
+            .filter { it.isPlayableSearchItem() && it.id != topResultItem?.id }
+            .distinctBy { it.id }
         if (ytTopTracks.isNotEmpty()) {
-            ytTopTracks.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
+            ytTopTracks
         } else {
-            searchItems.filter { it.isPlayableSearchItem() }.distinctBy { it.id }.take(15)
+            searchItems
+                .filter { it.isPlayableSearchItem() && it.id != topResultItem?.id }
+                .distinctBy { it.id }
+                .take(15)
         }
     }
-    val currentPlayableItems = remember(filteredSections, selectedFilter, playableItems) {
-        when (selectedFilter) {
-            "Personalized" -> playableItems
-            "All" -> (playableItems + filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }).distinctBy { it.id }
-            else -> filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
+
+    val currentPlayableItems = remember(filteredSections, selectedFilter, playableItems, topResultItem) {
+        if (selectedFilter == "All") {
+            (listOfNotNull(topResultItem?.takeIf { it.isPlayableSearchItem() }) + playableItems).distinctBy { it.id }
+        } else {
+            filteredSections.flatMap { it.items }.filter { it.isPlayableSearchItem() }.distinctBy { it.id }
         }
     }
     var tracksToAddToPlaylist by remember { mutableStateOf<List<MusicItem>?>(null) }
 
     val suggestionsListState = rememberLazyListState()
 
-    // Update query for suggestions
     LaunchedEffect(searchQuery) {
         searchViewModel.query.value = searchQuery
     }
 
-    // Keep suggestions scrolled to top so "Top results" stays below the search box
     LaunchedEffect(searchQuery, topResults, searchSuggestions, searchHistory) {
         suggestionsListState.scrollToItem(0)
     }
 
-    // Auto-exit selection mode if empty
     LaunchedEffect(selectedTracks) {
         if (selectedTracks.isEmpty() && isSelectionMode) {
             isSelectionMode = false
@@ -127,11 +124,28 @@ fun SearchScreen(
     }
 
     LaunchedEffect(searchQuery, visibleSections) {
-        if (selectedFilter != "Personalized" && selectedFilter != "All" && visibleSections.none { it.type.name == selectedFilter }) {
+        if (selectedFilter != "All" && visibleSections.none { it.type.name == selectedFilter }) {
             selectedFilter = "All"
         }
         if (searchViewModel.submittedQuery != searchQuery) {
             selectedFilter = "All"
+        }
+    }
+
+    val handleOpenOrPlayItem: (MusicItem) -> Unit = { musicItem ->
+        when {
+            musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
+            musicItem.isArtistResult() -> onNavigateToArtist(musicItem.artistId ?: musicItem.id, musicItem.title)
+            else -> {
+                searchViewModel.saveSearchHistory(
+                    query = musicItem.title,
+                    thumbnailUrl = musicItem.thumbnailUrl,
+                    resultTitle = musicItem.title,
+                    resultArtist = musicItem.artist
+                )
+                playerViewModel.playMusic(musicItem)
+                onNavigateToPlayer()
+            }
         }
     }
 
@@ -141,7 +155,6 @@ fun SearchScreen(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
     ) {
-        // Bulk Actions Bar
         AnimatedVisibility(
             visible = isSelectionMode,
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
@@ -163,10 +176,10 @@ fun SearchScreen(
                     Checkbox(
                         checked = allPlayableSelected,
                         onCheckedChange = { checkAll ->
-                            if (checkAll) {
-                                selectedTracks = selectedTracks + currentPlayableItems
+                            selectedTracks = if (checkAll) {
+                                selectedTracks + currentPlayableItems
                             } else {
-                                selectedTracks = selectedTracks - currentPlayableItems.toSet()
+                                selectedTracks - currentPlayableItems.toSet()
                             }
                         },
                         colors = CheckboxDefaults.colors(
@@ -183,8 +196,7 @@ fun SearchScreen(
                     )
                     IconButton(onClick = {
                         if (selectedTracks.isNotEmpty()) {
-                            val list = selectedTracks.toList()
-                            playerViewModel.playPlaylist(list, 0)
+                            playerViewModel.playPlaylist(selectedTracks.toList(), 0)
                             isSelectionMode = false
                             selectedTracks = emptySet()
                             onNavigateToPlayer()
@@ -244,26 +256,21 @@ fun SearchScreen(
             }
         )
 
-        // Content: Results OR Suggestions
         Box(modifier = Modifier.weight(1f)) {
             if (showingResults) {
                 when {
-                    isSearching -> {
-                        SearchLoadingState(query = searchQuery)
-                    }
+                    isSearching -> SearchLoadingState(query = searchQuery)
 
-                    searchError != null -> {
-                        SearchErrorState(
-                            message = searchError ?: "Something went wrong",
-                            onRetry = {
-                                if (searchViewModel.submittedQuery.isNotBlank()) {
-                                    searchViewModel.performSearch(searchViewModel.submittedQuery)
-                                }
+                    searchError != null -> SearchErrorState(
+                        message = searchError ?: "Something went wrong",
+                        onRetry = {
+                            if (searchViewModel.submittedQuery.isNotBlank()) {
+                                searchViewModel.performSearch(searchViewModel.submittedQuery)
                             }
-                        )
-                    }
+                        }
+                    )
 
-                    visibleSections.isEmpty() && playableItems.isEmpty() -> {
+                    visibleSections.isEmpty() && playableItems.isEmpty() && topResultItem == null -> {
                         SearchEmptyState(query = searchQuery)
                     }
 
@@ -277,23 +284,31 @@ fun SearchScreen(
                                     query = searchQuery,
                                     selectedFilter = selectedFilter,
                                     onSelectFilter = { selectedFilter = it },
-                                    sections = visibleSections,
-                                    topTracksCount = playableItems.size
+                                    sections = visibleSections
                                 )
                             }
 
-                            if ((selectedFilter == "All" || selectedFilter == "Personalized") && playableItems.isNotEmpty()) {
-                                if (selectedFilter == "All") {
-                                    item(key = "header_TOP_TRACKS") {
-                                        SearchSectionHeader(
-                                            title = "Top Tracks",
-                                            count = playableItems.size,
-                                            subtitle = "Top matches for your search"
-                                        )
-                                    }
+                            if (selectedFilter == "All" && topResultItem != null) {
+                                item(key = "top_result_${topResultItem.id}") {
+                                    TopResultHeroCard(
+                                        topResult = topResultItem,
+                                        onClick = handleOpenOrPlayItem,
+                                        onAddToPlaylist = { showAddToPlaylistItem = it },
+                                        onAddToQueue = {
+                                            playerViewModel.addToQueue(it)
+                                            Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onDownload = {
+                                            playerViewModel.downloadTrack(it)
+                                            Toast.makeText(context, "Downloading ${it.title}", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onShare = { ShareUtils.shareTrack(context, it) }
+                                    )
                                 }
+                            }
 
-                                items(playableItems, key = { item -> "personalized_${item.id}" }) { musicItem ->
+                            if (selectedFilter == "All" && playableItems.isNotEmpty()) {
+                                items(playableItems, key = { item -> "mixed_${item.id}" }) { musicItem ->
                                     val isPlayable = musicItem.isPlayableSearchItem()
                                     val isLiked = favoriteTracks.any { it.id == musicItem.id }
                                     val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
@@ -301,17 +316,14 @@ fun SearchScreen(
 
                                     com.israrxy.raazi.ui.components.SongListItem(
                                         song = musicItem,
+                                        subtitleOverride = formatSearchItemSubtitle(musicItem),
                                         isLiked = isLiked,
                                         isSaved = isSaved,
                                         isSelected = selectedTracks.contains(musicItem),
                                         isSelectionMode = isSelectionMode,
                                         selectionEnabled = isPlayable,
                                         onSelectionChange = { selected ->
-                                            if (selected) {
-                                                selectedTracks = selectedTracks + musicItem
-                                            } else {
-                                                selectedTracks = selectedTracks - musicItem
-                                            }
+                                            selectedTracks = if (selected) selectedTracks + musicItem else selectedTracks - musicItem
                                         },
                                         onLongClick = {
                                             if (isPlayable) {
@@ -319,25 +331,14 @@ fun SearchScreen(
                                                 selectedTracks = selectedTracks + musicItem
                                             }
                                         },
-                                        onClick = {
-                                            searchViewModel.saveSearchHistory(
-                                                query = musicItem.title,
-                                                thumbnailUrl = musicItem.thumbnailUrl,
-                                                resultTitle = musicItem.title,
-                                                resultArtist = musicItem.artist
-                                            )
-                                            playerViewModel.playMusic(musicItem)
-                                            onNavigateToPlayer()
-                                        },
+                                        onClick = { handleOpenOrPlayItem(musicItem) },
                                         onAddToQueue = {
                                             playerViewModel.addToQueue(musicItem)
                                             Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
                                         },
                                         onAddToPlaylist = { showAddToPlaylistItem = musicItem },
                                         onGoToArtist = {
-                                            if (musicItem.artistId != null) {
-                                                onNavigateToArtist(musicItem.artistId!!, musicItem.artist)
-                                            }
+                                            musicItem.artistId?.let { onNavigateToArtist(it, musicItem.artist) }
                                         },
                                         onDownload = {
                                             if (isPlayable) {
@@ -346,13 +347,9 @@ fun SearchScreen(
                                             }
                                         },
                                         onDownloadForRingtone = {
-                                            if (isPlayable) {
-                                                playerViewModel.downloadForRingtone(musicItem)
-                                            }
+                                            if (isPlayable) playerViewModel.downloadForRingtone(musicItem)
                                         },
-                                        onShare = {
-                                            ShareUtils.shareTrack(context, musicItem)
-                                        },
+                                        onShare = { ShareUtils.shareTrack(context, musicItem) },
                                         onLike = { playerViewModel.toggleFavorite(musicItem) },
                                         onSave = { playerViewModel.toggleSavedCollection(musicItem) },
                                         showAddToPlaylist = isPlayable,
@@ -366,75 +363,67 @@ fun SearchScreen(
                                 }
                             }
 
-                            if (selectedFilter != "Personalized") {
-                                filteredSections.forEach { section ->
-                                    item(key = "header_${section.type.name}") {
-                                        SearchSectionHeader(
-                                            title = section.title,
-                                            count = section.items.size,
-                                            subtitle = section.subtitle
-                                        )
-                                    }
+                            filteredSections.forEach { section ->
+                                item(key = "header_${section.type.name}") {
+                                    SearchSectionHeader(
+                                        title = section.title,
+                                        count = section.items.size,
+                                        subtitle = section.subtitle
+                                    )
+                                }
 
-                                    items(section.items, key = { item -> "${section.type.name}_${item.id}" }) { musicItem ->
-                                        val isArtist = musicItem.isArtistResult()
-                                        val isPlayable = musicItem.isPlayableSearchItem()
-                                        val canOpenArtist = !isArtist && musicItem.artistId != null
-                                        val isLiked = favoriteTracks.any { it.id == musicItem.id }
-                                        val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
-                                        val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
+                                items(section.items, key = { item -> "${section.type.name}_${item.id}" }) { musicItem ->
+                                    val isArtist = musicItem.isArtistResult()
+                                    val isPlayable = musicItem.isPlayableSearchItem()
+                                    val canOpenArtist = !isArtist && musicItem.artistId != null
+                                    val isLiked = favoriteTracks.any { it.id == musicItem.id }
+                                    val savedCollectionId = musicItem.toSavedCollectionItemOrNull()?.id
+                                    val isSaved = savedCollectionId != null && savedCollectionId in savedCollectionIds
 
-                                        com.israrxy.raazi.ui.components.SongListItem(
-                                            song = musicItem,
-                                            isLiked = isLiked,
-                                            isSaved = isSaved,
-                                            isSelected = selectedTracks.contains(musicItem),
-                                            isSelectionMode = isSelectionMode,
-                                            selectionEnabled = isPlayable,
-                                            onSelectionChange = { selected ->
-                                                selectedTracks = if (selected) selectedTracks + musicItem else selectedTracks - musicItem
-                                            },
-                                            onLongClick = {
-                                                if (isPlayable) { isSelectionMode = true; selectedTracks = selectedTracks + musicItem }
-                                            },
-                                            onClick = {
-                                                when {
-                                                    musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
-                                                    isArtist -> onNavigateToArtist(musicItem.artistId ?: musicItem.id, musicItem.title)
-                                                    else -> {
-                                                        searchViewModel.saveSearchHistory(musicItem.title, musicItem.thumbnailUrl, musicItem.title, musicItem.artist)
-                                                        playerViewModel.playMusic(musicItem)
-                                                        onNavigateToPlayer()
-                                                    }
-                                                }
-                                            },
-                                            onAddToQueue = {
-                                                if (isPlayable) {
-                                                    playerViewModel.addToQueue(musicItem)
-                                                    Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
-                                                }
-                                            },
-                                            onAddToPlaylist = { showAddToPlaylistItem = musicItem },
-                                            onGoToArtist = { musicItem.artistId?.let { onNavigateToArtist(it, musicItem.artist) } },
-                                            onDownload = {
-                                                if (isPlayable) {
-                                                    playerViewModel.downloadTrack(musicItem)
-                                                    Toast.makeText(context, "Downloading ${musicItem.title}", Toast.LENGTH_SHORT).show()
-                                                }
-                                            },
-                                            onDownloadForRingtone = { if (isPlayable) playerViewModel.downloadForRingtone(musicItem) },
-                                            onShare = { ShareUtils.shareTrack(context, musicItem) },
-                                            onLike = { playerViewModel.toggleFavorite(musicItem) },
-                                            onSave = { playerViewModel.toggleSavedCollection(musicItem) },
-                                            showAddToPlaylist = isPlayable,
-                                            showGoToArtist = canOpenArtist,
-                                            showDownload = isPlayable,
-                                            showRingtone = isPlayable,
-                                            showLike = isPlayable,
-                                            showSave = musicItem.toSavedCollectionItemOrNull() != null,
-                                            showMoreOptions = false
-                                        )
-                                    }
+                                    com.israrxy.raazi.ui.components.SongListItem(
+                                        song = musicItem,
+                                        subtitleOverride = if (isPlayable) formatSearchItemSubtitle(musicItem) else null,
+                                        isLiked = isLiked,
+                                        isSaved = isSaved,
+                                        isSelected = selectedTracks.contains(musicItem),
+                                        isSelectionMode = isSelectionMode,
+                                        selectionEnabled = isPlayable,
+                                        onSelectionChange = { selected ->
+                                            selectedTracks = if (selected) selectedTracks + musicItem else selectedTracks - musicItem
+                                        },
+                                        onLongClick = {
+                                            if (isPlayable) {
+                                                isSelectionMode = true
+                                                selectedTracks = selectedTracks + musicItem
+                                            }
+                                        },
+                                        onClick = { handleOpenOrPlayItem(musicItem) },
+                                        onAddToQueue = {
+                                            if (isPlayable) {
+                                                playerViewModel.addToQueue(musicItem)
+                                                Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                                        onGoToArtist = { musicItem.artistId?.let { onNavigateToArtist(it, musicItem.artist) } },
+                                        onDownload = {
+                                            if (isPlayable) {
+                                                playerViewModel.downloadTrack(musicItem)
+                                                Toast.makeText(context, "Downloading ${musicItem.title}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        onDownloadForRingtone = { if (isPlayable) playerViewModel.downloadForRingtone(musicItem) },
+                                        onShare = { ShareUtils.shareTrack(context, musicItem) },
+                                        onLike = { playerViewModel.toggleFavorite(musicItem) },
+                                        onSave = { playerViewModel.toggleSavedCollection(musicItem) },
+                                        showAddToPlaylist = isPlayable,
+                                        showGoToArtist = canOpenArtist,
+                                        showDownload = isPlayable,
+                                        showRingtone = isPlayable,
+                                        showLike = isPlayable,
+                                        showSave = musicItem.toSavedCollectionItemOrNull() != null,
+                                        showMoreOptions = false
+                                    )
                                 }
                             }
                         }
@@ -455,17 +444,10 @@ fun SearchScreen(
                         keyboardController?.hide()
                         focusManager.clearFocus()
                     },
-                    onPreviewItemClick = { musicItem ->
-                        when {
-                            musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
-                            musicItem.isArtistResult() -> onNavigateToArtist(musicItem.artistId ?: musicItem.id, musicItem.title)
-                            else -> {
-                                searchViewModel.saveSearchHistory(musicItem.title, musicItem.thumbnailUrl, musicItem.title, musicItem.artist)
-                                playerViewModel.playMusic(musicItem)
-                                onNavigateToPlayer()
-                            }
-                        }
-                    }
+                    onFillQuery = { filledQuery ->
+                        searchQuery = "$filledQuery "
+                    },
+                    onPreviewItemClick = handleOpenOrPlayItem
                 )
             }
         }
@@ -490,7 +472,9 @@ fun SearchScreen(
             onPlaylistSelected = { playlist ->
                 playerViewModel.addToPlaylist(tracksToAddToPlaylist!!, playlist)
                 Toast.makeText(context, "Added to ${playlist.title}", Toast.LENGTH_SHORT).show()
-                tracksToAddToPlaylist = null; isSelectionMode = false; selectedTracks = emptySet()
+                tracksToAddToPlaylist = null
+                isSelectionMode = false
+                selectedTracks = emptySet()
             }
         )
     }

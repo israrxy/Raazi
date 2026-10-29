@@ -56,7 +56,8 @@ fun SongListItem(
     isSaved: Boolean = false,
     previewPlaying: Boolean = false,
     previewLoading: Boolean = false,
-    onPreviewToggle: () -> Unit = {}
+    onPreviewToggle: () -> Unit = {},
+    subtitleOverride: String? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showRingtone || showAddToQueue || showMoreOptions || showLike || showSave || selectionEnabled
@@ -113,7 +114,7 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = song.artist,
+                text = subtitleOverride ?: song.artist,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

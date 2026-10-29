@@ -31,8 +31,8 @@ internal fun buildSearchSections(items: List<MusicItem>): List<SearchSectionUiMo
     return listOf(
         SearchSectionUiModel(
             type = MusicContentType.SONG,
-            title = "Music",
-            subtitle = "Songs and audio-first matches",
+            title = "Songs",
+            subtitle = "Official audio and songs",
             items = items.filter {
                 it.contentType == MusicContentType.SONG ||
                     (it.contentType == MusicContentType.UNKNOWN && !it.isArtistResult() && !it.isPlaylistResult())
@@ -41,7 +41,7 @@ internal fun buildSearchSections(items: List<MusicItem>): List<SearchSectionUiMo
         SearchSectionUiModel(
             type = MusicContentType.VIDEO,
             title = "Videos",
-            subtitle = "Watch-based matches",
+            subtitle = "Music videos, covers, and live performances",
             items = items.filter { it.contentType == MusicContentType.VIDEO }
         ),
         SearchSectionUiModel(
@@ -59,7 +59,7 @@ internal fun buildSearchSections(items: List<MusicItem>): List<SearchSectionUiMo
         SearchSectionUiModel(
             type = MusicContentType.PLAYLIST,
             title = "Playlists",
-            subtitle = "Curated lists and mixes",
+            subtitle = "Community and featured playlists",
             items = items.filter { it.contentType == MusicContentType.PLAYLIST }
         )
     )
@@ -146,23 +146,13 @@ internal fun SearchResultsHeader(
     query: String,
     selectedFilter: String,
     onSelectFilter: (String) -> Unit,
-    sections: List<SearchSectionUiModel>,
-    topTracksCount: Int = 0
+    sections: List<SearchSectionUiModel>
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = "Results for \"$query\"",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -172,16 +162,7 @@ internal fun SearchResultsHeader(
             FilterChip(
                 selected = selectedFilter == "All",
                 onClick = { onSelectFilter("All") },
-                label = { Text("All (${topTracksCount + sections.sumOf { it.items.size }})") }
-            )
-            FilterChip(
-                selected = selectedFilter == "Personalized",
-                onClick = {
-                    onSelectFilter(
-                        if (selectedFilter == "Personalized") "All" else "Personalized"
-                    )
-                },
-                label = { Text(if (topTracksCount > 0) "Top Tracks ($topTracksCount)" else "Top Tracks") }
+                label = { Text("All") }
             )
             sections.forEach { section ->
                 FilterChip(

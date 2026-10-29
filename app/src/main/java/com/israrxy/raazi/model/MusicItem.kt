@@ -24,7 +24,8 @@ data class MusicItem(
     val artistId: String? = null,
     val contentType: MusicContentType = MusicContentType.SONG,
     val setVideoId: String? = null,
-    val isrc: String? = null
+    val isrc: String? = null,
+    val viewsText: String? = null
 )
 
 data class Playlist(
@@ -47,7 +48,9 @@ data class SavedCollectionItem(
 data class SearchResult(
     val query: String,
     val items: List<MusicItem>,
-    val topTracks: List<MusicItem> = emptyList()
+    val topTracks: List<MusicItem> = emptyList(),
+    val topResult: MusicItem? = null,
+    val moreFromYouTube: List<MusicItem> = emptyList()
 )
 
 fun savedCollectionId(type: MusicContentType, sourceId: String): String = "${type.name}:$sourceId"

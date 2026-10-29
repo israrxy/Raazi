@@ -422,43 +422,18 @@ internal fun PlaylistHeroHeader(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Shuffle Button with distinct active color & dot indicator
-                    Box(contentAlignment = Alignment.Center) {
-                        IconButton(
-                            onClick = onShuffleClick,
-                            enabled = trackCount > 0,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isShuffleEnabled) Emerald500.copy(alpha = 0.22f)
-                                    else MaterialTheme.colorScheme.surfaceContainerHigh
-                                )
-                                .then(
-                                    if (isShuffleEnabled) {
-                                        Modifier.border(1.5.dp, Emerald500, CircleShape)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Shuffle,
-                                contentDescription = "Shuffle play",
-                                tint = if (isShuffleEnabled) Emerald500 else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        if (isShuffleEnabled) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 5.dp)
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(Emerald500)
-                            )
-                        }
+                    // Shuffle Button without bubble background
+                    IconButton(
+                        onClick = onShuffleClick,
+                        enabled = trackCount > 0,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Shuffle,
+                            contentDescription = "Shuffle play",
+                            tint = if (isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
 
                     // Large Primary Play/Pause Button (Spotify / YT Music signature button)

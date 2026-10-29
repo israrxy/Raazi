@@ -37,42 +37,11 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
-data class LyricLine(
-    val timestamp: Long,
-    val text: String,
-    val translation: String? = null
-)
-
 /**
- * Robust LRC parser supporting [mm:ss], [mm:ss.x], [mm:ss.xx], [mm:ss.xxx]
- * and multiple timestamps per line.
- */
-fun parseLrcLines(syncedLyrics: String?): List<Pair<Long, String>> {
-    if (syncedLyrics.isNullOrBlank()) return emptyList()
-    val timestampRegex = Regex("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\]")
-    val result = mutableListOf<Pair<Long, String>>()
-
-    syncedLyrics.lines().forEach { rawLine ->
-        val matches = timestampRegex.findAll(rawLine).toList()
-        if (matches.isNotEmpty()) {
-            val text = rawLine.substring(matches.last().range.last + 1).trim()
-            if (text.isNotEmpty()) {
-                matches.forEach { match ->
-                    val min = match.groupValues[1].toLongOrNull() ?: 0L
-                    val sec = match.groupValues[2].toDoubleOrNull() ?: 0.0
-                    val timeMs = (min * 60 * 1000 + sec * 1000).toLong()
-                    result.add(timeMs to text)
-                }
-            }
-        }
-    }
-    return result.sortedBy { it.first }
-}
-
-/**
- * Unified Spotify + YouTube Music style Lyrics Screen.
- * Supports smooth auto-scrolling, manual scroll with "Re-sync" pill, timestamp tap-to-seek,
- * musical interlude pulsing dots, Romanization/Script switching, AI Translation, and line sharing.
+ * Unified Spotify + YouTube Music + Musixmatch style Lyrics Screen.
+ * Supports word-by-word and line-by-line karaoke highlight, smooth auto-scrolling,
+ * manual scroll with "Re-sync" pill, timestamp tap-to-seek, musical interlude pulsing dots,
+ * Romanization/Script switching, AI Translation, provider badge, and line sharing.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -94,6 +63,22 @@ fun LyricsScreen(
     val currentPosition = playbackState.currentPosition
     val duration = playbackState.duration
     val isPlaying = playbackState.isPlaying
+
+    var smoothPositionMs by remember { mutableLongStateOf(currentPosition) }
+    LaunchedEffect(currentPosition, isPlaying, duration) {
+        smoothPositionMs = currentPosition
+        if (isPlaying) {
+            val basePosition = currentPosition
+            val startWallClock = android.os.SystemClock.elapsedRealtime()
+            while (true) {
+                delay(33L)
+                val elapsed = android.os.SystemClock.elapsedRealtime() - startWallClock
+                val maxPos = if (duration > 0L) duration else Long.MAX_VALUE
+                smoothPositionMs = (basePosition + elapsed).coerceAtMost(maxPos)
+            }
+        }
+    }
+
     val isTrackLiked = remember(currentTrack?.id, favoriteTracks) {
         currentTrack != null && favoriteTracks.any { it.id == currentTrack.id }
     }
@@ -111,7 +96,7 @@ fun LyricsScreen(
     var selectedVariant by remember(currentTrack?.id) { mutableStateOf(LyricsViewVariant.ORIGINAL) }
 
     val rawSourceText = remember(lyrics) {
-        lyrics?.syncedLyrics ?: lyrics?.plainLyrics.orEmpty()
+        (lyrics?.syncedLyrics ?: lyrics?.plainLyrics.orEmpty()).replace(STRIP_WORD_TAGS_REGEX, "")
     }
     val availableVariants = remember(rawSourceText) {
         LyricsTextVariants.availableVariants(rawSourceText)
@@ -126,17 +111,17 @@ fun LyricsScreen(
         parseLrcLines(lyrics?.syncedLyrics)
     }
 
-    val syncedLines = remember(parsedPairs, translatedLines.toList(), showTranslation) {
-        parsedPairs.mapIndexed { idx, (timeMs, text) ->
-            LyricLine(
-                timestamp = timeMs,
-                text = text,
-                translation = if (showTranslation && idx < translatedLines.size) translatedLines[idx] else null
-            )
-        }
+    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation) {
+        buildRichLyricLines(
+            rawPairs = parsedPairs,
+            durationMs = duration,
+            translations = translatedLines.toList(),
+            showTranslation = showTranslation
+        )
     }
 
     val isSynced = remember(syncedLines) { syncedLines.isNotEmpty() }
+    val hasWordSync = remember(syncedLines) { syncedLines.any { it.hasExplicitWordSync } }
 
     LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang, geminiApiKey) {
         if (!showTranslation || geminiApiKey.isNullOrBlank()) {
@@ -150,7 +135,7 @@ fun LyricsScreen(
         isTranslating = true
         try {
             if (parsedPairs.isNotEmpty()) {
-                val originalTexts = parsedPairs.map { it.second }
+                val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
                 val translations = LyricsTranslator.translateLines(geminiApiKey!!, originalTexts, translateLang)
                 translatedLines.clear()
                 translatedLines.addAll(translations)
@@ -164,9 +149,9 @@ fun LyricsScreen(
         }
     }
 
-    val activeLineIndex = remember(currentPosition, syncedLines, isSynced) {
+    val activeLineIndex = remember(smoothPositionMs, syncedLines, isSynced) {
         if (!isSynced || syncedLines.isEmpty()) -1
-        else syncedLines.indexOfLast { it.timestamp <= currentPosition + 120L }
+        else syncedLines.indexOfLast { it.timestamp <= smoothPositionMs + 120L }
     }
 
     val listState = rememberLazyListState()
@@ -225,13 +210,31 @@ fun LyricsScreen(
         }
     }
 
-    val lyricsStatusBadge = remember(isLoading, lyrics, isSynced) {
+    val lyricsStatusBadge = remember(isLoading, lyrics, isSynced, hasWordSync) {
+        val rawProvider = lyrics?.source
+            ?.removePrefix("Saved ")
+            ?.trim()
+            ?.uppercase()
+            .orEmpty()
+        val isSaved = lyrics?.source?.startsWith("Saved") == true
         when {
-            isLoading -> "SEARCHING"
-            lyrics?.source?.startsWith("Saved") == true -> "SAVED"
-            isSynced -> "SYNCED"
-            !lyrics?.plainLyrics.isNullOrEmpty() -> "PLAIN"
-            else -> "NO LYRICS"
+            isLoading -> "SEARCHING..."
+            lyrics == null || (lyrics?.syncedLyrics.isNullOrBlank() && lyrics?.plainLyrics.isNullOrBlank()) -> "NO LYRICS"
+            hasWordSync -> buildString {
+                if (isSaved) append("PINNED • ")
+                if (rawProvider.isNotBlank()) append("$rawProvider • ")
+                append("WORD SYNC")
+            }
+            isSynced -> buildString {
+                if (isSaved) append("PINNED • ")
+                if (rawProvider.isNotBlank()) append("$rawProvider • ")
+                append("SYNCED")
+            }
+            else -> buildString {
+                if (isSaved) append("PINNED • ")
+                if (rawProvider.isNotBlank()) append("$rawProvider • ")
+                append("PLAIN")
+            }
         }
     }
 
@@ -306,9 +309,11 @@ fun LyricsScreen(
 
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
+                lyricsSource = lyrics?.source,
                 isSynced = isSynced,
                 lyricsStatusBadge = lyricsStatusBadge,
                 isTrackLiked = isTrackLiked,
+                showOptionsMenu = showOptionsMenu,
                 availableVariants = availableVariants,
                 selectedVariant = selectedVariant,
                 onSelectVariant = { selectedVariant = it },
@@ -331,6 +336,15 @@ fun LyricsScreen(
                 LyricsSettingsDropdownMenu(
                     visible = showOptionsMenu,
                     lyrics = lyrics,
+                    hasWordSync = hasWordSync,
+                    isSynced = isSynced,
+                    availableVariants = availableVariants,
+                    selectedVariant = selectedVariant,
+                    onSelectVariant = { selectedVariant = it },
+                    hasTranslationSupport = !geminiApiKey.isNullOrBlank(),
+                    showTranslation = showTranslation,
+                    translateLang = translateLang,
+                    onToggleTranslation = { showTranslation = !showTranslation },
                     lyricsScriptFilter = lyricsScriptFilter,
                     onDismiss = { showOptionsMenu = false },
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
@@ -345,7 +359,7 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     syncedLines = syncedLines,
                     activeLineIndex = activeLineIndex,
-                    currentPosition = currentPosition,
+                    currentPosition = smoothPositionMs,
                     duration = duration,
                     listState = listState,
                     isUserScrolling = isUserScrolling,

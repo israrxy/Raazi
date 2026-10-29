@@ -1,5 +1,6 @@
 package com.israrxy.raazi.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,29 +49,35 @@ internal fun LyricsTopNavigationBar(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(
+        Surface(
             onClick = onClose,
-            modifier = Modifier.size(44.dp)
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.08f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.size(40.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = "Back to player",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Back to player",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
 
         Box(
             modifier = Modifier.weight(1f),
             contentAlignment = Alignment.Center
         ) {
-            val pillSegmentWidth = 56.dp
+            val pillSegmentWidth = 58.dp
             Box(
                 modifier = Modifier
                     .height(38.dp)
                     .width(pillSegmentWidth * 2)
                     .clip(RoundedCornerShape(19.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
+                    .background(Color.White.copy(alpha = 0.10f))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(19.dp))
             ) {
                 Box(
                     modifier = Modifier
@@ -118,28 +125,44 @@ internal fun LyricsTopNavigationBar(
             }
         }
 
-        IconButton(
+        Surface(
             onClick = onOpenLyricsBrowser,
-            modifier = Modifier.size(44.dp)
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.08f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            modifier = Modifier.size(40.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.ManageSearch,
-                contentDescription = "Search or change lyrics",
-                tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.size(24.dp)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.ManageSearch,
+                    contentDescription = "Search or switch lyrics provider",
+                    tint = Color.White.copy(alpha = 0.92f),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
 
-        IconButton(
+        Spacer(modifier = Modifier.width(8.dp))
+
+        val isOptionsActive = showOptionsMenu || selectedVariant != LyricsViewVariant.ORIGINAL || showTranslation
+        Surface(
             onClick = onToggleOptionsMenu,
-            modifier = Modifier.size(44.dp)
+            shape = CircleShape,
+            color = if (isOptionsActive) Emerald500.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.08f),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (isOptionsActive) Emerald400.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f)
+            ),
+            modifier = Modifier.size(40.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Tune,
-                contentDescription = "Lyrics options",
-                tint = if (showOptionsMenu || selectedVariant != LyricsViewVariant.ORIGINAL || showTranslation) Emerald400 else Color.White,
-                modifier = Modifier.size(22.dp)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = "Lyrics studio options",
+                    tint = if (isOptionsActive) Emerald400 else Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }
@@ -147,9 +170,11 @@ internal fun LyricsTopNavigationBar(
 @Composable
 internal fun LyricsNowPlayingStrip(
     currentTrack: MusicItem?,
+    lyricsSource: String?,
     isSynced: Boolean,
     lyricsStatusBadge: String,
     isTrackLiked: Boolean,
+    showOptionsMenu: Boolean,
     availableVariants: List<LyricsViewVariant>,
     selectedVariant: LyricsViewVariant,
     onSelectVariant: (LyricsViewVariant) -> Unit,
@@ -163,6 +188,10 @@ internal fun LyricsNowPlayingStrip(
     onOpenLyricsBrowser: () -> Unit,
     onToggleFavorite: (MusicItem) -> Unit
 ) {
+    val providerColor = remember(lyricsSource) {
+        if (lyricsSource.isNullOrBlank()) Emerald400 else providerAccentColor(lyricsSource)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -171,9 +200,9 @@ internal fun LyricsNowPlayingStrip(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = 0.08f))
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF10161E).copy(alpha = 0.72f))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -181,8 +210,8 @@ internal fun LyricsNowPlayingStrip(
                 model = ThumbnailUtils.getHighQualityThumbnail(currentTrack?.thumbnailUrl),
                 contentDescription = currentTrack?.title,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Zinc800),
                 contentScale = ContentScale.Crop
             )
@@ -211,28 +240,37 @@ internal fun LyricsNowPlayingStrip(
             Spacer(modifier = Modifier.width(8.dp))
 
             Surface(
+                onClick = onOpenLyricsBrowser,
                 shape = RoundedCornerShape(999.dp),
-                color = if (isSynced) Emerald500.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.1f)
+                color = if (isSynced) providerColor.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.10f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isSynced) providerColor.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.16f)
+                )
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    if (isSynced) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(Emerald400)
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (isSynced) providerColor else Color.White.copy(alpha = 0.6f))
+                    )
                     Text(
                         text = lyricsStatusBadge,
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSynced) Emerald400 else Color.White.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isSynced) providerColor else Color.White.copy(alpha = 0.88f),
                         fontSize = 10.sp
+                    )
+                    Icon(
+                        imageVector = Icons.Default.UnfoldMore,
+                        contentDescription = "Switch provider",
+                        tint = if (isSynced) providerColor else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
@@ -253,6 +291,8 @@ internal fun LyricsNowPlayingStrip(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Quick Studio Options Pill Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -260,18 +300,80 @@ internal fun LyricsNowPlayingStrip(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 1. Studio Options Pill
+            Surface(
+                onClick = onToggleOptionsMenu,
+                shape = RoundedCornerShape(999.dp),
+                color = if (showOptionsMenu) Emerald400 else Color.White.copy(alpha = 0.10f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (showOptionsMenu) Emerald400 else Color.White.copy(alpha = 0.12f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        tint = if (showOptionsMenu) Color.Black else Emerald400,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "Options",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (showOptionsMenu) Color.Black else Color.White
+                    )
+                }
+            }
+
+            // 2. Switch Provider Pill
+            Surface(
+                onClick = onOpenLyricsBrowser,
+                shape = RoundedCornerShape(999.dp),
+                color = Color.White.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SwapHoriz,
+                        contentDescription = null,
+                        tint = providerColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Providers",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+            }
+
+            // 3. Original / Romanized Variants
             if (availableVariants.size > 1) {
                 availableVariants.forEach { variant ->
                     val selected = selectedVariant == variant
                     Surface(
+                        onClick = { onSelectVariant(variant) },
                         shape = RoundedCornerShape(999.dp),
-                        color = if (selected) Color.White else Color.White.copy(alpha = 0.1f),
-                        modifier = Modifier.clickable { onSelectVariant(variant) }
+                        color = if (selected) Color.White else Color.White.copy(alpha = 0.08f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (selected) Color.White else Color.White.copy(alpha = 0.10f)
+                        )
                     ) {
                         Text(
                             text = variant.label,
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             color = if (selected) Color.Black else Color.White.copy(alpha = 0.85f),
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
@@ -279,17 +381,16 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
 
+            // 4. AI Translation Toggle
             if (!geminiApiKey.isNullOrBlank()) {
                 Surface(
+                    onClick = onToggleTranslation,
                     shape = RoundedCornerShape(999.dp),
-                    color = if (showTranslation) Emerald500.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.1f),
-                    modifier = Modifier
-                        .border(
-                            width = 1.dp,
-                            color = if (showTranslation) Emerald400.copy(alpha = 0.6f) else Color.Transparent,
-                            shape = RoundedCornerShape(999.dp)
-                        )
-                        .clickable { onToggleTranslation() }
+                    color = if (showTranslation) Emerald500.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.08f),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = if (showTranslation) Emerald400.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.10f)
+                    )
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -320,50 +421,40 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
 
+            // 5. Active Script Indicator Pill
             Surface(
+                onClick = onToggleOptionsMenu,
                 shape = RoundedCornerShape(999.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                modifier = Modifier.clickable { onToggleOptionsMenu() }
+                color = if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
+                    Emerald500.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.08f)
+                },
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
+                        Emerald400.copy(alpha = 0.45f)
+                    } else {
+                        Color.White.copy(alpha = 0.10f)
+                    }
+                )
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Language,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
+                        tint = if (lyricsScriptFilter != LyricsScriptFilter.ALL) Emerald400 else Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = "Script: ${lyricsScriptFilter.label}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                modifier = Modifier.clickable { onOpenLyricsBrowser() }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SwapHoriz,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "Switch Match",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.8f)
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (lyricsScriptFilter != LyricsScriptFilter.ALL) Emerald400 else Color.White.copy(alpha = 0.85f)
                     )
                 }
             }

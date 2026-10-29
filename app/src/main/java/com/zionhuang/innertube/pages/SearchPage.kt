@@ -8,6 +8,7 @@ import com.zionhuang.innertube.models.MusicResponsiveListItemRenderer
 import com.zionhuang.innertube.models.PlaylistItem
 import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.YTItem
+import com.zionhuang.innertube.models.clean
 import com.zionhuang.innertube.models.oddElements
 import com.zionhuang.innertube.models.splitBySeparator
 import com.zionhuang.innertube.utils.parseTime
@@ -19,24 +20,36 @@ data class SearchResult(
 
 object SearchPage {
     fun toYTItem(renderer: MusicResponsiveListItemRenderer): YTItem? {
-        val secondaryLine = renderer.flexColumns.getOrNull(1)
+        val rawSecondaryLine = renderer.flexColumns.getOrNull(1)
             ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.splitBySeparator()
             ?: return null
+        val secondaryLine = rawSecondaryLine.clean()
         return when {
             renderer.isSong -> {
+                val songId = renderer.playlistItemData?.videoId
+                    ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                    ?: renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId
+                    ?: return null
+                val viewsText = secondaryLine.flatten().firstOrNull {
+                    val lower = it.text.trim().lowercase()
+                    lower.endsWith("views") || lower.endsWith("plays") || lower.contains(" views") || lower.contains(" plays")
+                }?.text
                 SongItem(
-                    id = renderer.playlistItemData?.videoId
-                        ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
-                        ?: return null,
+                    id = songId,
                     title = renderer.flexColumns.firstOrNull()
                         ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs
                         ?.firstOrNull()?.text ?: return null,
-                    artists = secondaryLine.firstOrNull()?.oddElements()?.map {
-                        Artist(
-                            name = it.text,
-                            id = it.navigationEndpoint?.browseEndpoint?.browseId
-                        )
-                    } ?: return null,
+                    artists = secondaryLine.firstOrNull()?.oddElements()
+                        ?.filterNot {
+                            val lower = it.text.trim().lowercase()
+                            lower.contains(" views") || lower.contains(" plays") || it.text.parseTime() != null
+                        }
+                        ?.map {
+                            Artist(
+                                name = it.text,
+                                id = it.navigationEndpoint?.browseEndpoint?.browseId
+                            )
+                        } ?: return null,
                     album = secondaryLine.getOrNull(1)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
                         Album(
                             name = it.text,
@@ -47,7 +60,9 @@ object SearchPage {
                     thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                     explicit = renderer.badges?.find {
                         it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
-                    } != null
+                    } != null,
+                    isVideo = renderer.isVideo,
+                    viewsText = viewsText
                 )
             }
             renderer.isArtist -> {

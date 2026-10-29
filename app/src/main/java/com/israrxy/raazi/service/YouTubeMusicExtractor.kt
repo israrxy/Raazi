@@ -67,106 +67,185 @@ class YouTubeMusicExtractor private constructor() {
     suspend fun searchMusic(query: String, serviceId: Int = 0): SearchResult = withContext(Dispatchers.IO) {
         try {
             if (serviceId == 0) {
-                val summaryJob = async {
-                    com.zionhuang.innertube.YouTube.searchSummary(query).getOrNull()
-                }
-                val songResults = async {
-                    com.zionhuang.innertube.YouTube.search(
-                        query,
-                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
-                    ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG) }
-                }
-                val videoResults = async {
-                    com.zionhuang.innertube.YouTube.search(
-                        query,
-                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_VIDEO
-                    ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.VIDEO) }
-                }
-                val artistResults = async {
-                    com.zionhuang.innertube.YouTube.search(
-                        query,
-                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ARTIST
-                    ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ARTIST) }
-                }
-                val albumResults = async {
-                    com.zionhuang.innertube.YouTube.search(
-                        query,
-                        filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ALBUM
-                    ).getOrNull()?.items.orEmpty()
-                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ALBUM) }
-                }
-                val playlistResults = async {
-                    (
+                val wasLoginForBrowse = com.zionhuang.innertube.YouTube.useLoginForBrowse
+                com.zionhuang.innertube.YouTube.useLoginForBrowse = false
+                try {
+                    val summaryJob = async {
+                        com.zionhuang.innertube.YouTube.searchSummary(query).getOrNull()
+                    }
+                    val songResults = async {
                         com.zionhuang.innertube.YouTube.search(
                             query,
-                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST
-                        ).getOrNull()?.items.orEmpty() +
+                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
+                        ).getOrNull()?.items.orEmpty()
+                            .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG) }
+                    }
+                    val videoResults = async {
+                        com.zionhuang.innertube.YouTube.search(
+                            query,
+                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_VIDEO
+                        ).getOrNull()?.items.orEmpty()
+                            .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.VIDEO) }
+                    }
+                    val artistResults = async {
+                        com.zionhuang.innertube.YouTube.search(
+                            query,
+                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ARTIST
+                        ).getOrNull()?.items.orEmpty()
+                            .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ARTIST) }
+                    }
+                    val albumResults = async {
+                        com.zionhuang.innertube.YouTube.search(
+                            query,
+                            filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_ALBUM
+                        ).getOrNull()?.items.orEmpty()
+                            .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.ALBUM) }
+                    }
+                    val playlistResults = async {
+                        (
                             com.zionhuang.innertube.YouTube.search(
                                 query,
-                                filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
-                            ).getOrNull()?.items.orEmpty()
-                        )
-                        .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.PLAYLIST) }
-                        .distinctBy { it.id }
-                }
+                                filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST
+                            ).getOrNull()?.items.orEmpty() +
+                                com.zionhuang.innertube.YouTube.search(
+                                    query,
+                                    filter = com.zionhuang.innertube.YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
+                                ).getOrNull()?.items.orEmpty()
+                            )
+                            .mapNotNull { convertYTItemToMusicItem(it, overrideContentType = MusicContentType.PLAYLIST) }
+                            .distinctBy { it.id }
+                    }
 
-                val summary = summaryJob.await()
-                val summaryTopTracks = mutableListOf<MusicItem>()
-                val summaryAllItems = mutableListOf<MusicItem>()
+                    val summary = summaryJob.await()
+                    var cardMainItem: MusicItem? = null
+                    val moreFromYouTube = mutableListOf<MusicItem>()
+                    val summaryUnfilteredTracks = mutableListOf<MusicItem>()
+                    val summaryAllItems = mutableListOf<MusicItem>()
 
-                if (summary != null) {
-                    summary.summaries.forEach { section ->
-                        val isSongsSection = section.title.equals("Songs", ignoreCase = true)
-                        val isTopResultSection = section.title.contains("Top result", ignoreCase = true) || section.title.isBlank()
-                        val overrideType = when {
-                            isSongsSection -> MusicContentType.SONG
-                            section.title.equals("Videos", ignoreCase = true) -> MusicContentType.VIDEO
-                            section.title.equals("Artists", ignoreCase = true) -> MusicContentType.ARTIST
-                            section.title.equals("Albums", ignoreCase = true) -> MusicContentType.ALBUM
-                            section.title.contains("playlist", ignoreCase = true) -> MusicContentType.PLAYLIST
-                            else -> null
+                    if (summary != null) {
+                        val cardSection = summary.summaries.firstOrNull { it.mainItem != null }
+                        if (cardSection != null) {
+                            cardMainItem = cardSection.mainItem?.let { convertYTItemToMusicItem(it) }
+                            cardSection.moreItems.mapNotNullTo(moreFromYouTube) { convertYTItemToMusicItem(it) }
                         }
 
-                        val mappedItems = section.items.mapNotNull { ytItem ->
-                            convertYTItemToMusicItem(ytItem, overrideContentType = overrideType)
-                        }
+                        summary.summaries.forEach { section ->
+                            val isCardSection = section.mainItem != null
+                            val isSongsSection = section.title.equals("Songs", ignoreCase = true)
+                            val isVideosSection = section.title.equals("Videos", ignoreCase = true)
+                            val isArtistsSection = section.title.equals("Artists", ignoreCase = true)
+                            val isAlbumsSection = section.title.equals("Albums", ignoreCase = true)
+                            val isPlaylistSection = section.title.contains("playlist", ignoreCase = true)
 
-                        if (isTopResultSection || isSongsSection) {
-                            mappedItems.forEach { item ->
-                                if (item.contentType == MusicContentType.SONG ||
-                                    (item.contentType == MusicContentType.UNKNOWN && !item.isPlaylist)
-                                ) {
-                                    summaryTopTracks.add(item)
+                            val overrideType = when {
+                                isSongsSection -> MusicContentType.SONG
+                                isVideosSection -> MusicContentType.VIDEO
+                                isArtistsSection -> MusicContentType.ARTIST
+                                isAlbumsSection -> MusicContentType.ALBUM
+                                isPlaylistSection -> MusicContentType.PLAYLIST
+                                else -> null
+                            }
+
+                            val mappedItems = section.items.mapNotNull { ytItem ->
+                                convertYTItemToMusicItem(ytItem, overrideContentType = overrideType)
+                            }
+
+                            if (!isCardSection) {
+                                mappedItems.forEach { item ->
+                                    if (item.contentType == MusicContentType.SONG || item.contentType == MusicContentType.VIDEO) {
+                                        summaryUnfilteredTracks.add(item)
+                                    }
                                 }
                             }
+
+                            summaryAllItems.addAll(mappedItems)
                         }
-
-                        summaryAllItems.addAll(mappedItems)
                     }
-                }
 
-                val typedSongs = songResults.await()
-                val typedVideos = videoResults.await()
-                val typedArtists = artistResults.await()
-                val typedAlbums = albumResults.await()
-                val typedPlaylists = playlistResults.await()
+                    val typedSongs = songResults.await()
+                    val typedVideos = videoResults.await()
+                    val typedArtists = artistResults.await()
+                    val typedAlbums = albumResults.await()
+                    val typedPlaylists = playlistResults.await()
 
-                val finalTopTracks = (summaryTopTracks.ifEmpty { typedSongs.take(10) })
-                    .distinctBy { it.id }
-
-                val combinedResults = (summaryAllItems + typedSongs + typedVideos + typedArtists + typedAlbums + typedPlaylists)
-                    .distinctBy { "${it.contentType}:${it.id}" }
-
-                Log.d(TAG, "InnerTube search returned ${combinedResults.size} results, ${finalTopTracks.size} top tracks")
-                if (combinedResults.isNotEmpty()) {
-                    return@withContext SearchResult(
+                    val topResult = selectDynamicTopResult(
                         query = query,
-                        items = combinedResults,
-                        topTracks = finalTopTracks
+                        cardMainItem = cardMainItem,
+                        unfilteredTracks = summaryUnfilteredTracks,
+                        moreFromYouTube = moreFromYouTube,
+                        typedSongs = typedSongs
                     )
+
+                    val excludedHeroIds = setOfNotNull(topResult?.id)
+
+                    val demotedCardPlayable = listOfNotNull(
+                        cardMainItem?.takeIf {
+                            it.id != topResult?.id &&
+                                (it.contentType == MusicContentType.SONG || it.contentType == MusicContentType.VIDEO)
+                        }
+                    )
+
+                    val unfilteredPlayable = (
+                        demotedCardPlayable +
+                            summaryUnfilteredTracks +
+                            moreFromYouTube.filter { it.contentType == MusicContentType.SONG || it.contentType == MusicContentType.VIDEO }
+                        )
+                        .distinctBy { it.id }
+                        .filterNot { it.id in excludedHeroIds }
+
+                    val finalTopTracks = if (unfilteredPlayable.isNotEmpty()) {
+                        unfilteredPlayable.take(25)
+                    } else {
+                        (typedSongs + typedVideos)
+                            .distinctBy { it.id }
+                            .filterNot { it.id in excludedHeroIds }
+                            .take(20)
+                    }
+
+                    val allSongs = (
+                        listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.SONG }) +
+                            listOfNotNull(cardMainItem?.takeIf { it.contentType == MusicContentType.SONG }) +
+                            summaryAllItems.filter { it.contentType == MusicContentType.SONG } +
+                            moreFromYouTube.filter { it.contentType == MusicContentType.SONG } +
+                            typedSongs
+                        ).distinctBy { it.id }
+
+                    val allVideos = (
+                        listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.VIDEO }) +
+                            listOfNotNull(cardMainItem?.takeIf { it.contentType == MusicContentType.VIDEO }) +
+                            summaryAllItems.filter { it.contentType == MusicContentType.VIDEO } +
+                            moreFromYouTube.filter { it.contentType == MusicContentType.VIDEO } +
+                            typedVideos
+                        ).distinctBy { it.id }
+
+                    val combinedResults = (
+                        listOfNotNull(topResult) +
+                            demotedCardPlayable +
+                            summaryUnfilteredTracks +
+                            moreFromYouTube +
+                            allSongs +
+                            allVideos +
+                            summaryAllItems.filter { it.contentType != MusicContentType.SONG && it.contentType != MusicContentType.VIDEO } +
+                            typedArtists +
+                            typedAlbums +
+                            typedPlaylists
+                        ).distinctBy { "${it.contentType}:${it.id}" }
+
+                    Log.d(
+                        TAG,
+                        "InnerTube search returned ${combinedResults.size} results, topResult=${topResult?.title}, more=${moreFromYouTube.size}, topTracks=${finalTopTracks.size}"
+                    )
+                    if (combinedResults.isNotEmpty() || topResult != null) {
+                        return@withContext SearchResult(
+                            query = query,
+                            items = combinedResults,
+                            topTracks = finalTopTracks,
+                            topResult = topResult,
+                            moreFromYouTube = moreFromYouTube
+                        )
+                    }
+                } finally {
+                    com.zionhuang.innertube.YouTube.useLoginForBrowse = wasLoginForBrowse
                 }
 
                 Log.w(TAG, "InnerTube search empty for '$query', falling back to NewPipe")

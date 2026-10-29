@@ -30,10 +30,16 @@ Thumbs.db
 local.properties
 
 **/build/
+/.build-outputs/
+.build-outputs/
+*.apk
+*.aab
 *.hprof
 *.jks
 *.keystore
+*.keystore.base64
 keystore.properties
+.env
 .kotlin/
 .kotlinc/
 

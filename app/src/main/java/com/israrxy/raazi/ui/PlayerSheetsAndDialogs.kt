@@ -23,7 +23,9 @@ import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.data.lyrics.LyricsScriptDetector
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
 import com.israrxy.raazi.data.remote.Lyrics
+import com.israrxy.raazi.data.remote.LyricsProviderFilter
 import com.israrxy.raazi.data.remote.LyricsSearchResult
+import com.israrxy.raazi.data.remote.MultiSourceLyricsAggregator
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackVideoQuality
 import com.israrxy.raazi.ui.components.PlayerOptionsSheet
@@ -34,220 +36,13 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LyricsBrowserBottomSheet(
-    viewModel: MusicPlayerViewModel,
-    lyrics: Lyrics?,
-    lyricsSearchResults: List<LyricsSearchResult>,
-    isLyricsSearchLoading: Boolean,
-    lyricsScriptFilter: LyricsScriptFilter,
-    lyricsSearchTitle: String,
-    onTitleChange: (String) -> Unit,
-    lyricsSearchArtist: String,
-    onArtistChange: (String) -> Unit,
-    selectedLyricsLanguage: String,
-    onLanguageChange: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val languages = remember(lyricsSearchResults) {
-        listOf("All") + lyricsSearchResults
-            .map { it.lyrics.language?.ifBlank { "Unknown" } ?: "Unknown" }
-            .distinct()
-    }
-    val filteredResults = remember(lyricsSearchResults, selectedLyricsLanguage, lyricsScriptFilter) {
-        lyricsSearchResults.filter { result ->
-            val languageMatches = selectedLyricsLanguage == "All" ||
-                (result.lyrics.language?.ifBlank { "Unknown" } ?: "Unknown") == selectedLyricsLanguage
-            val scriptMatches = LyricsScriptDetector.matches(lyricsScriptFilter, result.lyrics)
-            languageMatches && scriptMatches
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = {
-            onDismiss()
-            viewModel.clearLyricsSearchResults()
-        },
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Browse Lyrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(
-                text = "Search manually, compare versions, then save the right one for this song.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            OutlinedTextField(
-                value = lyricsSearchTitle,
-                onValueChange = onTitleChange,
-                label = { Text("Song Title") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = lyricsSearchArtist,
-                onValueChange = onArtistChange,
-                label = { Text("Artist") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        onLanguageChange("All")
-                        viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (isLyricsSearchLoading) "Searching..." else "Search")
-                }
-
-                if (lyrics?.source?.startsWith("Saved") == true) {
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.clearSavedLyricsSelection()
-                            Toast.makeText(context, "Using automatic lyrics again", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Remove Saved")
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LyricsScriptFilter.visibleFilters.forEach { filter ->
-                    FilterChip(
-                        selected = lyricsScriptFilter == filter,
-                        onClick = { viewModel.setLyricsScriptFilter(filter) },
-                        label = { Text(filter.label) }
-                    )
-                }
-            }
-
-            if (languages.size > 1) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    languages.forEach { language ->
-                        FilterChip(
-                            selected = selectedLyricsLanguage == language,
-                            onClick = { onLanguageChange(language) },
-                            label = { Text(language) }
-                        )
-                    }
-                }
-            }
-
-            when {
-                isLyricsSearchLoading -> {
-                    Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-
-                filteredResults.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                        Text("No lyric versions found yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(filteredResults) { result ->
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(result.lyrics.trackName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                            Text(
-                                                result.lyrics.artistName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Surface(
-                                            shape = RoundedCornerShape(999.dp),
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                        ) {
-                                            Text(
-                                                text = "${result.matchScore}%",
-                                                color = MaterialTheme.colorScheme.primary,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        AssistChip(onClick = {}, label = { Text(LyricsScriptDetector.detect(result.lyrics).label) })
-                                        AssistChip(onClick = {}, label = { Text(result.lyrics.language ?: "Unknown") })
-                                        AssistChip(onClick = {}, label = { Text(result.lyrics.source) })
-                                        AssistChip(onClick = {}, label = { Text("%.0fs".format(result.lyrics.duration)) })
-                                    }
-
-                                    Text(
-                                        text = result.lyrics.syncedLyrics?.lineSequence()?.firstOrNull { it.isNotBlank() }
-                                            ?: result.lyrics.plainLyrics?.lineSequence()?.firstOrNull { it.isNotBlank() }
-                                            ?: "No preview available",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    Button(
-                                        onClick = {
-                                            viewModel.saveLyricsSelection(result)
-                                            onDismiss()
-                                            Toast.makeText(context, "Lyrics saved for this song", Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Use And Save")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 internal fun PlayerSheetsAndDialogsHost(
     viewModel: MusicPlayerViewModel,
     currentTrack: MusicItem?,
     userPlaylists: List<PlaylistEntity>,
     videoQuality: PlaybackVideoQuality,
     showSleepTimer: Boolean,
+    onShowSleepTimer: () -> Unit = {},
     onDismissSleepTimer: () -> Unit,
     showPlaylistDialog: Boolean,
     onDismissPlaylistDialog: () -> Unit,
@@ -424,6 +219,7 @@ internal fun PlayerSheetsAndDialogsHost(
                 onSaveToPlaylist = onSaveToPlaylistFromOptions,
                 onViewCredits = onViewCreditsFromOptions,
                 onSetRingtone = { currentTrack?.let { track -> viewModel.downloadForRingtone(track) } },
+                onShowSleepTimer = onShowSleepTimer,
                 currentVideoQuality = videoQuality,
                 onSelectVideoQuality = { viewModel.setPlaybackVideoQuality(it) }
             )

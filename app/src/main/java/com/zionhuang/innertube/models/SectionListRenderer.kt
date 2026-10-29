@@ -47,5 +47,18 @@ data class SectionListRenderer(
         val musicResponsiveHeaderRenderer: MusicResponsiveHeaderRenderer?,
         val musicEditablePlaylistDetailHeaderRenderer: MusicEditablePlaylistDetailHeaderRenderer?,
         val gridRenderer: GridRenderer?,
+        val itemSectionRenderer: ItemSectionRenderer? = null,
     )
+
+    @Serializable
+    data class ItemSectionRenderer(
+        val contents: List<ItemSectionContent>? = null,
+    ) {
+        @Serializable
+        data class ItemSectionContent(
+            val musicCardShelfRenderer: MusicCardShelfRenderer? = null,
+            val musicShelfRenderer: MusicShelfRenderer? = null,
+            val musicResponsiveListItemRenderer: MusicResponsiveListItemRenderer? = null,
+        )
+    }
 }

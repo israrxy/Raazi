@@ -9,6 +9,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.Visualizer
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -23,18 +24,53 @@ internal class PlaybackAudioEffectsController(
     private val isDestroyedProvider: () -> Boolean
 ) {
     private var audioEffectsInitRetryCount = 0
+    private var initializedSessionId = 0
     private var audioEqualizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     private var presetReverb: PresetReverb? = null
     private var visualizer: Visualizer? = null
     private var visualizerData: ByteArray? = null
+    private var bassBoostUnsupported = false
+    private var virtualizerUnsupported = false
+    private var presetReverbUnsupported = false
+    private var visualizerUnsupported = false
+    private var cachedBassBoostStrength: Short = 0
+    private var cachedVirtualizerStrength: Short = 0
+    private var cachedReverbPreset: Int = 0
     private val visualizerListeners = CopyOnWriteArraySet<(ByteArray) -> Unit>()
 
-    private fun isAudioEffectAvailable(effectTypeUuid: UUID): Boolean {
+    private fun isEmulatorAudioHal(): Boolean {
+        val hardware = Build.HARDWARE.lowercase()
+        val fingerprint = Build.FINGERPRINT.lowercase()
+        val product = Build.PRODUCT.lowercase()
+        val model = Build.MODEL.lowercase()
+        val brand = Build.BRAND.lowercase()
+        val device = Build.DEVICE.lowercase()
+        return hardware.contains("ranchu") ||
+            hardware.contains("goldfish") ||
+            hardware.contains("cutf") ||
+            hardware.contains("vsoc") ||
+            fingerprint.startsWith("generic") ||
+            fingerprint.contains("emulator") ||
+            product.contains("sdk") ||
+            product.contains("emulator") ||
+            model.contains("sdk") ||
+            model.contains("emulator") ||
+            (brand.startsWith("generic") && device.startsWith("generic"))
+    }
+
+    private fun isAudioEffectAvailable(
+        effectTypeUuid: UUID,
+        requireInsertMode: Boolean = true
+    ): Boolean {
+        if (effectTypeUuid != AudioEffect.EFFECT_TYPE_EQUALIZER && isEmulatorAudioHal()) {
+            return false
+        }
         return runCatching {
             AudioEffect.queryEffects()?.any { descriptor ->
-                descriptor.type == effectTypeUuid
+                descriptor.type == effectTypeUuid &&
+                    (!requireInsertMode || descriptor.connectMode == AudioEffect.EFFECT_INSERT)
             } ?: false
         }.getOrDefault(false)
     }
@@ -47,8 +83,9 @@ internal class PlaybackAudioEffectsController(
     }
 
     private fun isVisualizerEffectAvailable(): Boolean {
+        if (visualizerUnsupported || isEmulatorAudioHal()) return false
         val visualizerUuid = UUID.fromString("e46b26a0-dddd-11db-8afd-0002a5d5c51b")
-        return isAudioEffectAvailable(visualizerUuid)
+        return isAudioEffectAvailable(visualizerUuid, requireInsertMode = false)
     }
 
     fun initializeAudioEffects() {
@@ -70,6 +107,20 @@ internal class PlaybackAudioEffectsController(
                 return
             }
 
+            if (initializedSessionId == audioSessionId && audioEqualizer != null) {
+                return
+            }
+
+            audioEqualizer?.release()
+            bassBoost?.release()
+            virtualizer?.release()
+            presetReverb?.release()
+            audioEqualizer = null
+            bassBoost = null
+            virtualizer = null
+            presetReverb = null
+            initializedSessionId = audioSessionId
+
             if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_EQUALIZER)) {
                 runCatching {
                     audioEqualizer = Equalizer(0, audioSessionId).apply {
@@ -80,37 +131,17 @@ internal class PlaybackAudioEffectsController(
                 }
             }
 
-            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_BASS_BOOST)) {
-                runCatching {
-                    bassBoost = BassBoost(0, audioSessionId).apply {
-                        enabled = true
-                    }
-                }.onFailure { e ->
-                    Log.w("MusicService", "BassBoost unavailable: ${e.message}")
-                }
+            if (cachedBassBoostStrength > 0) {
+                setBassBoostStrength(cachedBassBoostStrength)
+            }
+            if (cachedVirtualizerStrength > 0) {
+                setVirtualizerStrength(cachedVirtualizerStrength)
+            }
+            if (cachedReverbPreset > 0) {
+                setReverbPreset(cachedReverbPreset)
             }
 
-            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_VIRTUALIZER)) {
-                runCatching {
-                    virtualizer = Virtualizer(0, audioSessionId).apply {
-                        enabled = true
-                    }
-                }.onFailure { e ->
-                    Log.w("MusicService", "Virtualizer unavailable: ${e.message}")
-                }
-            }
-
-            if (isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB)) {
-                runCatching {
-                    presetReverb = PresetReverb(0, audioSessionId).apply {
-                        enabled = true
-                    }
-                }.onFailure { e ->
-                    Log.w("MusicService", "PresetReverb unavailable: ${e.message}")
-                }
-            }
-
-            if (visualizerListeners.isNotEmpty() && hasRecordAudioPermission()) {
+            if (visualizerListeners.isNotEmpty() && hasRecordAudioPermission() && isVisualizerEffectAvailable()) {
                 ensureVisualizerInitialized()
             }
 
@@ -120,8 +151,68 @@ internal class PlaybackAudioEffectsController(
         }
     }
 
+    private fun ensureBassBoostInitialized(): BassBoost? {
+        bassBoost?.let { return it }
+        if (bassBoostUnsupported || isDestroyedProvider() || !isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_BASS_BOOST)) {
+            return null
+        }
+        val audioSessionId = initializedSessionId.takeIf { it != 0 }
+            ?: runCatching { exoPlayerProvider()?.audioSessionId ?: 0 }.getOrDefault(0)
+        if (audioSessionId == 0) return null
+        return runCatching {
+            BassBoost(0, audioSessionId).apply {
+                enabled = true
+                bassBoost = this
+            }
+        }.getOrElse { e ->
+            bassBoostUnsupported = true
+            Log.w("MusicService", "BassBoost unavailable: ${e.message}")
+            null
+        }
+    }
+
+    private fun ensureVirtualizerInitialized(): Virtualizer? {
+        virtualizer?.let { return it }
+        if (virtualizerUnsupported || isDestroyedProvider() || !isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_VIRTUALIZER)) {
+            return null
+        }
+        val audioSessionId = initializedSessionId.takeIf { it != 0 }
+            ?: runCatching { exoPlayerProvider()?.audioSessionId ?: 0 }.getOrDefault(0)
+        if (audioSessionId == 0) return null
+        return runCatching {
+            Virtualizer(0, audioSessionId).apply {
+                enabled = true
+                virtualizer = this
+            }
+        }.getOrElse { e ->
+            virtualizerUnsupported = true
+            Log.w("MusicService", "Virtualizer unavailable: ${e.message}")
+            null
+        }
+    }
+
+    private fun ensurePresetReverbInitialized(): PresetReverb? {
+        presetReverb?.let { return it }
+        if (presetReverbUnsupported || isDestroyedProvider() || !isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB, requireInsertMode = true)) {
+            return null
+        }
+        val audioSessionId = initializedSessionId.takeIf { it != 0 }
+            ?: runCatching { exoPlayerProvider()?.audioSessionId ?: 0 }.getOrDefault(0)
+        if (audioSessionId == 0) return null
+        return runCatching {
+            PresetReverb(0, audioSessionId).apply {
+                enabled = true
+                presetReverb = this
+            }
+        }.getOrElse { e ->
+            presetReverbUnsupported = true
+            Log.w("MusicService", "PresetReverb unavailable: ${e.message}")
+            null
+        }
+    }
+
     private fun ensureVisualizerInitialized(): Boolean {
-        if (isDestroyedProvider()) return false
+        if (isDestroyedProvider() || visualizerUnsupported) return false
         if (visualizer != null) return true
         if (!hasRecordAudioPermission() || !isVisualizerEffectAvailable()) {
             return false
@@ -155,6 +246,7 @@ internal class PlaybackAudioEffectsController(
             Log.d("MusicService", "Visualizer initialized successfully")
             true
         }.getOrElse { e ->
+            visualizerUnsupported = true
             Log.w("MusicService", "Visualizer unavailable on this session: ${e.message}")
             false
         }
@@ -185,21 +277,31 @@ internal class PlaybackAudioEffectsController(
         audioEqualizer?.usePreset(preset)
     }
 
-    fun getBassBoostStrength(): Short = bassBoost?.roundedStrength ?: 0
+    fun getBassBoostStrength(): Short = bassBoost?.roundedStrength ?: cachedBassBoostStrength
 
     fun setBassBoostStrength(strength: Short) {
-        bassBoost?.setStrength(strength)
+        cachedBassBoostStrength = strength
+        if (strength <= 0 && bassBoost == null) return
+        runCatching {
+            ensureBassBoostInitialized()?.setStrength(strength)
+        }
     }
 
-    fun isBassBoostSupported(): Boolean = bassBoost != null
+    fun isBassBoostSupported(): Boolean =
+        bassBoost != null || (!bassBoostUnsupported && isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_BASS_BOOST))
 
-    fun getVirtualizerStrength(): Short = virtualizer?.roundedStrength ?: 0
+    fun getVirtualizerStrength(): Short = virtualizer?.roundedStrength ?: cachedVirtualizerStrength
 
     fun setVirtualizerStrength(strength: Short) {
-        virtualizer?.setStrength(strength)
+        cachedVirtualizerStrength = strength
+        if (strength <= 0 && virtualizer == null) return
+        runCatching {
+            ensureVirtualizerInitialized()?.setStrength(strength)
+        }
     }
 
-    fun isVirtualizerSupported(): Boolean = virtualizer != null
+    fun isVirtualizerSupported(): Boolean =
+        virtualizer != null || (!virtualizerUnsupported && isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_VIRTUALIZER))
 
     fun getReverbPresets(): List<String> = listOf(
         "None", "Small Room", "Medium Room", "Large Room",
@@ -207,12 +309,17 @@ internal class PlaybackAudioEffectsController(
     )
 
     fun setReverbPreset(preset: Int) {
-        presetReverb?.preset = preset.toShort()
+        cachedReverbPreset = preset
+        if (preset <= 0 && presetReverb == null) return
+        runCatching {
+            ensurePresetReverbInitialized()?.preset = preset.toShort()
+        }
     }
 
-    fun getReverbPreset(): Int = presetReverb?.preset?.toInt() ?: 0
+    fun getReverbPreset(): Int = presetReverb?.preset?.toInt() ?: cachedReverbPreset
 
-    fun isReverbSupported(): Boolean = presetReverb != null
+    fun isReverbSupported(): Boolean =
+        presetReverb != null || (!presetReverbUnsupported && isAudioEffectAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB, requireInsertMode = true))
 
     fun getFrequencyData(): ByteArray? = visualizerData
 

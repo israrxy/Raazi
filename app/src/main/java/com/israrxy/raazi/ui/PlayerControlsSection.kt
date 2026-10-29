@@ -51,7 +51,8 @@ internal fun PlayerControlsAndActionsSection(
     onSliderChange: (Float) -> Unit,
     onSliderFinished: () -> Unit,
     hasQueueOrRelated: Boolean,
-    onShowQueueSheet: () -> Unit
+    onShowQueueSheet: () -> Unit,
+    onShowSleepTimer: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentTrack = playbackState.currentTrack
@@ -373,6 +374,44 @@ internal fun PlayerControlsAndActionsSection(
 
         Spacer(modifier = Modifier.width(24.dp))
 
+        val sleepTimer = remember { com.israrxy.raazi.service.SleepTimer.getInstance() }
+        val sleepTimerActive by sleepTimer.isActive.collectAsStateWithLifecycle()
+        val sleepRemainingMs by sleepTimer.remainingTimeMs.collectAsStateWithLifecycle()
+        val sleepAccent = if (sleepTimerActive) Emerald500 else Color.White.copy(alpha = 0.9f)
+
+        Box(
+            modifier = Modifier
+                .height(50.dp)
+                .widthIn(min = 50.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onShowSleepTimer)
+                .padding(horizontal = if (sleepTimerActive) 10.dp else 0.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    imageVector = if (sleepTimerActive) Icons.Default.Bedtime else Icons.Default.Timer,
+                    contentDescription = "Sleep Timer",
+                    tint = sleepAccent,
+                    modifier = Modifier.size(24.dp)
+                )
+                if (sleepTimerActive && sleepRemainingMs > 0L) {
+                    val totalSec = sleepRemainingMs / 1000
+                    Text(
+                        text = String.format("%d:%02d", totalSec / 60, totalSec % 60),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Emerald500
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(24.dp))
+
         Box(
             modifier = Modifier
                 .size(50.dp)
@@ -390,7 +429,7 @@ internal fun PlayerControlsAndActionsSection(
                 },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Share, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(24.dp))
+            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(24.dp))
         }
     }
 }

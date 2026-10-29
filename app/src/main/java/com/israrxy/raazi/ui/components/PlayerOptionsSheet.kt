@@ -50,6 +50,7 @@ fun PlayerOptionsSheet(
     onSaveToPlaylist: () -> Unit,
     onViewCredits: () -> Unit,
     onSetRingtone: () -> Unit = {},
+    onShowSleepTimer: () -> Unit = {},
     currentVideoQuality: PlaybackVideoQuality = PlaybackVideoQuality.AUTO,
     onSelectVideoQuality: (PlaybackVideoQuality) -> Unit = {}
 ) {
@@ -201,6 +202,22 @@ fun PlayerOptionsSheet(
             onClick = {
                 onViewCredits()
                 onDismiss()
+            }
+        )
+        val sleepTimer = remember { com.israrxy.raazi.service.SleepTimer.getInstance() }
+        val isSleepTimerActive by sleepTimer.isActive.collectAsStateWithLifecycle()
+        val sleepRemainingMs by sleepTimer.remainingTimeMs.collectAsStateWithLifecycle()
+        SheetOption(
+            icon = Icons.Outlined.Bedtime,
+            title = "Sleep timer",
+            subtitle = if (isSleepTimerActive && sleepRemainingMs > 0L) {
+                val totalSec = sleepRemainingMs / 1000
+                String.format("Active · %d:%02d remaining", totalSec / 60, totalSec % 60)
+            } else {
+                "Pause playback after 15, 30, or 60 minutes"
+            },
+            onClick = {
+                onShowSleepTimer()
             }
         )
         SheetOption(

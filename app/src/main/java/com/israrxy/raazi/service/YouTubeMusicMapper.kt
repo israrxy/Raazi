@@ -253,14 +253,16 @@ internal fun convertYTItemToMusicItem(
             MusicItem(
                 id = id,
                 title = item.title ?: "Unknown",
-                artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
+                artist = item.artists.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name } ?: "Unknown Artist",
                 duration = (item.duration?.toLong() ?: 0) * 1000L,
                 thumbnailUrl = item.thumbnail ?: "",
                 audioUrl = "",
                 videoUrl = id,
                 isLive = false,
-                contentType = overrideContentType ?: MusicContentType.SONG,
-                setVideoId = item.setVideoId
+                artistId = item.artists.firstOrNull()?.id,
+                contentType = overrideContentType ?: if (item.isVideo) MusicContentType.VIDEO else MusicContentType.SONG,
+                setVideoId = item.setVideoId,
+                viewsText = item.viewsText
             )
         }
         is com.zionhuang.innertube.models.AlbumItem -> MusicItem(
@@ -303,3 +305,6 @@ internal fun convertYTItemToMusicItem(
         else -> null
     }
 }
+
+
+

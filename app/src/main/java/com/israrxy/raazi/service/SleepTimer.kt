@@ -23,7 +23,7 @@ class SleepTimer private constructor() {
         }
         
         // Preset durations in minutes
-        val PRESET_DURATIONS = listOf(5, 10, 15, 30, 45, 60, 90)
+        val PRESET_DURATIONS = listOf(15, 30, 60)
     }
     
     private var countDownTimer: CountDownTimer? = null

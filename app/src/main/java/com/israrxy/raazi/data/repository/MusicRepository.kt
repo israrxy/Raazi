@@ -33,6 +33,7 @@ class MusicRepository(
 ) {
     private val downloadManager = com.israrxy.raazi.service.SimpleDownloadManager(context)
     private val lrcLibApi = com.israrxy.raazi.data.remote.LrcLibApi(context)
+    private val lyricsAggregator = com.israrxy.raazi.data.remote.MultiSourceLyricsAggregator(context, lrcLibApi)
     private val savedLyricsStore = SavedLyricsStore(context)
     private val chartsExtractor = com.israrxy.raazi.data.remote.YouTubeChartsExtractor()
     internal val settingsDataStore = SettingsDataStore(context)
@@ -42,7 +43,13 @@ class MusicRepository(
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
     ): com.israrxy.raazi.data.remote.Lyrics? {
         return savedLyricsStore.get(item.id)
-            ?: lrcLibApi.getLyrics(item.title, item.artist, item.duration, preferredScript)
+            ?: lyricsAggregator.getLyrics(
+                trackId = item.id,
+                trackName = item.title,
+                artistName = item.artist,
+                durationMs = item.duration,
+                preferredScript = preferredScript
+            )
     }
 
     suspend fun searchLyricsOptions(
@@ -51,10 +58,11 @@ class MusicRepository(
         artistOverride: String = item.artist,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
     ): List<LyricsSearchResult> {
-        return lrcLibApi.searchLyricsOptions(
+        return lyricsAggregator.searchAllProviders(
+            trackId = item.id,
             trackName = titleOverride,
             artistName = artistOverride,
-            duration = item.duration,
+            durationMs = item.duration,
             preferredScript = preferredScript
         )
     }

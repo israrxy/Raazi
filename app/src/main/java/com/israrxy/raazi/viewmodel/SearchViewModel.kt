@@ -9,6 +9,7 @@ import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.YTItem
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,125 +69,90 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         )
 
     val topResults: StateFlow<List<com.israrxy.raazi.model.MusicItem>> = viewState.map { state ->
-        state.items.mapNotNull { ytItem ->
-            when (ytItem) {
-                is com.zionhuang.innertube.models.SongItem -> com.israrxy.raazi.model.MusicItem(
-                    id = ytItem.id ?: return@mapNotNull null,
-                    title = ytItem.title ?: "Unknown",
-                    artist = ytItem.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
-                    duration = (ytItem.duration?.toLong() ?: 0) * 1000L,
-                    thumbnailUrl = ytItem.thumbnail ?: "",
-                    audioUrl = "",
-                    videoUrl = ytItem.id ?: return@mapNotNull null,
-                    isLive = false,
-                    contentType = com.israrxy.raazi.model.MusicContentType.SONG,
-                    setVideoId = ytItem.setVideoId
-                )
-                is com.zionhuang.innertube.models.ArtistItem -> com.israrxy.raazi.model.MusicItem(
-                    id = ytItem.id,
-                    title = ytItem.title,
-                    artist = "Artist",
-                    duration = 0L,
-                    thumbnailUrl = ytItem.thumbnail ?: "",
-                    audioUrl = "",
-                    videoUrl = ytItem.shareLink.orEmpty(),
-                    isLive = false,
-                    isPlaylist = false,
-                    artistId = ytItem.id,
-                    contentType = com.israrxy.raazi.model.MusicContentType.ARTIST
-                )
-                is com.zionhuang.innertube.models.AlbumItem -> com.israrxy.raazi.model.MusicItem(
-                    id = ytItem.browseId ?: return@mapNotNull null,
-                    title = ytItem.title ?: "Unknown",
-                    artist = ytItem.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown Artist",
-                    duration = 0L,
-                    thumbnailUrl = ytItem.thumbnail ?: "",
-                    audioUrl = "",
-                    videoUrl = ytItem.browseId ?: return@mapNotNull null,
-                    isLive = false,
-                    isPlaylist = true,
-                    contentType = com.israrxy.raazi.model.MusicContentType.ALBUM
-                )
-                is com.zionhuang.innertube.models.PlaylistItem -> com.israrxy.raazi.model.MusicItem(
-                    id = ytItem.id ?: return@mapNotNull null,
-                    title = ytItem.title ?: "Unknown",
-                    artist = ytItem.author?.name ?: "Unknown Artist",
-                    duration = 0L,
-                    thumbnailUrl = ytItem.thumbnail ?: "",
-                    audioUrl = "",
-                    videoUrl = ytItem.id ?: return@mapNotNull null,
-                    isLive = false,
-                    isPlaylist = true,
-                    contentType = com.israrxy.raazi.model.MusicContentType.PLAYLIST
-                )
-                else -> null
-            }
-        }
+        state.musicItems
     }.stateIn(
         viewModelScope,
         SharingStarted.Lazily,
         emptyList()
     )
 
-    // Simple in-memory suggestion cache
-    private val suggestionCache = LinkedHashMap<String, com.zionhuang.innertube.models.SearchSuggestions?>(16, 0.75f, true)
+    private val suggestionCache = java.util.concurrent.ConcurrentHashMap<String, CachedSuggestionBundle>()
 
     init {
         viewModelScope.launch {
             query
-                .debounce(150L)
-                .flatMapLatest { query ->
-                    if (query.isEmpty()) {
+                .debounce(180L)
+                .flatMapLatest { rawQuery ->
+                    val trimmed = rawQuery.trim()
+                    if (trimmed.isEmpty()) {
                         musicDao.searchHistory().map { history ->
                             SearchSuggestionViewState(history = history)
                         }
                     } else {
-                        val cached = suggestionCache[query]
-                        val result = if (cached != null) {
+                        val cached = suggestionCache[trimmed.lowercase()]
+                        val bundle = if (cached != null) {
                             cached
                         } else {
                             try {
                                 withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    // Temporarily disable login-for-browse for suggestions
-                                    // YouTube suggestion API doesn't handle authenticated requests
-                                    val wasLoginForBrowse = YouTube.useLoginForBrowse
-                                    try {
-                                        YouTube.useLoginForBrowse = false
-                                        YouTube.searchSuggestions(query).getOrNull()
-                                    } finally {
-                                        YouTube.useLoginForBrowse = wasLoginForBrowse
+                                    kotlinx.coroutines.coroutineScope {
+                                        val wasLoginForBrowse = YouTube.useLoginForBrowse
+                                        try {
+                                            YouTube.useLoginForBrowse = false
+                                            val suggestionsDeferred = async {
+                                                YouTube.searchSuggestions(trimmed).getOrNull()
+                                            }
+                                            val summaryDeferred = async {
+                                                if (trimmed.length >= 2) {
+                                                    YouTube.searchSummary(trimmed).getOrNull()
+                                                } else null
+                                            }
+                                            val suggestionsRes = suggestionsDeferred.await()
+                                            val summaryRes = summaryDeferred.await()
+                                            val resolvedQueries = suggestionsRes?.queries
+                                                ?.takeIf { it.isNotEmpty() }
+                                                ?: runCatching { repository.getSearchSuggestions(trimmed) }.getOrDefault(emptyList())
+                                            val dynamicItems = com.israrxy.raazi.service.buildDynamicSuggestionItems(
+                                                query = trimmed,
+                                                queries = resolvedQueries,
+                                                summaryPage = summaryRes,
+                                                recommendedItems = suggestionsRes?.recommendedItems.orEmpty()
+                                            )
+                                            CachedSuggestionBundle(
+                                                queries = resolvedQueries,
+                                                musicItems = dynamicItems
+                                            )
+                                        } finally {
+                                            YouTube.useLoginForBrowse = wasLoginForBrowse
+                                        }
                                     }
                                 }
                             } catch (e: Exception) {
                                 null
                             }
                         }
-                        if (result != null && query.length >= 2) {
-                            suggestionCache[query] = result
-                            // Keep cache size bounded
+                        if (bundle != null && trimmed.length >= 2) {
                             if (suggestionCache.size > 50) {
-                                val eldest = suggestionCache.keys.first()
-                                suggestionCache.remove(eldest)
+                                suggestionCache.keys.firstOrNull()?.let { suggestionCache.remove(it) }
                             }
+                            suggestionCache[trimmed.lowercase()] = bundle
                         }
-                        musicDao.searchHistory(query)
+                        musicDao.searchHistory(trimmed)
                             .map { it.take(3) }
                             .map { history ->
                                 SearchSuggestionViewState(
                                     history = history,
-                                    suggestions = result?.queries
+                                    suggestions = bundle?.queries
                                         ?.filter { suggestion ->
-                                            history.none { it.query == suggestion }
+                                            history.none { it.query.equals(suggestion, ignoreCase = true) }
                                         }.orEmpty(),
-                                    items = result?.recommendedItems
-                                        .orEmpty()
-                                        .distinctBy { it.id }
+                                    musicItems = bundle?.musicItems.orEmpty()
                                 )
                             }
                     }
                 }.collect { state ->
-                _viewState.value = state
-            }
+                    _viewState.value = state
+                }
         }
     }
 
@@ -202,7 +168,7 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 val result = repository.searchMusic(normalizedQuery, _selectedService.value)
                 _searchError.value = null
                 _searchResults.value = result
-                val top = result.items.firstOrNull { item ->
+                val top = result.topResult ?: result.topTracks.firstOrNull() ?: result.items.firstOrNull { item ->
                     item.contentType == com.israrxy.raazi.model.MusicContentType.SONG ||
                         item.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO ||
                         (item.contentType == com.israrxy.raazi.model.MusicContentType.UNKNOWN && !item.isPlaylist)
@@ -267,8 +233,14 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
 private const val MAX_SEARCH_HISTORY_ITEMS = 20
 
+private data class CachedSuggestionBundle(
+    val queries: List<String> = emptyList(),
+    val musicItems: List<com.israrxy.raazi.model.MusicItem> = emptyList()
+)
+
 data class SearchSuggestionViewState(
     val history: List<SearchHistoryEntity> = emptyList(),
     val suggestions: List<String> = emptyList(),
-    val items: List<YTItem> = emptyList()
+    val items: List<YTItem> = emptyList(),
+    val musicItems: List<com.israrxy.raazi.model.MusicItem> = emptyList()
 )

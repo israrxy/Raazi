@@ -42,55 +42,111 @@ import com.zionhuang.innertube.pages.SearchSummary
 import com.zionhuang.innertube.pages.SearchSummaryPage
 
 internal fun parseSearchSuggestions(response: GetSearchSuggestionsResponse): SearchSuggestions {
+    val allContents = response.contents.orEmpty()
+        .flatMap { it.searchSuggestionsSectionRenderer.contents }
+
+    val queries = allContents.mapNotNull { content ->
+        val renderer = content.searchSuggestionRenderer ?: return@mapNotNull null
+        renderer.navigationEndpoint.searchEndpoint?.query?.takeIf { it.isNotBlank() }
+            ?: renderer.suggestion.runs?.joinToString(separator = "") { it.text }?.takeIf { it.isNotBlank() }
+    }.distinct()
+
+    val recommendedItems = allContents.mapNotNull { content ->
+        content.musicResponsiveListItemRenderer?.let { renderer ->
+            SearchSuggestionPage.fromMusicResponsiveListItemRenderer(renderer)
+        }
+    }
+
     return SearchSuggestions(
-        queries = response.contents?.getOrNull(0)?.searchSuggestionsSectionRenderer?.contents?.mapNotNull { content ->
-            content.searchSuggestionRenderer?.suggestion?.runs?.joinToString(separator = "") { it.text }
-        }.orEmpty(),
-        recommendedItems = response.contents?.getOrNull(1)?.searchSuggestionsSectionRenderer?.contents?.mapNotNull {
-            it.musicResponsiveListItemRenderer?.let { renderer ->
-                SearchSuggestionPage.fromMusicResponsiveListItemRenderer(renderer)
-            }
-        }.orEmpty()
+        queries = queries,
+        recommendedItems = recommendedItems
     )
 }
 
+
 internal fun parseSearchSummaryPage(response: SearchResponse): SearchSummaryPage {
+    val sectionContents = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()
+        ?.tabRenderer?.content?.sectionListRenderer?.contents.orEmpty()
     return SearchSummaryPage(
-        summaries = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents?.mapNotNull { it ->
-            if (it.musicCardShelfRenderer != null)
-                SearchSummary(
-                    title = it.musicCardShelfRenderer.header?.musicCardShelfHeaderBasicRenderer?.title?.runs?.firstOrNull()?.text ?: "",
-                    items = listOfNotNull(SearchSummaryPage.fromMusicCardShelfRenderer(it.musicCardShelfRenderer))
-                        .plus(
-                            it.musicCardShelfRenderer.contents
-                                ?.mapNotNull { it.musicResponsiveListItemRenderer }
-                                ?.mapNotNull(SearchSummaryPage.Companion::fromMusicResponsiveListItemRenderer)
-                                .orEmpty()
-                        )
-                        .distinctBy { it.id }
-                        .ifEmpty { null } ?: return@mapNotNull null
-                )
-            else
-                SearchSummary(
-                    title = it.musicShelfRenderer?.title?.runs?.firstOrNull()?.text ?: "",
-                    items = it.musicShelfRenderer?.contents?.getItems()
-                        ?.mapNotNull {
-                            SearchSummaryPage.fromMusicResponsiveListItemRenderer(it)
+        summaries = sectionContents.mapNotNull { it ->
+            val cardShelf = it.musicCardShelfRenderer
+                ?: it.itemSectionRenderer?.contents?.firstOrNull { c -> c.musicCardShelfRenderer != null }?.musicCardShelfRenderer
+            val musicShelf = it.musicShelfRenderer
+                ?: it.itemSectionRenderer?.contents?.firstOrNull { c -> c.musicShelfRenderer != null }?.musicShelfRenderer
+
+            if (cardShelf != null) {
+                val mainItem = SearchSummaryPage.fromMusicCardShelfRenderer(cardShelf)
+                val fallbackArtist = (mainItem as? ArtistItem)?.let { artist ->
+                    Artist(name = artist.title, id = artist.id)
+                }
+                val subItems = cardShelf.contents
+                    ?.mapNotNull { c -> c.musicResponsiveListItemRenderer }
+                    ?.mapNotNull(SearchSummaryPage.Companion::fromMusicResponsiveListItemRenderer)
+                    ?.map { subItem ->
+                        if (subItem is SongItem && subItem.artists.isEmpty() && fallbackArtist != null) {
+                            subItem.copy(artists = listOf(fallbackArtist))
+                        } else {
+                            subItem
                         }
-                        ?.distinctBy { it.id }
+                    }
+                    .orEmpty()
+                val allCardItems = (listOfNotNull(mainItem) + subItems).distinctBy { item -> item.id }
+                if (allCardItems.isEmpty()) return@mapNotNull null
+                SearchSummary(
+                    title = cardShelf.header?.musicCardShelfHeaderBasicRenderer?.title?.runs?.firstOrNull()?.text ?: "Top result",
+                    items = allCardItems,
+                    mainItem = mainItem,
+                    moreItems = subItems.filter { it.id != mainItem?.id }.distinctBy { it.id }
+                )
+            } else if (musicShelf != null) {
+                SearchSummary(
+                    title = musicShelf.title?.runs?.firstOrNull()?.text ?: "",
+                    items = musicShelf.contents?.getItems()
+                        ?.mapNotNull { renderer ->
+                            SearchSummaryPage.fromMusicResponsiveListItemRenderer(renderer)
+                        }
+                        ?.distinctBy { item -> item.id }
                         ?.ifEmpty { null } ?: return@mapNotNull null
                 )
-        }!!
+            } else {
+                val directItems = it.itemSectionRenderer?.contents
+                    ?.mapNotNull { c -> c.musicResponsiveListItemRenderer }
+                    ?.mapNotNull(SearchSummaryPage.Companion::fromMusicResponsiveListItemRenderer)
+                    ?.distinctBy { item -> item.id }
+                    .orEmpty()
+                if (directItems.isNotEmpty()) {
+                    SearchSummary(
+                        title = "",
+                        items = directItems
+                    )
+                } else {
+                    null
+                }
+            }
+        }
     )
 }
 
 internal fun parseSearchResult(response: SearchResponse): SearchResult {
-    val shelf = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()
-        ?.tabRenderer?.content?.sectionListRenderer?.contents?.lastOrNull()
-        ?.musicShelfRenderer
+    val sectionContents = response.contents?.tabbedSearchResultsRenderer?.tabs?.firstOrNull()
+        ?.tabRenderer?.content?.sectionListRenderer?.contents.orEmpty()
+    val shelves = sectionContents.mapNotNull {
+        it.musicShelfRenderer ?: it.itemSectionRenderer?.contents?.firstOrNull { c -> c.musicShelfRenderer != null }?.musicShelfRenderer
+    }
+    val shelfItems = shelves.flatMap { shelf ->
+        shelf.contents?.getItems()?.mapNotNull { SearchPage.toYTItem(it) }.orEmpty()
+    }
+    val directItems = sectionContents.flatMap { section ->
+        section.itemSectionRenderer?.contents
+            ?.mapNotNull { c -> c.musicResponsiveListItemRenderer }
+            ?.mapNotNull { renderer -> SearchPage.toYTItem(renderer) }
+            .orEmpty()
+    }
+    val items = (shelfItems + directItems).distinctBy { it.id }
+    val continuation = shelves.lastOrNull()?.continuations?.getContinuation()
     return SearchResult(
-        items = shelf?.contents?.getItems()?.mapNotNull { SearchPage.toYTItem(it) }.orEmpty(),
-        continuation = shelf?.continuations?.getContinuation()
+        items = items,
+        continuation = continuation
     )
 }
 
