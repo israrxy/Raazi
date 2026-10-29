@@ -96,6 +96,7 @@ internal fun TopResultHeroCard(
 
     val isVideo = topResult.contentType == MusicContentType.VIDEO
     val isArtist = topResult.isArtistResult()
+    val isPlaylist = topResult.isPlaylistResult()
     val isPlayable = topResult.isPlayableSearchItem()
     val thumbnailUrl = remember(topResult.thumbnailUrl) {
         ThumbnailUtils.getHighQualityThumbnail(topResult.thumbnailUrl)
@@ -191,6 +192,21 @@ internal fun TopResultHeroCard(
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else if (isPlaylist) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.65f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -295,19 +311,19 @@ internal fun TopResultHeroCard(
                     modifier = Modifier.testTag("top_result_play_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
+                        imageVector = if (isPlayable) Icons.Default.PlayArrow else if (isPlaylist) Icons.AutoMirrored.Filled.QueueMusic else Icons.Default.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isPlayable) "Play" else "Open",
+                        text = if (isPlayable) "Play" else if (isPlaylist) "Open Playlist" else "Open",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                if (isPlayable) {
+                if (isPlayable || isPlaylist) {
                     OutlinedButton(
                         onClick = { onAddToPlaylist(topResult) },
                         shape = RoundedCornerShape(50),
@@ -322,13 +338,13 @@ internal fun TopResultHeroCard(
                         modifier = Modifier.testTag("top_result_save_button")
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                            imageVector = if (isPlaylist) Icons.Default.BookmarkAdd else Icons.AutoMirrored.Filled.PlaylistAdd,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Save",
+                            text = if (isPlaylist) "Save" else "Add",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )

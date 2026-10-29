@@ -173,7 +173,11 @@ class YouTubeMusicExtractor private constructor() {
                         cardMainItem = cardMainItem,
                         unfilteredTracks = summaryUnfilteredTracks,
                         moreFromYouTube = moreFromYouTube,
-                        typedSongs = typedSongs
+                        typedSongs = typedSongs,
+                        typedPlaylists = typedPlaylists,
+                        typedAlbums = typedAlbums,
+                        typedArtists = typedArtists,
+                        summaryAllItems = summaryAllItems
                     )
 
                     val excludedHeroIds = setOfNotNull(topResult?.id)
@@ -202,21 +206,13 @@ class YouTubeMusicExtractor private constructor() {
                             .take(20)
                     }
 
-                    val allSongs = (
-                        listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.SONG }) +
-                            listOfNotNull(cardMainItem?.takeIf { it.contentType == MusicContentType.SONG }) +
-                            summaryAllItems.filter { it.contentType == MusicContentType.SONG } +
-                            moreFromYouTube.filter { it.contentType == MusicContentType.SONG } +
-                            typedSongs
-                        ).distinctBy { it.id }
+                    val allSongs = (listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.SONG }, cardMainItem?.takeIf { it.contentType == MusicContentType.SONG }) +
+                        summaryAllItems.filter { it.contentType == MusicContentType.SONG } +
+                        moreFromYouTube.filter { it.contentType == MusicContentType.SONG } + typedSongs).distinctBy { it.id }
 
-                    val allVideos = (
-                        listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.VIDEO }) +
-                            listOfNotNull(cardMainItem?.takeIf { it.contentType == MusicContentType.VIDEO }) +
-                            summaryAllItems.filter { it.contentType == MusicContentType.VIDEO } +
-                            moreFromYouTube.filter { it.contentType == MusicContentType.VIDEO } +
-                            typedVideos
-                        ).distinctBy { it.id }
+                    val allVideos = (listOfNotNull(topResult?.takeIf { it.contentType == MusicContentType.VIDEO }, cardMainItem?.takeIf { it.contentType == MusicContentType.VIDEO }) +
+                        summaryAllItems.filter { it.contentType == MusicContentType.VIDEO } +
+                        moreFromYouTube.filter { it.contentType == MusicContentType.VIDEO } + typedVideos).distinctBy { it.id }
 
                     val combinedResults = (
                         listOfNotNull(topResult) +

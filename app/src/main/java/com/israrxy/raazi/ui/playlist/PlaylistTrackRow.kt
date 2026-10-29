@@ -2,7 +2,6 @@ package com.israrxy.raazi.ui.playlist
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,8 +24,11 @@ import coil.compose.AsyncImage
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.utils.ThumbnailUtils
-import java.util.Locale
 
+/**
+ * Spotify-style Playlist Track Row with playing equalizer indicator,
+ * rounded album thumbnail, download badges, and context menu.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SpotifyStylePlaylistTrackRow(
@@ -51,7 +53,8 @@ internal fun SpotifyStylePlaylistTrackRow(
     onAddToPlaylist: () -> Unit,
     onDownload: () -> Unit,
     onShareTrack: () -> Unit,
-    onRemoveFromPlaylist: () -> Unit
+    onRemoveFromPlaylist: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showTrackMenu by remember { mutableStateOf(false) }
 
@@ -62,9 +65,9 @@ internal fun SpotifyStylePlaylistTrackRow(
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .padding(horizontal = 10.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(rowContainerColor)
             .combinedClickable(
@@ -74,9 +77,9 @@ internal fun SpotifyStylePlaylistTrackRow(
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Track Index / Active Indicator / Checkbox
+        // Track Index / Active Equalizer Wave / Selection Checkbox
         Box(
-            modifier = Modifier.width(30.dp),
+            modifier = Modifier.width(32.dp),
             contentAlignment = Alignment.Center
         ) {
             when {
@@ -84,6 +87,7 @@ internal fun SpotifyStylePlaylistTrackRow(
                     Checkbox(
                         checked = isSelected,
                         onCheckedChange = { onClick() },
+                        colors = CheckboxDefaults.colors(checkedColor = Emerald500),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -108,7 +112,7 @@ internal fun SpotifyStylePlaylistTrackRow(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Track Artwork
+        // High-Quality Track Artwork
         AsyncImage(
             model = ThumbnailUtils.getListThumbnail(item.thumbnailUrl),
             contentDescription = item.title,
@@ -121,7 +125,7 @@ internal fun SpotifyStylePlaylistTrackRow(
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        // Title + Artist + Downloaded badge
+        // Title + Artist + Offline Downloaded badge
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -143,11 +147,11 @@ internal fun SpotifyStylePlaylistTrackRow(
                         imageVector = Icons.Filled.DownloadDone,
                         contentDescription = "Downloaded",
                         tint = Emerald500,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 } else if (isDownloading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(13.dp),
                         strokeWidth = 1.5.dp,
                         color = Emerald500
                     )
@@ -180,7 +184,8 @@ internal fun SpotifyStylePlaylistTrackRow(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowUp,
-                        contentDescription = "Move up"
+                        contentDescription = "Move up",
+                        tint = if (canMoveUp) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     )
                 }
                 IconButton(
@@ -190,7 +195,8 @@ internal fun SpotifyStylePlaylistTrackRow(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Move down"
+                        contentDescription = "Move down",
+                        tint = if (canMoveDown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     )
                 }
             }
@@ -237,7 +243,7 @@ internal fun SpotifyStylePlaylistTrackRow(
                     )
                     if (!isDownloaded) {
                         DropdownMenuItem(
-                            text = { Text("Download") },
+                            text = { Text("Download track") },
                             leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
                             onClick = {
                                 showTrackMenu = false
@@ -278,179 +284,5 @@ internal fun SpotifyStylePlaylistTrackRow(
                 }
             }
         }
-    }
-}
-
-@Composable
-internal fun PlaylistSelectionBottomBar(
-    selectedCount: Int,
-    isEditablePlaylist: Boolean,
-    onDownloadSelected: () -> Unit,
-    onQueueSelected: () -> Unit,
-    onRemoveSelected: () -> Unit
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 8.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onDownloadSelected)
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Download,
-                    contentDescription = "Download selected",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Download",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onQueueSelected)
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = "Add selected to queue",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Queue",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            if (isEditablePlaylist) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onRemoveSelected)
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Remove selected",
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Remove",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun PlaylistRenameDialog(
-    initialTitle: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
-    var newTitle by remember(initialTitle) { mutableStateOf(initialTitle) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Rename Playlist", fontWeight = FontWeight.Bold) },
-        text = {
-            OutlinedTextField(
-                value = newTitle,
-                onValueChange = { newTitle = it },
-                label = { Text("Playlist name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val trimmed = newTitle.trim()
-                    if (trimmed.isNotEmpty()) {
-                        onSave(trimmed)
-                    }
-                }
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
-internal fun PlaylistDeleteConfirmDialog(
-    playlistTitle: String,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Playlist?", fontWeight = FontWeight.Bold) },
-        text = {
-            Text("Are you sure you want to delete \"$playlistTitle\"? This action cannot be undone.")
-        },
-        confirmButton = {
-            Button(
-                onClick = onDelete,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text("Delete")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-internal fun formatTrackDuration(durationMs: Long): String {
-    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
-}
-
-internal fun formatPlaylistTotalDuration(durationMs: Long): String {
-    if (durationMs <= 0L) return ""
-    val totalMinutes = (durationMs / 1000L / 60L).coerceAtLeast(1L)
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    return if (hours > 0L) {
-        "${hours}h ${minutes}m"
-    } else {
-        "${minutes} min"
     }
 }

@@ -288,12 +288,25 @@ fun SearchScreen(
                                 )
                             }
 
-                            if (selectedFilter == "All" && topResultItem != null) {
+                            val showTopResult = topResultItem != null && (
+                                selectedFilter == "All" ||
+                                (selectedFilter == "PLAYLIST" && topResultItem.isPlaylistResult()) ||
+                                (selectedFilter == "ARTIST" && topResultItem.isArtistResult()) ||
+                                (selectedFilter == "ALBUM" && topResultItem.contentType == MusicContentType.ALBUM)
+                            )
+                            if (showTopResult && topResultItem != null) {
                                 item(key = "top_result_${topResultItem.id}") {
                                     TopResultHeroCard(
                                         topResult = topResultItem,
                                         onClick = handleOpenOrPlayItem,
-                                        onAddToPlaylist = { showAddToPlaylistItem = it },
+                                        onAddToPlaylist = { itemToSave ->
+                                            if (itemToSave.isPlaylistResult()) {
+                                                playerViewModel.toggleSavedCollection(itemToSave)
+                                                Toast.makeText(context, "Saved to library", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                showAddToPlaylistItem = itemToSave
+                                            }
+                                        },
                                         onAddToQueue = {
                                             playerViewModel.addToQueue(it)
                                             Toast.makeText(context, "Added to queue", Toast.LENGTH_SHORT).show()
@@ -453,25 +466,15 @@ fun SearchScreen(
         }
     }
 
-    if (showAddToPlaylistItem != null) {
+    val targetForPlaylist = showAddToPlaylistItem?.let { listOf(it) } ?: tracksToAddToPlaylist
+    if (targetForPlaylist != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = playerViewModel,
-            onDismiss = { showAddToPlaylistItem = null },
+            onDismiss = { showAddToPlaylistItem = null; tracksToAddToPlaylist = null },
             onPlaylistSelected = { playlist ->
-                playerViewModel.addToPlaylist(showAddToPlaylistItem!!, playlist)
+                playerViewModel.addToPlaylist(targetForPlaylist, playlist)
                 Toast.makeText(context, "Added to ${playlist.title}", Toast.LENGTH_SHORT).show()
                 showAddToPlaylistItem = null
-            }
-        )
-    }
-
-    if (tracksToAddToPlaylist != null) {
-        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
-            viewModel = playerViewModel,
-            onDismiss = { tracksToAddToPlaylist = null },
-            onPlaylistSelected = { playlist ->
-                playerViewModel.addToPlaylist(tracksToAddToPlaylist!!, playlist)
-                Toast.makeText(context, "Added to ${playlist.title}", Toast.LENGTH_SHORT).show()
                 tracksToAddToPlaylist = null
                 isSelectionMode = false
                 selectedTracks = emptySet()

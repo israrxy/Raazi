@@ -6,15 +6,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -23,22 +22,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.ui.theme.Emerald500
 
+/**
+ * Spotify-style Hero Header for Playlists featuring dynamic atmospheric background,
+ * fading cover artwork, metadata badges, quick in-line search, and signature playback controls.
+ */
 @Composable
 internal fun PlaylistHeroHeader(
     playlist: Playlist,
     displayDescription: String,
     coverUrl: String,
+    dominantColor: Color,
+    scrollOffset: Float,
     trackCount: Int,
     durationSummary: String,
     isLocalPlaylist: Boolean,
@@ -51,10 +55,8 @@ internal fun PlaylistHeroHeader(
     isReorderMode: Boolean,
     showSearchBar: Boolean,
     searchQuery: String,
+    currentSortOrder: PlaylistSortOrder,
     downloadCount: Int,
-    showHeaderMenu: Boolean,
-    onShowHeaderMenuChange: (Boolean) -> Unit,
-    onNavigateBack: () -> Unit,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onClearSearch: () -> Unit,
@@ -64,122 +66,42 @@ internal fun PlaylistHeroHeader(
     onToggleSaveClick: () -> Unit,
     onSyncToYouTubeClick: () -> Unit,
     onToggleReorderClick: () -> Unit,
-    onRenameClick: () -> Unit,
-    onSelectTracksClick: () -> Unit,
-    onDeletePlaylistClick: () -> Unit,
-    onSharePlaylistClick: () -> Unit
+    onOpenSortSheet: () -> Unit,
+    onSharePlaylistClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        dominantColor.copy(alpha = 0.55f),
+                        dominantColor.copy(alpha = 0.22f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(top = 48.dp, start = 20.dp, end = 20.dp, bottom = 8.dp)
         ) {
-            // Top bar with Back, Search, and More menu
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onNavigateBack,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+            // Spotify-style Fading Cover Art with parallax & bottom blend mask
+            PlaylistHeroCover(
+                coverUrl = coverUrl,
+                playlistTitle = playlist.title,
+                dominantColor = dominantColor,
+                scrollOffset = scrollOffset,
+                fadeThresholdPx = 520f
+            )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onSearchToggle,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (showSearchBar) Emerald500.copy(alpha = 0.22f)
-                                else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "Search in playlist",
-                            tint = if (showSearchBar) Emerald500 else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+            Spacer(modifier = Modifier.height(16.dp))
 
-                    Box {
-                        IconButton(
-                            onClick = { onShowHeaderMenuChange(true) },
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More options",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = showHeaderMenu,
-                            onDismissRequest = { onShowHeaderMenuChange(false) }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Select tracks") },
-                                leadingIcon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
-                                onClick = onSelectTracksClick
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Share playlist") },
-                                leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                                onClick = onSharePlaylistClick
-                            )
-                            if (isEditablePlaylist) {
-                                DropdownMenuItem(
-                                    text = { Text("Rename playlist") },
-                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                    onClick = onRenameClick
-                                )
-                            }
-                            if (isLocalPlaylist) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Delete playlist",
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Filled.Delete,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    },
-                                    onClick = onDeletePlaylistClick
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
+            // In-line Expandable Search Bar
             AnimatedVisibility(
                 visible = showSearchBar,
                 enter = expandVertically() + fadeIn(),
@@ -188,8 +110,8 @@ internal fun PlaylistHeroHeader(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
-                    placeholder = { Text("Find in playlist...") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    placeholder = { Text("Find songs in playlist...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Emerald500) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = onClearSearch) {
@@ -199,51 +121,25 @@ internal fun PlaylistHeroHeader(
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Emerald500,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onClearSearch() }),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(bottom = 12.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Elevated Album/Playlist Cover Art
-            Box(
-                modifier = Modifier
-                    .size(216.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .shadow(24.dp, RoundedCornerShape(20.dp))
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                if (coverUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = coverUrl,
-                        contentDescription = playlist.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.LibraryMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(72.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(22.dp))
 
             // Playlist Title
             Text(
                 text = playlist.title,
-                style = MaterialTheme.typography.headlineSmall.copy(
+                style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.5).sp
+                    letterSpacing = (-0.6).sp
                 ),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 2,
@@ -263,32 +159,32 @@ internal fun PlaylistHeroHeader(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Metadata badges (YouTube Music / Local badge + Track count + Duration)
+            // Metadata Badges (YouTube Sync / Song Count / Total Duration)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = if (isSyncedWithYouTube) {
-                        Emerald500.copy(alpha = 0.16f)
+                        Emerald500.copy(alpha = 0.18f)
                     } else {
                         MaterialTheme.colorScheme.surfaceContainerHighest
                     }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(
                             imageVector = if (isSyncedWithYouTube) Icons.Filled.CloudDone else Icons.AutoMirrored.Filled.QueueMusic,
                             contentDescription = null,
                             tint = if (isSyncedWithYouTube) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Text(
-                            text = if (isSyncedWithYouTube) "YouTube Music" else if (isLocalPlaylist) "Your Playlist" else "Playlist",
+                            text = if (isSyncedWithYouTube) "YouTube Music" else if (isLocalPlaylist) "Local Playlist" else "Playlist",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isSyncedWithYouTube) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -298,26 +194,26 @@ internal fun PlaylistHeroHeader(
 
                 Text(
                     text = buildString {
-                        append("$trackCount ${if (trackCount == 1) "song" else "songs"}")
+                        append("$trackCount ${if (trackCount == 1) "track" else "tracks"}")
                         if (durationSummary.isNotBlank()) {
                             append(" • ")
                             append(durationSummary)
                         }
                     },
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Spotify / YT Music Action Bar Row
+            // Spotify Signature Action Bar Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left Utility Action Icons (Download, Save/Sync, Reorder, Share)
+                // Left Utility Buttons
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -326,8 +222,8 @@ internal fun PlaylistHeroHeader(
                     BadgedBox(
                         badge = {
                             if (downloadCount > 0) {
-                                Badge(containerColor = Emerald500, contentColor = Color.White) {
-                                    Text(downloadCount.toString())
+                                Badge(containerColor = Emerald500, contentColor = Color.Black) {
+                                    Text(downloadCount.toString(), fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -347,7 +243,7 @@ internal fun PlaylistHeroHeader(
                         }
                     }
 
-                    // Save remote playlist OR Sync local playlist to YouTube Music
+                    // Save to Library or Sync with YouTube
                     if (!isLocalPlaylist) {
                         IconButton(
                             onClick = onToggleSaveClick,
@@ -355,13 +251,13 @@ internal fun PlaylistHeroHeader(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (isSaved) Emerald500.copy(alpha = 0.18f)
+                                    if (isSaved) Emerald500.copy(alpha = 0.2f)
                                     else MaterialTheme.colorScheme.surfaceContainerHigh
                                 )
                         ) {
                             Icon(
                                 imageVector = if (isSaved) Icons.Filled.BookmarkAdded else Icons.Outlined.BookmarkAdd,
-                                contentDescription = if (isSaved) "Saved in Library" else "Save to Library",
+                                contentDescription = if (isSaved) "Saved" else "Save to library",
                                 tint = if (isSaved) Emerald500 else MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -381,7 +277,25 @@ internal fun PlaylistHeroHeader(
                         }
                     }
 
-                    // Reorder Tracks Toggle (for editable playlists)
+                    // Sort Order Button
+                    IconButton(
+                        onClick = onOpenSortSheet,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (currentSortOrder != PlaylistSortOrder.DEFAULT) Emerald500.copy(alpha = 0.2f)
+                                else MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = "Sort tracks",
+                            tint = if (currentSortOrder != PlaylistSortOrder.DEFAULT) Emerald500 else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Reorder Tracks (if editable)
                     if (isEditablePlaylist && trackCount > 1) {
                         IconButton(
                             onClick = onToggleReorderClick,
@@ -389,13 +303,13 @@ internal fun PlaylistHeroHeader(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (isReorderMode) Emerald500.copy(alpha = 0.2f)
+                                    if (isReorderMode) Emerald500.copy(alpha = 0.22f)
                                     else MaterialTheme.colorScheme.surfaceContainerHigh
                                 )
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.SwapVert,
-                                contentDescription = "Reorder tracks",
+                                contentDescription = "Reorder mode",
                                 tint = if (isReorderMode) Emerald500 else MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -417,43 +331,83 @@ internal fun PlaylistHeroHeader(
                     }
                 }
 
-                // Right Playback Controls (Distinct Shuffle Button + Big Play/Pause FAB)
+                // Right Playback Action Buttons
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Shuffle Button without bubble background
+                    // Shuffle Toggle
                     IconButton(
                         onClick = onShuffleClick,
                         enabled = trackCount > 0,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Shuffle,
-                            contentDescription = "Shuffle play",
-                            tint = if (isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentDescription = "Shuffle",
+                            tint = if (isShuffleEnabled) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp)
                         )
                     }
 
-                    // Large Primary Play/Pause Button (Spotify / YT Music signature button)
+                    // Large Signature Spotify Play/Pause Button
                     FloatingActionButton(
                         onClick = onPlayPauseClick,
                         shape = CircleShape,
                         containerColor = Emerald500,
                         contentColor = Color.Black,
-                        modifier = Modifier.size(60.dp)
+                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
+                        modifier = Modifier
+                            .size(62.dp)
+                            .shadow(16.dp, CircleShape, spotColor = Emerald500.copy(alpha = 0.6f))
                     ) {
                         Icon(
                             imageVector = if (isThisPlaylistPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (isThisPlaylistPlaying) "Pause playlist" else "Play playlist",
-                            modifier = Modifier.size(32.dp)
+                            contentDescription = if (isThisPlaylistPlaying) "Pause" else "Play",
+                            modifier = Modifier.size(34.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }
+
+@Composable
+internal fun PlaylistEmptyPlaceholder(
+    searchQuery: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 56.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = if (searchQuery.isNotBlank()) Icons.Outlined.SearchOff else Icons.Outlined.MusicNote,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = if (searchQuery.isNotBlank()) "No songs matching \"$searchQuery\"" else "This playlist is empty",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (searchQuery.isBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Search for songs and tap 'Add to Playlist' to build your collection.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+

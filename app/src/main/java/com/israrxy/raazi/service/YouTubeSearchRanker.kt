@@ -27,8 +27,17 @@ private val SPECIAL_INTENT_KEYWORDS = listOf(
 )
 
 private val VIDEO_INTENT_KEYWORDS = listOf(
-    "video", "mv", "cover", "live", "lyrics", "lyric", "karaoke"
+    "video", "mv", "cover", "live", "lyrics", "lyric", "karaoke", "visualizer"
 )
+
+private val PLAYLIST_INTENT_KEYWORDS = listOf(
+    "playlist", "playlists", "mix", "collection", "soundtrack", "ost",
+    "compilation", "greatest hits", "best of", "top hits", "radio", "anthology"
+)
+
+private val ALBUM_INTENT_KEYWORDS = listOf("album", "ep", "lp", "discography")
+
+private val ARTIST_INTENT_KEYWORDS = listOf("artist", "singer", "band", "musician")
 
 internal fun parseViewsOrPlaysCount(viewsText: String?): Long {
     if (viewsText.isNullOrBlank()) return 0L
@@ -69,21 +78,26 @@ internal fun scoreSearchCandidate(
     }
 
     if (titleLower == qNorm) {
-        score += 95.0
+        score += 110.0
     } else if (titleLower.startsWith(qNorm) && qNorm.length >= 3) {
-        score += 55.0
+        score += 65.0
     }
 
-    val wantsVideoOrSpecial = VIDEO_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    // Dynamic Intent Detection
+    val wantsPlaylist = PLAYLIST_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    val wantsAlbum = ALBUM_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    val wantsArtist = ARTIST_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    val wantsVideo = VIDEO_INTENT_KEYWORDS.any { qNorm.contains(it) }
+
     for (word in SPECIAL_INTENT_KEYWORDS) {
         if (qNorm.contains(word)) {
             if (combined.contains(word)) {
                 score += 120.0
             } else {
-                score -= 90.0
+                score -= 80.0
             }
         } else if (word != "video" && titleLower.contains(word)) {
-            score -= 45.0
+            score -= 40.0
         }
     }
 
@@ -92,21 +106,50 @@ internal fun scoreSearchCandidate(
         score += min(90.0, log10(count.toDouble() + 1.0) * 10.0)
     }
 
-    when (item.contentType) {
-        MusicContentType.SONG -> {
-            if (!wantsVideoOrSpecial && matchRatio >= 0.5) {
-                score += 65.0
+    // Dynamic Type-Specific Weighting based on User Intent
+    when {
+        item.contentType == MusicContentType.PLAYLIST || item.isPlaylist -> {
+            if (wantsPlaylist) {
+                score += 180.0
+                if (titleLower.contains("playlist") || titleLower.contains("mix")) {
+                    score += 40.0
+                }
+            } else if (matchRatio >= 0.75) {
+                score += 60.0
             }
         }
-        MusicContentType.VIDEO -> {
-            if (wantsVideoOrSpecial && matchRatio >= 0.5) {
+        item.contentType == MusicContentType.ALBUM -> {
+            if (wantsAlbum) {
+                score += 180.0
+            } else if (matchRatio >= 0.75) {
+                score += 50.0
+            }
+        }
+        item.contentType == MusicContentType.ARTIST -> {
+            if (wantsArtist) {
+                score += 180.0
+            } else if (matchRatio >= 0.85) {
                 score += 55.0
+            }
+        }
+        item.contentType == MusicContentType.VIDEO -> {
+            if (wantsVideo) {
+                score += 70.0
+            } else if (wantsPlaylist || wantsAlbum) {
+                score -= 80.0
+            }
+        }
+        item.contentType == MusicContentType.SONG -> {
+            if (wantsPlaylist || wantsAlbum) {
+                score -= 80.0
+            } else if (!wantsVideo && matchRatio >= 0.5) {
+                score += 65.0
             }
         }
         else -> Unit
     }
 
-    if (isCardMain && matchRatio >= 0.5) {
+    if (isCardMain && matchRatio >= 0.45) {
         score += 35.0
     }
 
@@ -114,27 +157,54 @@ internal fun scoreSearchCandidate(
     return score
 }
 
+/**
+ * Dynamically selects the best top result across all content types (Playlists, Albums, Artists, Songs, Videos)
+ * without hardcoding, accurately respecting query intent and token match.
+ */
 internal fun selectDynamicTopResult(
     query: String,
     cardMainItem: MusicItem?,
-    unfilteredTracks: List<MusicItem>,
-    moreFromYouTube: List<MusicItem>,
-    typedSongs: List<MusicItem>
+    unfilteredTracks: List<MusicItem> = emptyList(),
+    moreFromYouTube: List<MusicItem> = emptyList(),
+    typedSongs: List<MusicItem> = emptyList(),
+    typedPlaylists: List<MusicItem> = emptyList(),
+    typedAlbums: List<MusicItem> = emptyList(),
+    typedArtists: List<MusicItem> = emptyList(),
+    summaryAllItems: List<MusicItem> = emptyList()
 ): MusicItem? {
-    if (cardMainItem != null &&
-        (cardMainItem.contentType == MusicContentType.ARTIST ||
-            cardMainItem.contentType == MusicContentType.ALBUM ||
-            cardMainItem.contentType == MusicContentType.PLAYLIST)
-    ) {
-        return cardMainItem
+    val qNorm = query.trim().lowercase()
+    val wantsPlaylist = PLAYLIST_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    val wantsAlbum = ALBUM_INTENT_KEYWORDS.any { qNorm.contains(it) }
+    val wantsArtist = ARTIST_INTENT_KEYWORDS.any { qNorm.contains(it) }
+
+    // If cardMainItem matches explicit high-level intent with high confidence, prefer it
+    if (cardMainItem != null) {
+        val matchesExplicitIntent = (wantsPlaylist && (cardMainItem.contentType == MusicContentType.PLAYLIST || cardMainItem.isPlaylist)) ||
+            (wantsAlbum && cardMainItem.contentType == MusicContentType.ALBUM) ||
+            (wantsArtist && cardMainItem.contentType == MusicContentType.ARTIST)
+
+        if (matchesExplicitIntent) {
+            return cardMainItem
+        }
     }
+
+    // Pool candidates across all available sources and types
+    val summaryPlaylists = summaryAllItems.filter { it.contentType == MusicContentType.PLAYLIST || it.isPlaylist }
+    val summaryAlbums = summaryAllItems.filter { it.contentType == MusicContentType.ALBUM }
+    val summaryArtists = summaryAllItems.filter { it.contentType == MusicContentType.ARTIST }
 
     val candidates = (
         listOfNotNull(cardMainItem) +
-            unfilteredTracks.take(10) +
-            moreFromYouTube.take(3) +
-            typedSongs.take(3)
-        ).distinctBy { it.id }
+            typedPlaylists.take(6) +
+            summaryPlaylists.take(6) +
+            typedAlbums.take(4) +
+            summaryAlbums.take(4) +
+            typedArtists.take(4) +
+            summaryArtists.take(4) +
+            unfilteredTracks.take(8) +
+            moreFromYouTube.take(4) +
+            typedSongs.take(4)
+        ).distinctBy { "${it.contentType}:${it.id}" }
 
     if (candidates.isEmpty()) return cardMainItem
 
@@ -150,9 +220,8 @@ internal fun selectDynamicTopResult(
 
 /**
  * Builds YouTube Music-accurate entity suggestions for the search dropdown.
- * Prioritizes YT Music's native `recommendedItems` from `music/get_search_suggestions`
- * while promoting official audio `SONG` over `VIDEO` when the user didn't request a video,
- * and supplements with top matches from `searchSummary` scored against YT Music's top predicted query.
+ * Prioritizes direct entity recommendations while promoting correct types (such as Playlists
+ * when searching for playlists) dynamically without hardcoding.
  */
 internal fun buildDynamicSuggestionItems(
     query: String,
@@ -172,9 +241,9 @@ internal fun buildDynamicSuggestionItems(
         .filter { it.mainItem == null }
         .flatMap { section -> section.items.mapNotNull { convertYTItemToMusicItem(it) } }
 
-    // If YT Music's native autocomplete returned direct entity items, preserve their priority
-    // while ensuring that if the #1 item is a Video and an official Song version of the same track
-    // exists in summaryItems/directSuggestItems, we surface the Song first (just like YT Music).
+    val summaryPlaylists = summaryItems.filter { it.contentType == MusicContentType.PLAYLIST || it.isPlaylist }
+    val summarySongs = summaryItems.filter { it.contentType == MusicContentType.SONG }
+
     val prioritizedDirect = if (directSuggestItems.isNotEmpty()) {
         val firstDirect = directSuggestItems.first()
         if (!wantsVideo && firstDirect.contentType == MusicContentType.VIDEO) {
@@ -203,7 +272,9 @@ internal fun buildDynamicSuggestionItems(
             cardMainItem = cardMain,
             unfilteredTracks = summaryItems,
             moreFromYouTube = moreItems,
-            typedSongs = summaryItems.filter { it.contentType == MusicContentType.SONG }
+            typedSongs = summarySongs,
+            typedPlaylists = summaryPlaylists,
+            summaryAllItems = summaryItems
         )
     }
 

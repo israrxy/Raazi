@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
@@ -46,12 +47,15 @@ fun PlaylistDetailScreen(
     val downloadedTracks by viewModel.downloadedTracks.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val listState = rememberLazyListState()
 
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedTracks = remember { mutableStateListOf<MusicItem>() }
     var isReorderMode by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var currentSortOrder by remember { mutableStateOf(PlaylistSortOrder.DEFAULT) }
+    var showSortSheet by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
@@ -65,18 +69,26 @@ fun PlaylistDetailScreen(
         isReorderMode = false
         showSearchBar = false
         searchQuery = ""
+        currentSortOrder = PlaylistSortOrder.DEFAULT
     }
 
     val playlist = currentPlaylist
     val items = playlist?.items ?: emptyList()
-    val filteredItems = remember(items, searchQuery) {
-        if (searchQuery.isBlank()) {
+
+    val filteredItems = remember(items, searchQuery, currentSortOrder) {
+        val queried = if (searchQuery.isBlank()) {
             items
         } else {
             val query = searchQuery.trim().lowercase()
             items.filter {
                 it.title.lowercase().contains(query) || it.artist.lowercase().contains(query)
             }
+        }
+        when (currentSortOrder) {
+            PlaylistSortOrder.DEFAULT -> queried
+            PlaylistSortOrder.TITLE_ASC -> queried.sortedBy { it.title.lowercase() }
+            PlaylistSortOrder.ARTIST_ASC -> queried.sortedBy { it.artist.lowercase() }
+            PlaylistSortOrder.DURATION_DESC -> queried.sortedByDescending { it.duration }
         }
     }
 
@@ -110,12 +122,10 @@ fun PlaylistDetailScreen(
         ThumbnailUtils.getHighQualityThumbnail(candidate)
     }
 
-    val totalDurationMs = remember(items) {
-        items.sumOf { it.duration.coerceAtLeast(0L) }
-    }
-    val durationSummary = remember(totalDurationMs) {
-        formatPlaylistTotalDuration(totalDurationMs)
-    }
+    val dominantColor = rememberPlaylistDominantColor(coverUrl = coverUrl)
+
+    val totalDurationMs = remember(items) { items.sumOf { it.duration.coerceAtLeast(0L) } }
+    val durationSummary = remember(totalDurationMs) { formatPlaylistTotalDuration(totalDurationMs) }
 
     val downloadCount = remember(items, activeDownloads) {
         val itemIds = items.map { it.id }.toSet()
@@ -125,6 +135,27 @@ fun PlaylistDetailScreen(
     val displayDescription = remember(playlist?.description) {
         val raw = playlist?.description.orEmpty()
         if (parseYouTubePlaylistMetadata(raw) != null) "" else raw
+    }
+
+    // Scroll metrics for Spotify-style fade-out cover and sticky top bar
+    val scrollOffset by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex == 0) {
+                listState.firstVisibleItemScrollOffset.toFloat()
+            } else {
+                1000f
+            }
+        }
+    }
+    val isScrolledPastHero by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 380
+        }
+    }
+    val scrollProgress by remember {
+        derivedStateOf {
+            (scrollOffset / 380f).coerceIn(0f, 1f)
+        }
     }
 
     Scaffold(
@@ -175,35 +206,20 @@ fun PlaylistDetailScreen(
                     isEditablePlaylist = isEditablePlaylist && playlist != null,
                     onDownloadSelected = {
                         viewModel.downloadPlaylist(selectedTracks.toList())
-                        Toast.makeText(
-                            context,
-                            "Downloading ${selectedTracks.size} tracks",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        Toast.makeText(context, "Downloading ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
                         isSelectionMode = false
                         selectedTracks.clear()
                     },
                     onQueueSelected = {
                         viewModel.addToQueue(selectedTracks.toList())
-                        Toast.makeText(
-                            context,
-                            "Added ${selectedTracks.size} tracks to queue",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        Toast.makeText(context, "Added ${selectedTracks.size} tracks to queue", Toast.LENGTH_SHORT).show()
                         isSelectionMode = false
                         selectedTracks.clear()
                     },
                     onRemoveSelected = {
                         if (playlist != null) {
-                            viewModel.removeTracksFromPlaylist(
-                                playlist.id,
-                                selectedTracks.toList()
-                            )
-                            Toast.makeText(
-                                context,
-                                "Removed ${selectedTracks.size} tracks",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            viewModel.removeTracksFromPlaylist(playlist.id, selectedTracks.toList())
+                            Toast.makeText(context, "Removed ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
                             isSelectionMode = false
                             selectedTracks.clear()
                         }
@@ -222,42 +238,21 @@ fun PlaylistDetailScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else if (playlist == null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Playlist not found",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    FilledTonalButton(onClick = onNavigateBack) {
-                        Text("Go Back")
-                    }
-                }
+                PlaylistNotFoundView(onNavigateBack = onNavigateBack)
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 128.dp)
+                    contentPadding = PaddingValues(bottom = 140.dp)
                 ) {
-                    // Spotify / YouTube Music style Hero Header
+                    // Spotify-style Hero Header with cover fade-out
                     item {
                         PlaylistHeroHeader(
                             playlist = playlist,
                             displayDescription = displayDescription,
                             coverUrl = coverUrl,
+                            dominantColor = dominantColor,
+                            scrollOffset = scrollOffset,
                             trackCount = items.size,
                             durationSummary = durationSummary,
                             isLocalPlaylist = isLocalPlaylist,
@@ -270,15 +265,11 @@ fun PlaylistDetailScreen(
                             isReorderMode = isReorderMode,
                             showSearchBar = showSearchBar,
                             searchQuery = searchQuery,
+                            currentSortOrder = currentSortOrder,
                             downloadCount = downloadCount,
-                            showHeaderMenu = showHeaderMenu,
-                            onShowHeaderMenuChange = { showHeaderMenu = it },
-                            onNavigateBack = onNavigateBack,
                             onSearchToggle = {
                                 showSearchBar = !showSearchBar
-                                if (!showSearchBar) {
-                                    searchQuery = ""
-                                }
+                                if (!showSearchBar) searchQuery = ""
                             },
                             onSearchQueryChange = { searchQuery = it },
                             onClearSearch = {
@@ -300,19 +291,14 @@ fun PlaylistDetailScreen(
                                     if (!playbackState.isShuffleEnabled) {
                                         viewModel.toggleShuffle()
                                     }
-                                    val shuffled = items.shuffled()
-                                    viewModel.playPlaylist(shuffled, 0)
+                                    viewModel.playPlaylist(items.shuffled(), 0)
                                     onNavigateToPlayer()
                                 }
                             },
                             onDownloadAllClick = {
                                 if (items.isNotEmpty()) {
                                     viewModel.downloadPlaylist(items)
-                                    Toast.makeText(
-                                        context,
-                                        "Downloading ${items.size} tracks...",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    Toast.makeText(context, "Downloading ${items.size} tracks...", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onToggleSaveClick = {
@@ -325,29 +311,11 @@ fun PlaylistDetailScreen(
                             },
                             onSyncToYouTubeClick = {
                                 viewModel.syncLocalPlaylistToYouTube(playlist.id)
-                                Toast.makeText(
-                                    context,
-                                    "Syncing playlist with YouTube Music...",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "Syncing playlist with YouTube Music...", Toast.LENGTH_SHORT).show()
                             },
-                            onToggleReorderClick = {
-                                isReorderMode = !isReorderMode
-                            },
-                            onRenameClick = {
-                                showHeaderMenu = false
-                                showRenameDialog = true
-                            },
-                            onSelectTracksClick = {
-                                showHeaderMenu = false
-                                isSelectionMode = true
-                            },
-                            onDeletePlaylistClick = {
-                                showHeaderMenu = false
-                                showDeleteConfirmDialog = true
-                            },
+                            onToggleReorderClick = { isReorderMode = !isReorderMode },
+                            onOpenSortSheet = { showSortSheet = true },
                             onSharePlaylistClick = {
-                                showHeaderMenu = false
                                 val shareUrl = if (!isLocalPlaylist || isSyncedWithYouTube) {
                                     "https://raazi.pages.dev/playlist?list=${playlist.id.removePrefix("VL")}"
                                 } else {
@@ -364,39 +332,7 @@ fun PlaylistDetailScreen(
 
                     if (filteredItems.isEmpty()) {
                         item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 56.dp, horizontal = 24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = if (searchQuery.isNotBlank()) Icons.Outlined.SearchOff else Icons.Outlined.MusicNote,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = if (searchQuery.isNotBlank()) {
-                                        "No songs matching \"$searchQuery\""
-                                    } else {
-                                        "This playlist is empty"
-                                    },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (searchQuery.isBlank()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Search for songs and tap 'Add to Playlist' to build your collection.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
+                            PlaylistEmptyPlaceholder(searchQuery = searchQuery)
                         }
                     } else {
                         itemsIndexed(
@@ -406,19 +342,17 @@ fun PlaylistDetailScreen(
                             val actualIndex = items.indexOfFirst { it.id == item.id }.takeIf { it >= 0 } ?: index
                             val isSelected = selectedTracks.contains(item)
                             val isPlayingTrack = playbackState.currentTrack?.id == item.id
-                            val isDownloaded = downloadedTracks.any {
-                                it.id == item.id && !it.localPath.isNullOrBlank()
-                            }
+                            val isDownloaded = downloadedTracks.any { it.id == item.id && !it.localPath.isNullOrBlank() }
                             val isDownloading = activeDownloads.any { it.trackId == item.id }
 
                             SpotifyStylePlaylistTrackRow(
-                                index = actualIndex + 1,
+                                index = index + 1,
                                 item = item,
                                 isPlayingTrack = isPlayingTrack,
                                 isActivelyPlaying = isPlayingTrack && playbackState.isPlaying,
                                 isSelectionMode = isSelectionMode,
                                 isSelected = isSelected,
-                                isReorderMode = isReorderMode && searchQuery.isBlank(),
+                                isReorderMode = isReorderMode && searchQuery.isBlank() && currentSortOrder == PlaylistSortOrder.DEFAULT,
                                 canMoveUp = actualIndex > 0,
                                 canMoveDown = actualIndex < items.lastIndex,
                                 isDownloaded = isDownloaded,
@@ -428,11 +362,16 @@ fun PlaylistDetailScreen(
                                     if (isSelectionMode) {
                                         if (isSelected) selectedTracks.remove(item) else selectedTracks.add(item)
                                     } else {
-                                        viewModel.playPlaylist(items, actualIndex)
+                                        viewModel.playPlaylist(filteredItems, index)
                                         onNavigateToPlayer()
                                     }
                                 },
-                                onLongClick = { if (!isSelectionMode) { isSelectionMode = true; selectedTracks.add(item) } },
+                                onLongClick = {
+                                    if (!isSelectionMode) {
+                                        isSelectionMode = true
+                                        selectedTracks.add(item)
+                                    }
+                                },
                                 onMoveUp = {
                                     if (actualIndex > 0) {
                                         val mutableIds = items.map { it.id }.toMutableList()
@@ -464,21 +403,80 @@ fun PlaylistDetailScreen(
                         }
                     }
                 }
+
+                // Sticky Spotify-style Top Bar overlay (persists on top of scroll)
+                if (!isSelectionMode) {
+                    PlaylistStickyTopBar(
+                        playlistTitle = playlist.title,
+                        dominantColor = dominantColor,
+                        scrollProgress = scrollProgress,
+                        isScrolledPastHero = isScrolledPastHero,
+                        isThisPlaylistPlaying = isThisPlaylistPlaying,
+                        showSearchBar = showSearchBar,
+                        showHeaderMenu = showHeaderMenu,
+                        isEditablePlaylist = isEditablePlaylist,
+                        isLocalPlaylist = isLocalPlaylist,
+                        onNavigateBack = onNavigateBack,
+                        onPlayPauseClick = {
+                            if (items.isNotEmpty()) {
+                                if (isThisPlaylistPlaying) viewModel.playPause()
+                                else { viewModel.playPlaylist(items, 0); onNavigateToPlayer() }
+                            }
+                        },
+                        onSearchToggle = {
+                            showSearchBar = !showSearchBar
+                            if (!showSearchBar) searchQuery = ""
+                        },
+                        onShowHeaderMenuChange = { showHeaderMenu = it },
+                        onSelectTracksClick = { showHeaderMenu = false; isSelectionMode = true },
+                        onSharePlaylistClick = {
+                            showHeaderMenu = false
+                            val shareUrl = if (!isLocalPlaylist || isSyncedWithYouTube) {
+                                "https://raazi.pages.dev/playlist?list=${playlist.id.removePrefix("VL")}"
+                            } else {
+                                "${playlist.title} (${items.size} tracks)"
+                            }
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "Check out ${playlist.title} on Raazi: $shareUrl")
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Playlist"))
+                        },
+                        onRenameClick = { showHeaderMenu = false; showRenameDialog = true },
+                        onDeletePlaylistClick = { showHeaderMenu = false; showDeleteConfirmDialog = true },
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                }
             }
         }
     }
 
+    if (showSortSheet) {
+        PlaylistSortModalSheet(
+            currentSortOrder = currentSortOrder,
+            onSortSelected = { currentSortOrder = it },
+            onDismiss = { showSortSheet = false }
+        )
+    }
     if (showRenameDialog && playlist != null) {
-        PlaylistRenameDialog(playlist.title, { showRenameDialog = false }) { trimmed -> viewModel.renamePlaylist(playlist.id, trimmed); showRenameDialog = false }
+        PlaylistRenameDialog(playlist.title, { showRenameDialog = false }) { trimmed ->
+            viewModel.renamePlaylist(playlist.id, trimmed)
+            showRenameDialog = false
+        }
     }
     if (showDeleteConfirmDialog && playlist != null) {
-        PlaylistDeleteConfirmDialog(playlist.title, { showDeleteConfirmDialog = false }) { viewModel.deletePlaylist(playlist.id); showDeleteConfirmDialog = false; onNavigateBack() }
+        PlaylistDeleteConfirmDialog(playlist.title, { showDeleteConfirmDialog = false }) {
+            viewModel.deletePlaylist(playlist.id)
+            showDeleteConfirmDialog = false
+            onNavigateBack()
+        }
     }
     if (showAddToPlaylistDialog && selectedTrackForAdd != null) {
         AddToPlaylistDialog(viewModel, { showAddToPlaylistDialog = false; selectedTrackForAdd = null }) { targetPlaylist ->
             viewModel.addToPlaylist(selectedTrackForAdd!!, targetPlaylist)
             Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
-            showAddToPlaylistDialog = false; selectedTrackForAdd = null
+            showAddToPlaylistDialog = false
+            selectedTrackForAdd = null
         }
     }
 }

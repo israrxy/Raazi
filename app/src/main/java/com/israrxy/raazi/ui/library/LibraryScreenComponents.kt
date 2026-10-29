@@ -30,26 +30,7 @@ import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.SavedCollectionItem
 
-@Composable
-internal fun Header(onSettings: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "Library",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = onSettings) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings")
-        }
-    }
-}
+
 
 @Composable
 internal fun Section(title: String) {
