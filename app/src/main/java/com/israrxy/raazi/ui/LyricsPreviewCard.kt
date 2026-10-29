@@ -12,7 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,19 +24,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.israrxy.raazi.ui.theme.Emerald400
-import com.israrxy.raazi.ui.theme.Emerald500
 
-/**
- * Spotify-style Inline Lyrics Preview Card shown below the main player controls
- * on PlayerScreen. Shows live synced lines in real-time and expands into full Lyrics mode.
- */
 @Composable
 fun SpotifyLyricsPreviewCard(
     syncedLines: List<Pair<Long, String>>,
@@ -57,24 +50,17 @@ fun SpotifyLyricsPreviewCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onExpandLyrics() },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF141C24).copy(alpha = 0.92f)
+            containerColor = Color(0xFF141417)
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Emerald500.copy(alpha = 0.14f),
-                            Color.Transparent
-                        )
-                    )
-                )
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -86,65 +72,64 @@ fun SpotifyLyricsPreviewCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "LYRICS",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White.copy(alpha = 0.85f),
-                        letterSpacing = 1.2.sp
+                        text = "Lyrics",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
                     if (syncedLines.isNotEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Emerald500.copy(alpha = 0.2f)
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.White.copy(alpha = 0.08f)
                         ) {
                             Text(
-                                text = "SYNCED",
+                                text = "Synced",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Emerald400,
-                                fontSize = 9.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.72f),
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(alpha = 0.10f),
-                        modifier = Modifier.clickable { onSearchLyrics() }
+                        onClick = onSearchLyrics,
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.07f)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Match lyrics",
-                                tint = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(14.dp)
+                                contentDescription = "Switch lyrics source",
+                                tint = Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier.size(13.dp)
                             )
                             Text(
-                                text = "Match",
+                                text = "Source",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.85f)
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.82f)
                             )
                         }
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(alpha = 0.14f),
-                        modifier = Modifier.clickable { onExpandLyrics() }
+                        onClick = onExpandLyrics,
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.11f)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -152,12 +137,12 @@ fun SpotifyLyricsPreviewCard(
                                 imageVector = Icons.Default.OpenInFull,
                                 contentDescription = "Expand lyrics",
                                 tint = Color.White,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = "Full Lyrics",
+                                text = "Expand",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
                         }
@@ -170,19 +155,19 @@ fun SpotifyLyricsPreviewCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp,
-                            color = Emerald400
+                            color = Color.White.copy(alpha = 0.78f)
                         )
                         Text(
-                            text = "Fetching synced lyrics...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.65f)
+                            text = "Loading lyrics...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.56f)
                         )
                     }
                 }
@@ -195,14 +180,14 @@ fun SpotifyLyricsPreviewCard(
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         if (prevLine != null) {
                             Text(
                                 text = prevLine.second,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.32f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.30f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -212,18 +197,18 @@ fun SpotifyLyricsPreviewCard(
                             AnimatedContent(
                                 targetState = currLine,
                                 transitionSpec = {
-                                    (fadeIn(tween(240)) + slideInVertically { it / 3 }) togetherWith
-                                        (fadeOut(tween(180)) + slideOutVertically { -it / 3 })
+                                    (fadeIn(tween(220)) + slideInVertically { it / 3 }) togetherWith
+                                        (fadeOut(tween(160)) + slideOutVertically { -it / 3 })
                                 },
                                 label = "preview_active_lyric"
                             ) { activePair ->
                                 Text(
                                     text = activePair.second,
-                                    style = MaterialTheme.typography.headlineSmall.copy(
-                                        fontSize = 22.sp,
-                                        lineHeight = 28.sp
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 20.sp,
+                                        lineHeight = 26.sp
                                     ),
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = Color.White,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
@@ -235,9 +220,9 @@ fun SpotifyLyricsPreviewCard(
                         if (nextLine1 != null) {
                             Text(
                                 text = nextLine1.second,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.58f),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.52f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -246,9 +231,9 @@ fun SpotifyLyricsPreviewCard(
                         if (nextLine2 != null) {
                             Text(
                                 text = nextLine2.second,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.35f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Normal,
+                                color = Color.White.copy(alpha = 0.30f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -264,9 +249,9 @@ fun SpotifyLyricsPreviewCard(
                         previewLines.forEachIndexed { idx, line ->
                             Text(
                                 text = line,
-                                style = if (idx == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (idx == 0) FontWeight.Bold else FontWeight.Medium,
-                                color = Color.White.copy(alpha = if (idx == 0) 0.9f else 0.55f),
+                                style = if (idx == 0) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (idx == 0) FontWeight.SemiBold else FontWeight.Normal,
+                                color = Color.White.copy(alpha = if (idx == 0) 0.88f else 0.48f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -278,20 +263,20 @@ fun SpotifyLyricsPreviewCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "No synced lyrics loaded yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.55f)
+                            text = "No lyrics loaded",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.50f)
                         )
                         TextButton(onClick = onSearchLyrics) {
                             Text(
-                                text = "Find Lyrics",
-                                color = Emerald400,
-                                fontWeight = FontWeight.Bold
+                                text = "Choose Source",
+                                color = Color.White.copy(alpha = 0.88f),
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

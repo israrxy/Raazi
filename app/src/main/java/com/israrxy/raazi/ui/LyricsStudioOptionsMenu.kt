@@ -8,17 +8,17 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,8 +35,6 @@ import androidx.compose.ui.zIndex
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
 import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.data.remote.Lyrics
-import com.israrxy.raazi.ui.theme.Emerald400
-import com.israrxy.raazi.ui.theme.Emerald500
 
 @Composable
 internal fun BoxScope.LyricsSettingsDropdownMenu(
@@ -59,68 +57,60 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
     onSelectScriptFilter: (LyricsScriptFilter) -> Unit
 ) {
     val cleanSource = remember(lyrics?.source) {
-        lyrics?.source?.removePrefix("Saved ")?.trim().orEmpty().ifBlank { "Auto Match" }
+        lyrics?.source?.removePrefix("Saved ")?.trim().orEmpty().ifBlank { "Auto" }
     }
     val isPinned = lyrics?.source?.startsWith("Saved") == true
-    val providerColor = remember(cleanSource) { providerAccentColor(cleanSource) }
     val syncLabel = when {
-        hasWordSync -> "WORD SYNC"
-        isSynced -> "SYNCED LRC"
-        lyrics != null -> "PLAIN TEXT"
-        else -> "NO LYRICS"
+        hasWordSync -> "Word Sync"
+        isSynced -> "Synced"
+        lyrics != null -> "Plain"
+        else -> "None"
     }
 
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically(initialOffsetY = { -it / 4 }) + fadeIn() + scaleIn(initialScale = 0.96f),
-        exit = slideOutVertically(targetOffsetY = { -it / 4 }) + fadeOut() + scaleOut(targetScale = 0.96f),
+        enter = slideInVertically(initialOffsetY = { -it / 5 }) + fadeIn() + scaleIn(initialScale = 0.97f),
+        exit = slideOutVertically(targetOffsetY = { -it / 5 }) + fadeOut() + scaleOut(targetScale = 0.97f),
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .padding(horizontal = 20.dp, vertical = 6.dp)
             .zIndex(10f)
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF0E131A).copy(alpha = 0.98f),
-            shadowElevation = 24.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFF141417),
+            shadowElevation = 20.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.09f))
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Text(
-                            text = "Lyrics Studio Options",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Multi-source engine • Karaoke & script controls",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.56f)
-                        )
-                    }
+                    Text(
+                        text = "Lyrics Options",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
 
                     Surface(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(alpha = 0.08f)
+                        color = Color.White.copy(alpha = 0.07f)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close options",
-                            tint = Color.White.copy(alpha = 0.8f),
+                            contentDescription = "Close",
+                            tint = Color.White.copy(alpha = 0.75f),
                             modifier = Modifier
-                                .padding(6.dp)
-                                .size(16.dp)
+                                .padding(5.dp)
+                                .size(15.dp)
                         )
                     }
                 }
@@ -130,116 +120,83 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                         onDismiss()
                         onOpenLyricsBrowser()
                     },
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF141C25),
-                    border = BorderStroke(1.dp, providerColor.copy(alpha = 0.35f))
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF1C1C20),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(providerColor.copy(alpha = 0.16f), RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    tint = providerColor,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = cleanSource,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = providerColor.copy(alpha = 0.18f)
-                                    ) {
-                                        Text(
-                                            text = syncLabel,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = providerColor,
-                                            fontSize = 9.sp,
-                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = if (isPinned) "Pinned manually • Tap to switch source" else "Auto-selected highest match • Tap to switch",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.58f),
-                                    fontSize = 11.sp
-                                )
-                            }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "$cleanSource • $syncLabel",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = if (isPinned) "Pinned manually" else "Automatic best match",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.48f),
+                                fontSize = 11.sp
+                            )
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Emerald400
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.SwapHoriz,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(15.dp)
+                            )
                             Text(
-                                text = "Switch",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.Black,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                text = "Change",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.88f)
                             )
                         }
                     }
                 }
 
                 if (availableVariants.size > 1 || hasTranslationSupport) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "DISPLAY & TRANSLATION",
+                            text = "Text Display",
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.52f),
-                            fontSize = 10.sp
+                            color = Color.White.copy(alpha = 0.45f),
+                            fontSize = 11.sp
                         )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             availableVariants.forEach { variant ->
                                 val selected = selectedVariant == variant
                                 Surface(
                                     onClick = { onSelectVariant(variant) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (selected) Color.White else Color.White.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) Color.White else Color(0xFF1C1C20),
                                     border = BorderStroke(
-                                        width = 1.dp,
-                                        color = if (selected) Color.White else Color.White.copy(alpha = 0.08f)
+                                        1.dp,
+                                        if (selected) Color.White else Color.White.copy(alpha = 0.07f)
                                     )
                                 ) {
                                     Text(
                                         text = variant.label,
                                         style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (selected) Color.Black else Color.White.copy(alpha = 0.85f),
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (selected) Color(0xFF09090B) else Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                                     )
                                 }
                             }
@@ -247,29 +204,29 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                             if (hasTranslationSupport) {
                                 Surface(
                                     onClick = onToggleTranslation,
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (showTranslation) Emerald500.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (showTranslation) Color.White else Color(0xFF1C1C20),
                                     border = BorderStroke(
-                                        width = 1.dp,
-                                        color = if (showTranslation) Emerald400.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.08f)
+                                        1.dp,
+                                        if (showTranslation) Color.White else Color.White.copy(alpha = 0.07f)
                                     )
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Translate,
                                             contentDescription = null,
-                                            tint = if (showTranslation) Emerald400 else Color.White.copy(alpha = 0.8f),
-                                            modifier = Modifier.size(14.dp)
+                                            tint = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.75f),
+                                            modifier = Modifier.size(13.dp)
                                         )
                                         Text(
-                                            text = if (showTranslation) "AI Translate (${translateLang.uppercase()})" else "AI Translate",
+                                            text = if (showTranslation) "Translated (${translateLang.uppercase()})" else "Translate",
                                             style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (showTranslation) Emerald400 else Color.White.copy(alpha = 0.85f)
+                                            fontWeight = if (showTranslation) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.8f)
                                         )
                                     }
                                 }
@@ -278,17 +235,16 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "PREFERRED SCRIPT",
+                        text = "Preferred Script",
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.52f),
-                        fontSize = 10.sp
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 11.sp
                     )
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         LyricsScriptFilter.visibleFilters.forEach { filter ->
                             val selected = lyricsScriptFilter == filter
@@ -297,28 +253,30 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                                     onSelectScriptFilter(filter)
                                     onDismiss()
                                 },
-                                shape = RoundedCornerShape(999.dp),
-                                color = if (selected) Emerald500.copy(alpha = 0.24f) else Color.White.copy(alpha = 0.06f),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) Color.White else Color(0xFF1C1C20),
                                 border = BorderStroke(
-                                    width = 1.dp,
-                                    color = if (selected) Emerald400.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f)
+                                    1.dp,
+                                    if (selected) Color.White else Color.White.copy(alpha = 0.07f)
                                 )
                             ) {
                                 Text(
                                     text = filter.label,
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (selected) Emerald400 else Color.White.copy(alpha = 0.82f),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (selected) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                                 )
                             }
                         }
                     }
                 }
 
+                HorizontalDivider(color = Color.White.copy(alpha = 0.07f))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Surface(
                         onClick = {
@@ -326,27 +284,27 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                             onRetryLyricsFetch()
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.White.copy(alpha = 0.06f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF1C1C20),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = null,
-                                tint = Emerald400,
-                                modifier = Modifier.size(16.dp)
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Re-Sync Auto",
+                                text = "Refresh Match",
                                 style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.88f)
                             )
                         }
                     }
@@ -358,27 +316,27 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                                 onClearSavedLyricsSelection()
                             },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White.copy(alpha = 0.06f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1C1C20),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.AutoFixHigh,
+                                    imageVector = Icons.Default.RestartAlt,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(16.dp)
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Unpin Saved",
+                                    text = "Reset Auto",
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White.copy(alpha = 0.88f)
                                 )
                             }
                         }

@@ -173,14 +173,14 @@ internal fun LyricsLoadingPlaceholder() {
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             CircularProgressIndicator(
-                color = Emerald400,
+                color = Color.White.copy(alpha = 0.78f),
                 strokeWidth = 2.dp,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(16.dp)
             )
             Text(
-                text = "Searching Musixmatch, LRCLIB, Genius, Lyrica & YT Music...",
-                style = MaterialTheme.typography.labelLarge,
-                color = Emerald400
+                text = "Loading lyrics...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.65f)
             )
         }
 

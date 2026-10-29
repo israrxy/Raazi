@@ -36,8 +36,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
-
-
     private val incomingDeepLinkUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
 
     // Permission launcher for Android 13+ notifications

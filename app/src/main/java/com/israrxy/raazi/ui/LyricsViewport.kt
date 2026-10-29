@@ -294,7 +294,7 @@ internal fun LyricsMainViewportContent(
                         Text(
                             text = translatedPlain,
                             style = MaterialTheme.typography.titleMedium.copy(lineHeight = 28.sp),
-                            color = Emerald400.copy(alpha = 0.9f),
+                            color = Color.White.copy(alpha = 0.72f),
                             textAlign = TextAlign.Start,
                             modifier = Modifier.fillMaxWidth()
                         )

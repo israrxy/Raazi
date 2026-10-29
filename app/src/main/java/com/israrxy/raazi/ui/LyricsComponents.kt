@@ -1,6 +1,5 @@
 package com.israrxy.raazi.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -10,11 +9,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,17 +26,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.israrxy.raazi.data.lyrics.LyricsTextVariants
 import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.RepeatMode as PlaybackRepeatMode
-import com.israrxy.raazi.ui.theme.Emerald400
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -63,44 +56,39 @@ internal fun SpotifyYoutubeLyricItem(
 ) {
     val targetAlpha = when {
         isCurrent -> 1f
-        showTimestampBadge -> 0.78f
-        isPassed -> 0.28f
-        distance == 1 -> 0.64f
-        distance == 2 -> 0.46f
-        else -> 0.30f
+        showTimestampBadge -> 0.72f
+        isPassed -> 0.24f
+        distance == 1 -> 0.52f
+        distance == 2 -> 0.36f
+        else -> 0.24f
     }
 
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = tween(durationMillis = 280),
         label = "lyric_alpha"
     )
 
     val targetScale = when {
-        isCurrent -> 1.02f
-        distance == 1 -> 0.98f
-        else -> 0.95f
+        isCurrent -> 1.01f
+        distance == 1 -> 0.99f
+        else -> 0.97f
     }
 
     val animatedScale by animateFloatAsState(
         targetValue = targetScale,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
         ),
         label = "lyric_scale"
     )
 
     val containerAlpha by animateFloatAsState(
-        targetValue = if (isCurrent) 0.11f else 0f,
-        animationSpec = tween(260),
+        targetValue = if (isCurrent) 0.06f else 0f,
+        animationSpec = tween(240),
         label = "lyric_bg_alpha"
     )
-
-    val lineProgress = if (isCurrent) {
-        val totalSpan = (lineEndTimestampMs - timestampMs).coerceAtLeast(300L)
-        ((currentPositionMs - timestampMs).toFloat() / totalSpan.toFloat()).coerceIn(0f, 1f)
-    } else 0f
 
     Row(
         modifier = Modifier
@@ -110,42 +98,27 @@ internal fun SpotifyYoutubeLyricItem(
                 scaleY = animatedScale
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = containerAlpha))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onShareLine
             )
             .padding(
-                horizontal = if (isCurrent) 14.dp else 8.dp,
-                vertical = if (isCurrent) 12.dp else 8.dp
+                horizontal = 12.dp,
+                vertical = if (isCurrent) 10.dp else 7.dp
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AnimatedVisibility(
-            visible = isCurrent,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(end = 12.dp)
-                    .width(4.dp)
-                    .height(30.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Emerald400)
-            )
-        }
-
         Column(modifier = Modifier.weight(1f)) {
             if (isCurrent && words.isNotEmpty()) {
                 val karaokeText = buildAnnotatedString {
                     words.forEachIndexed { idx, word ->
                         val transformedWord = LyricsTextVariants.transform(word.text, selectedVariant)
                         val wordColor = when {
-                            currentPositionMs >= word.endTimeMs -> Color.White
-                            currentPositionMs >= word.startTimeMs -> Emerald400
-                            else -> Color.White.copy(alpha = 0.42f)
+                            currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.94f)
+                            currentPositionMs >= word.startTimeMs -> Color.White
+                            else -> Color.White.copy(alpha = 0.35f)
                         }
                         withStyle(SpanStyle(color = wordColor)) {
                             append(transformedWord)
@@ -158,9 +131,9 @@ internal fun SpotifyYoutubeLyricItem(
                 Text(
                     text = karaokeText,
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        lineHeight = 34.sp,
+                        fontSize = 25.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 33.sp,
                         letterSpacing = (-0.3).sp
                     ),
                     textAlign = TextAlign.Start
@@ -169,9 +142,9 @@ internal fun SpotifyYoutubeLyricItem(
                 Text(
                     text = text.ifBlank { "♪" },
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = if (isCurrent) 26.sp else 22.sp,
-                        fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Bold,
-                        lineHeight = if (isCurrent) 34.sp else 30.sp,
+                        fontSize = if (isCurrent) 25.sp else 21.sp,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                        lineHeight = if (isCurrent) 33.sp else 29.sp,
                         letterSpacing = (-0.3).sp
                     ),
                     color = Color.White.copy(alpha = animatedAlpha),
@@ -179,35 +152,18 @@ internal fun SpotifyYoutubeLyricItem(
                 )
             }
 
-            if (isCurrent) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.5.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.14f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(lineProgress)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Emerald400)
-                    )
-                }
-            }
-
             if (!translation.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = translation,
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = if (isCurrent) 16.sp else 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        lineHeight = 22.sp
+                        fontSize = if (isCurrent) 15.sp else 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        lineHeight = 21.sp
                     ),
-                    color = if (isCurrent) Emerald400 else Color.White.copy(alpha = (animatedAlpha * 0.75f).coerceIn(0.15f, 0.85f)),
+                    color = Color.White.copy(
+                        alpha = if (isCurrent) 0.68f else (animatedAlpha * 0.65f).coerceIn(0.15f, 0.55f)
+                    ),
                     textAlign = TextAlign.Start
                 )
             }
@@ -216,24 +172,21 @@ internal fun SpotifyYoutubeLyricItem(
         if (showTimestampBadge) {
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = Color.White.copy(alpha = 0.14f)
+                shape = RoundedCornerShape(6.dp),
+                color = Color.White.copy(alpha = 0.10f)
             ) {
                 Text(
                     text = formatLyricsTimestamp(timestampMs),
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.82f),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                 )
             }
         }
     }
 }
 
-/**
- * Animated 3-dot musical interlude indicator ("• • •") like Spotify / Apple Music / YT Music.
- */
 @Composable
 internal fun MusicalInterludeDots(
     progress: Float,
@@ -241,8 +194,8 @@ internal fun MusicalInterludeDots(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "interlude_pulse")
     val pulse by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.18f,
+        initialValue = 0.88f,
+        targetValue = 1.12f,
         animationSpec = infiniteRepeatable(
             animation = tween(700, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -253,29 +206,29 @@ internal fun MusicalInterludeDots(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .background(Color.White.copy(alpha = 0.07f))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) { dotIndex ->
             val threshold = (dotIndex + 1) / 3f
             val isLit = progress >= (dotIndex / 3f)
             val dotAlpha = when {
-                progress >= threshold -> 1f
-                isLit -> 0.5f + ((progress - (dotIndex / 3f)) * 1.5f).coerceIn(0f, 0.5f)
-                else -> 0.28f
+                progress >= threshold -> 0.95f
+                isLit -> 0.45f + ((progress - (dotIndex / 3f)) * 1.5f).coerceIn(0f, 0.5f)
+                else -> 0.22f
             }
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(8.dp)
                     .graphicsLayer {
-                        val s = if (isLit) pulse else 0.9f
+                        val s = if (isLit) pulse else 0.92f
                         scaleX = s
                         scaleY = s
                     }
                     .clip(CircleShape)
-                    .background(if (isLit) Emerald400.copy(alpha = dotAlpha) else Color.White.copy(alpha = dotAlpha))
+                    .background(Color.White.copy(alpha = dotAlpha))
             )
         }
     }
@@ -327,7 +280,7 @@ internal fun LyricsBottomTransport(
             },
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
-                activeTrackColor = Emerald400,
+                activeTrackColor = Color.White,
                 inactiveTrackColor = Color.White.copy(alpha = 0.18f)
             ),
             modifier = Modifier
@@ -344,12 +297,12 @@ internal fun LyricsBottomTransport(
             Text(
                 text = formatLyricsTimestamp(displayedPosition),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (isDraggingSlider) Emerald400 else Color.White.copy(alpha = 0.55f)
+                color = if (isDraggingSlider) Color.White else Color.White.copy(alpha = 0.52f)
             )
             Text(
                 text = formatLyricsTimestamp(duration),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.55f)
+                color = Color.White.copy(alpha = 0.52f)
             )
         }
 
@@ -364,8 +317,8 @@ internal fun LyricsBottomTransport(
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (shuffleEnabled) Emerald400 else Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier.size(22.dp)
+                    tint = if (shuffleEnabled) Color.White else Color.White.copy(alpha = 0.45f),
+                    modifier = Modifier.size(21.dp)
                 )
             }
 
@@ -374,13 +327,13 @@ internal fun LyricsBottomTransport(
                     imageVector = Icons.Default.SkipPrevious,
                     contentDescription = "Previous",
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(54.dp)
                     .clip(CircleShape)
                     .background(Color.White)
                     .clickable(onClick = onPlayPause),
@@ -389,8 +342,8 @@ internal fun LyricsBottomTransport(
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = Color.Black,
-                    modifier = Modifier.size(28.dp)
+                    tint = Color(0xFF09090B),
+                    modifier = Modifier.size(26.dp)
                 )
             }
 
@@ -399,7 +352,7 @@ internal fun LyricsBottomTransport(
                     imageVector = Icons.Default.SkipNext,
                     contentDescription = "Next",
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
@@ -412,8 +365,8 @@ internal fun LyricsBottomTransport(
                 Icon(
                     imageVector = repeatIcon,
                     contentDescription = "Repeat",
-                    tint = if (isRepeatActive) Emerald400 else Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier.size(22.dp)
+                    tint = if (isRepeatActive) Color.White else Color.White.copy(alpha = 0.45f),
+                    modifier = Modifier.size(21.dp)
                 )
             }
         }

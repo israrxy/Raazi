@@ -9,31 +9,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.israrxy.raazi.data.lyrics.LyricsScriptDetector
@@ -41,9 +34,6 @@ import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
 import com.israrxy.raazi.data.remote.Lyrics
 import com.israrxy.raazi.data.remote.LyricsProviderFilter
 import com.israrxy.raazi.data.remote.LyricsSearchResult
-import com.israrxy.raazi.data.remote.MultiSourceLyricsAggregator
-import com.israrxy.raazi.ui.theme.Emerald400
-import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,18 +88,18 @@ internal fun LyricsBrowserBottomSheet(
             viewModel.clearLyricsSearchResults()
         },
         sheetState = sheetState,
-        containerColor = Color(0xFF0B0F15),
+        containerColor = Color(0xFF101012),
         contentColor = Color.White,
-        scrimColor = Color.Black.copy(alpha = 0.72f),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        scrimColor = Color.Black.copy(alpha = 0.68f),
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(top = 12.dp, bottom = 6.dp)
-                    .width(42.dp)
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .width(36.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .background(Color.White.copy(alpha = 0.18f))
             )
         }
     ) {
@@ -118,69 +108,40 @@ internal fun LyricsBrowserBottomSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            Emerald500.copy(alpha = 0.32f),
-                                            Emerald400.copy(alpha = 0.12f)
-                                        )
-                                    )
-                                )
-                                .border(1.dp, Emerald400.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lyrics,
-                                contentDescription = null,
-                                tint = Emerald400,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "Lyrics Studio & Providers",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Musixmatch • LRCLIB • Genius • Lyrica • YT Music",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.55f)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "Lyrics Source",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "${filteredResults.size} matches across 5 providers",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.48f),
+                        fontSize = 12.sp
+                    )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (lyrics?.source?.startsWith("Saved") == true) {
                         Surface(
                             onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                 viewModel.clearSavedLyricsSelection()
-                                Toast.makeText(context, "Restored automatic lyrics match", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Restored automatic match", Toast.LENGTH_SHORT).show()
                             },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFFF87171).copy(alpha = 0.15f),
-                            border = BorderStroke(1.dp, Color(0xFFF87171).copy(alpha = 0.35f))
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF1A1A1E),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -189,15 +150,15 @@ internal fun LyricsBrowserBottomSheet(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.RestartAlt,
-                                    contentDescription = "Unpin",
-                                    tint = Color(0xFFF87171),
+                                    contentDescription = "Reset to automatic",
+                                    tint = Color.White.copy(alpha = 0.78f),
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
-                                    text = "Unpin",
+                                    text = "Auto",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFF87171)
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White.copy(alpha = 0.78f)
                                 )
                             }
                         }
@@ -205,45 +166,44 @@ internal fun LyricsBrowserBottomSheet(
 
                     Surface(
                         onClick = { showCustomQueryInputs = !showCustomQueryInputs },
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (showCustomQueryInputs) Emerald500.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (showCustomQueryInputs) Color.White else Color(0xFF1A1A1E),
                         border = BorderStroke(
                             1.dp,
-                            if (showCustomQueryInputs) Emerald400.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.12f)
+                            if (showCustomQueryInputs) Color.White else Color.White.copy(alpha = 0.08f)
                         )
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.EditNote,
-                                contentDescription = "Edit search query",
-                                tint = if (showCustomQueryInputs) Emerald400 else Color.White.copy(alpha = 0.85f),
-                                modifier = Modifier.size(15.dp)
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Custom search",
+                                tint = if (showCustomQueryInputs) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
+                                modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "Custom Query",
+                                text = "Custom Search",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (showCustomQueryInputs) Emerald400 else Color.White.copy(alpha = 0.85f)
+                                fontWeight = FontWeight.Medium,
+                                color = if (showCustomQueryInputs) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f)
                             )
                         }
                     }
                 }
             }
 
-            // Collapsible Custom Search Capsule
             AnimatedVisibility(
                 visible = showCustomQueryInputs,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White.copy(alpha = 0.05f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF161619),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
                 ) {
                     Column(
                         modifier = Modifier
@@ -258,7 +218,7 @@ internal fun LyricsBrowserBottomSheet(
                             GlassSearchInputField(
                                 value = lyricsSearchTitle,
                                 onValueChange = onTitleChange,
-                                label = "Track Title",
+                                label = "Title",
                                 modifier = Modifier.weight(1f)
                             )
                             GlassSearchInputField(
@@ -277,21 +237,23 @@ internal fun LyricsBrowserBottomSheet(
                                 viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Emerald400,
-                                contentColor = Color.Black
-                            )
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF09090B)
+                            ),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isLyricsSearchLoading) "Searching All 5 Engines..." else "Search All Engines",
-                                fontWeight = FontWeight.Bold
+                                text = if (isLyricsSearchLoading) "Searching..." else "Search",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -312,34 +274,8 @@ internal fun LyricsBrowserBottomSheet(
                 onLanguageChange = onLanguageChange
             )
 
-            // Results Viewport
             when {
                 isLyricsSearchLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(260.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                color = Emerald400,
-                                strokeWidth = 2.5.dp,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Text(
-                                text = "Fetching from Musixmatch, LRCLIB, Genius, Lyrica & YT Music...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.65f)
-                            )
-                        }
-                    }
-                }
-
-                filteredResults.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -350,17 +286,42 @@ internal fun LyricsBrowserBottomSheet(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            CircularProgressIndicator(
+                                color = Color.White.copy(alpha = 0.85f),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Text(
+                                text = "Searching providers...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.52f)
+                            )
+                        }
+                    }
+                }
+
+                filteredResults.isEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.SearchOff,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.35f),
-                                modifier = Modifier.size(36.dp)
+                                tint = Color.White.copy(alpha = 0.32f),
+                                modifier = Modifier.size(30.dp)
                             )
                             Text(
-                                text = "No lyrics matched this filter",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.85f)
+                                text = "No matching lyrics found",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.78f)
                             )
                             TextButton(
                                 onClick = {
@@ -369,7 +330,11 @@ internal fun LyricsBrowserBottomSheet(
                                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
                                 }
                             ) {
-                                Text("Reset filters & search again", color = Emerald400)
+                                Text(
+                                    text = "Reset filters",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                         }
                     }
@@ -379,8 +344,8 @@ internal fun LyricsBrowserBottomSheet(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 430.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
                             items = filteredResults,
@@ -405,7 +370,7 @@ internal fun LyricsBrowserBottomSheet(
                                     onDismiss()
                                     Toast.makeText(
                                         context,
-                                        "Switched to ${result.lyrics.source} lyrics",
+                                        "Using ${result.lyrics.source}",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -417,4 +382,3 @@ internal fun LyricsBrowserBottomSheet(
         }
     }
 }
-
