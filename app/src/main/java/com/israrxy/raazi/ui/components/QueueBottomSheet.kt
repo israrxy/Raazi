@@ -102,49 +102,15 @@ fun QueueBottomSheet(
                 )
             }
 
-            // Shuffle Pill Toggle with distinct active color
+            // Shuffle toggle
             val shuffleActive = playbackState.isShuffleEnabled
-            Surface(
-                onClick = { viewModel.toggleShuffle() },
-                shape = CircleShape,
-                color = if (shuffleActive) {
-                    Emerald500.copy(alpha = 0.2f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-                modifier = Modifier
-                    .height(38.dp)
-                    .then(
-                        if (shuffleActive) {
-                            Modifier.border(1.dp, Emerald500.copy(alpha = 0.6f), CircleShape)
-                        } else {
-                            Modifier
-                        }
-                    )
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shuffle,
-                        contentDescription = "Shuffle",
-                        tint = if (shuffleActive) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    if (shuffleActive) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(Emerald500)
-                        )
-                    }
-                }
+            IconButton(onClick = { viewModel.toggleShuffle() }) {
+                Icon(
+                    imageVector = Icons.Default.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (shuffleActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-
-            Spacer(modifier = Modifier.width(6.dp))
 
             // Repeat toggle
             val repeatActive = playbackState.repeatMode != RepeatMode.OFF
@@ -155,7 +121,7 @@ fun QueueBottomSheet(
                         else -> Icons.Default.Repeat
                     },
                     contentDescription = "Repeat",
-                    tint = if (repeatActive) Emerald500 else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (repeatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

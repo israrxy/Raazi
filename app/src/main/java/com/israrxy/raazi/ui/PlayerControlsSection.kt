@@ -193,39 +193,18 @@ internal fun PlayerControlsAndActionsSection(
                 .height(72.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            IconButton(
+                onClick = { viewModel.toggleShuffle() },
+                modifier = Modifier.size(44.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (shuffleEnabled) Emerald500.copy(alpha = 0.22f) else Color.Transparent
-                        )
-                        .clickable { viewModel.toggleShuffle() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Shuffle,
-                        contentDescription = "Shuffle",
-                        tint = if (shuffleEnabled) Emerald500 else Color.White.copy(alpha = 0.78f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                if (shuffleEnabled) {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(Emerald500)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.78f),
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
-
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -304,7 +283,7 @@ internal fun PlayerControlsAndActionsSection(
                     },
                     contentDescription = "Repeat",
                     tint = when (playbackState.repeatMode) {
-                        RepeatMode.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        RepeatMode.OFF -> Color.White.copy(alpha = 0.78f)
                         else -> MaterialTheme.colorScheme.primary
                     },
                     modifier = Modifier.size(24.dp)
