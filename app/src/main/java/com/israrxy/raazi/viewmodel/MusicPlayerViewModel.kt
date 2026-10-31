@@ -205,6 +205,7 @@ class MusicPlayerViewModel(
         val currentLevels: List<Short> = emptyList(), val centerFreqs: List<Int> = emptyList(),
         val presets: List<String> = emptyList(), val currentPreset: String = "Custom",
         val bassBoostStrength: Short = 0, val virtualizerStrength: Short = 0, val reverbPreset: Int = 0,
+        val toneBassDb: Int = 0, val toneMidDb: Int = 0, val toneTrebleDb: Int = 0,
         val bassBoostSupported: Boolean = false, val virtualizerSupported: Boolean = false, val reverbSupported: Boolean = false
     )
     data class CustomPreset(val name: String, val levels: List<Short>, val bassBoost: Short = 0, val virtualizer: Short = 0, val reverb: Int = 0)
@@ -338,6 +339,7 @@ class MusicPlayerViewModel(
 
     fun loadEqualizerState() = loadEqualizerStateImpl()
     fun setBandLevel(band: Short, level: Short) = setBandLevelImpl(band, level)
+    fun setToneLevel(group: EqualizerToneGroup, gainDb: Int) = setToneLevelImpl(group, gainDb)
     fun usePreset(presetName: String) = usePresetImpl(presetName)
     fun saveEqualizerSettings() = saveEqualizerSettingsImpl()
     fun applyDeviceEqProfileIfAny() = applyDeviceEqProfileIfAnyImpl()

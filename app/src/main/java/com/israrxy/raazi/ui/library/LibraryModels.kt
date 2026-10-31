@@ -119,6 +119,10 @@ internal data class LibraryUiState(
     /** While browsing (no query, no filter) the song lists stay short and offer "See all". */
     private val isBrowsing: Boolean = query.isBlank() && filter == LibraryFilter.ALL
 
+    /** Data-driven mixes built from the user's own plays and likes. */
+    val smartMixes: List<LibrarySmartMix> =
+        if (isBrowsing) buildLibrarySmartMixes(likedSongs, history) else emptyList()
+
     val likedPreview: List<MusicItem> =
         if (isBrowsing) visibleLikedSongs.take(LIKED_PREVIEW_LIMIT) else visibleLikedSongs
 
@@ -165,6 +169,69 @@ internal data class LibraryUiState(
 // ---------------------------------------------------------------------------------------
 // Pure helpers - no Compose, no Android, safe to unit test.
 // ---------------------------------------------------------------------------------------
+
+enum class LibrarySmartMixKind { ON_REPEAT, REDISCOVER, DISCOVER }
+
+data class LibrarySmartMix(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val kind: LibrarySmartMixKind,
+    val tracks: List<MusicItem>
+)
+
+internal fun buildLibrarySmartMixes(
+    likedSongs: List<MusicItem>,
+    history: List<MusicItem>
+): List<LibrarySmartMix> {
+    val liked = likedSongs.distinctBy { it.id }
+    val recent = history.distinctBy { it.id }
+    val likedIds = liked.mapTo(HashSet()) { it.id }
+    val recentIds = recent.mapTo(HashSet()) { it.id }
+
+    val onRepeat = recent.filter { it.id in likedIds }.take(SMART_MIX_LIMIT)
+    val rediscover = liked.filterNot { it.id in recentIds }.take(SMART_MIX_LIMIT)
+    val discover = recent.filterNot { it.id in likedIds }.take(SMART_MIX_LIMIT)
+
+    return buildList {
+        if (onRepeat.size >= MIN_SMART_MIX_TRACKS) {
+            add(
+                LibrarySmartMix(
+                    key = "smart_on_repeat",
+                    title = "On repeat",
+                    subtitle = "Liked songs back in rotation",
+                    kind = LibrarySmartMixKind.ON_REPEAT,
+                    tracks = onRepeat
+                )
+            )
+        }
+        if (rediscover.size >= MIN_SMART_MIX_TRACKS) {
+            add(
+                LibrarySmartMix(
+                    key = "smart_rediscover",
+                    title = "Rediscover",
+                    subtitle = "From your likes, not played lately",
+                    kind = LibrarySmartMixKind.REDISCOVER,
+                    tracks = rediscover
+                )
+            )
+        }
+        if (discover.size >= MIN_SMART_MIX_TRACKS) {
+            add(
+                LibrarySmartMix(
+                    key = "smart_discover",
+                    title = "Fresh rotation",
+                    subtitle = "Recent plays outside your likes",
+                    kind = LibrarySmartMixKind.DISCOVER,
+                    tracks = discover
+                )
+            )
+        }
+    }
+}
+
+private const val MIN_SMART_MIX_TRACKS = 3
+private const val SMART_MIX_LIMIT = 8
 
 internal fun matchesQuery(query: String, vararg fields: String): Boolean {
     if (query.isEmpty()) return true

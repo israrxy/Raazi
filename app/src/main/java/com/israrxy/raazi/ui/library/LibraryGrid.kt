@@ -46,6 +46,15 @@ internal fun LazyGridScope.LibraryGridContent(
         return
     }
 
+    if (state.smartMixes.isNotEmpty()) {
+        fullSpan("smart_mixes") {
+            LibrarySmartMixesRow(
+                mixes = state.smartMixes,
+                onPlay = { mix -> actions.playTracks(mix.tracks, 0) }
+            )
+        }
+    }
+
     renderUserPlaylists(state, actions)
     renderSavedGroup(
         title = "Saved playlists",
