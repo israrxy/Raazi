@@ -15,6 +15,7 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -63,6 +64,7 @@ internal fun MusicPlaybackService.createNotificationChannel() {
 internal fun MusicPlaybackService.startForegroundService() {
     try {
         val notification = createNotification(getPlaybackState())
+        ContextCompat.startForegroundService(this, Intent(this, MusicPlaybackService::class.java))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 notificationId,
