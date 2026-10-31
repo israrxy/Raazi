@@ -45,7 +45,7 @@ class MultiSourceLyricsAggregator(
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
     ): Lyrics? = withContext(Dispatchers.IO) {
         val prepared = LyricsMetadataSanitizer.prepare(trackName, artistName)
-        val cacheKey = "${prepared.cacheKey}|${durationMs / 1000L}|v2"
+        val cacheKey = "${prepared.cacheKey}|${durationMs / 1000L}|v3"
 
         cache.get(cacheKey)?.let { cached ->
             if (LyricsScriptDetector.matches(preferredScript, cached)) {

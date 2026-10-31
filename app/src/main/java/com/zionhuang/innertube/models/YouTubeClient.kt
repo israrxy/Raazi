@@ -157,6 +157,18 @@ data class YouTubeClient(
             referer = null,
         )
 
+        val ANDROID_MUSIC = YouTubeClient(
+            clientName = "ANDROID_MUSIC",
+            clientVersion = "7.21.50",
+            clientId = "21",
+            userAgent = "com.google.android.apps.youtube.music/7.21.50 (Linux; U; Android 14) gzip",
+            osName = "Android",
+            osVersion = "14",
+            apiUrl = API_URL_YOUTUBE_MUSIC,
+            origin = ORIGIN_YOUTUBE_MUSIC,
+            referer = REFERER_YOUTUBE_MUSIC,
+        )
+
         val ANDROID_VR_NO_AUTH = YouTubeClient(
             clientName = "ANDROID_VR",
             clientVersion = "1.62.27",

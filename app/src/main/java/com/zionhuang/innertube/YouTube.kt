@@ -8,6 +8,7 @@ import com.zionhuang.innertube.models.SearchSuggestions
 import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.WatchEndpoint
 import com.zionhuang.innertube.models.YouTubeClient
+import com.zionhuang.innertube.models.YouTubeClient.Companion.ANDROID_MUSIC
 import com.zionhuang.innertube.models.YouTubeClient.Companion.WEB
 import com.zionhuang.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import com.zionhuang.innertube.models.YouTubeLocale
@@ -22,6 +23,8 @@ import com.zionhuang.innertube.models.response.GetTranscriptResponse
 import com.zionhuang.innertube.models.response.NextResponse
 import com.zionhuang.innertube.models.response.PlayerResponse
 import com.zionhuang.innertube.models.response.SearchResponse
+import com.zionhuang.innertube.models.response.TimedLyricsResponse
+import com.zionhuang.innertube.models.response.toLrc
 import com.zionhuang.innertube.pages.AlbumPage
 import com.zionhuang.innertube.pages.ArtistItemsContinuationPage
 import com.zionhuang.innertube.pages.ArtistItemsPage
@@ -392,6 +395,12 @@ object YouTube {
     suspend fun lyrics(endpoint: BrowseEndpoint): Result<String?> = runCatching {
         val response = innerTube.browse(WEB_REMIX, endpoint.browseId, endpoint.params, poToken = webPoToken).body<BrowseResponse>()
         response.contents?.sectionListRenderer?.contents?.firstOrNull()?.musicDescriptionShelfRenderer?.description?.runs?.firstOrNull()?.text
+    }
+
+    suspend fun timedLyrics(endpoint: BrowseEndpoint): Result<String?> = runCatching {
+        innerTube.browse(ANDROID_MUSIC, endpoint.browseId)
+            .body<TimedLyricsResponse>()
+            .toLrc()
     }
 
     suspend fun related(endpoint: BrowseEndpoint): Result<RelatedPage> = runCatching {
