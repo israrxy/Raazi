@@ -13,7 +13,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 
-internal enum class EqualizerToneGroup { BASS, MID, TREBLE }
+enum class EqualizerToneGroup { BASS, MID, TREBLE }
 
 private fun toneGroupForFrequency(freqHz: Int): EqualizerToneGroup = when {
     freqHz < 250 -> EqualizerToneGroup.BASS
