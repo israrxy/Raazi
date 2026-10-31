@@ -33,6 +33,7 @@ import coil.request.ImageRequest
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.lyrics.LyricsTextVariants
 import com.israrxy.raazi.data.lyrics.LyricsViewVariant
+import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.service.LyricsTranslator
 import com.israrxy.raazi.utils.BlurTransformation
 import com.israrxy.raazi.utils.ThumbnailUtils
@@ -216,7 +217,7 @@ fun LyricsScreen(
             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
             if (targetItem != null && viewportHeight > 0) {
-                val desiredY = (viewportHeight * 0.28f).toInt()
+                val desiredY = (viewportHeight * 0.38f).toInt()
                 val itemCenter = targetItem.offset + (targetItem.size / 2)
                 val diff = itemCenter - desiredY
                 if (abs(diff) > 10) {
@@ -226,7 +227,7 @@ fun LyricsScreen(
                     )
                 }
             } else {
-                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.25f).toInt() else -160
+                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.35f).toInt() else -160
                 listState.animateScrollToItem(
                     index = targetLazyIndex,
                     scrollOffset = anchorOffset
@@ -293,10 +294,42 @@ fun LyricsScreen(
                 .background(
                     Brush.verticalGradient(
                         colorStops = arrayOf(
-                            0.0f to Color.Black.copy(alpha = 0.72f),
-                            0.25f to Color.Black.copy(alpha = 0.54f),
-                            0.75f to Color.Black.copy(alpha = 0.66f),
-                            1.0f to Color.Black.copy(alpha = 0.88f)
+                            0.0f to Color.Black.copy(alpha = 0.58f),
+                            0.22f to Color.Black.copy(alpha = 0.34f),
+                            0.62f to Color.Black.copy(alpha = 0.52f),
+                            1.0f to Color.Black.copy(alpha = 0.84f)
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(210.dp)
+                .align(androidx.compose.ui.Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.58f),
+                            Color.Black.copy(alpha = 0.18f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(190.dp)
+                .align(androidx.compose.ui.Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.88f)
                         )
                     )
                 )
@@ -321,7 +354,14 @@ fun LyricsScreen(
                 .navigationBarsPadding()
         ) {
             LyricsTopNavigationBar(
-                onClose = onClose,
+                onSelectAudio = {
+                    viewModel.setPlaybackMediaMode(PlaybackMediaMode.AUDIO)
+                    onClose()
+                },
+                onSelectVideo = {
+                    viewModel.setPlaybackMediaMode(PlaybackMediaMode.VIDEO)
+                    onClose()
+                },
                 onOpenLyricsBrowser = {
                     showOptionsMenu = false
                     onOpenLyricsBrowser()

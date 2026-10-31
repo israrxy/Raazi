@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -34,31 +35,23 @@ import com.israrxy.raazi.utils.ThumbnailUtils
 
 @Composable
 internal fun LyricsTopNavigationBar(
-    onClose: () -> Unit,
+    onSelectAudio: () -> Unit,
+    onSelectVideo: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
     onOpenTrackDetails: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)
+                )
+            )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            onClick = onClose,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Back to player",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
+        Spacer(modifier = Modifier.size(38.dp))
 
         Box(
             modifier = Modifier.weight(1f),
@@ -68,7 +61,7 @@ internal fun LyricsTopNavigationBar(
             Box(
                 modifier = Modifier
                     .height(34.dp)
-                    .width(pillSegmentWidth * 2)
+                    .width(pillSegmentWidth * 3)
                     .clip(RoundedCornerShape(17.dp))
                     .background(Color.White.copy(alpha = 0.08f))
             ) {
@@ -76,7 +69,7 @@ internal fun LyricsTopNavigationBar(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(pillSegmentWidth)
-                        .offset(x = pillSegmentWidth)
+                        .offset(x = pillSegmentWidth * 2)
                         .clip(RoundedCornerShape(17.dp))
                         .background(Color.White)
                 )
@@ -91,14 +84,31 @@ internal fun LyricsTopNavigationBar(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { onClose() },
+                            ) { onSelectAudio() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Headphones,
-                            contentDescription = "Song View",
-                            tint = Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.size(16.dp)
+                            contentDescription = "Audio Mode",
+                            tint = Color.White.copy(alpha = 0.72f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelectVideo() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OndemandVideo,
+                            contentDescription = "Video Mode",
+                            tint = Color.White.copy(alpha = 0.72f),
+                            modifier = Modifier.size(17.dp)
                         )
                     }
                     Box(

@@ -2,6 +2,7 @@ package com.israrxy.raazi.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -243,8 +244,14 @@ fun PlayerScreen(
         // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY
         AnimatedVisibility(
             visible = isLyricsVisible,
-            enter = slideInVertically(initialOffsetY = { it / 3 }, animationSpec = tween(320)) + fadeIn(tween(260)),
-            exit = slideOutVertically(targetOffsetY = { it / 3 }, animationSpec = tween(260)) + fadeOut(tween(200)),
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = tween(380, easing = FastOutSlowInEasing)
+            ) + fadeIn(tween(220)),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
+            ) + fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize()
         ) {
             LyricsScreen(

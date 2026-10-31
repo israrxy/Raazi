@@ -414,6 +414,35 @@ internal fun SettingsCategoryDetailList(
                 }
             }
 
+            SettingsCategory.FEEDBACK -> {
+                item {
+                    SettingsSection(title = "Send Feedback") {
+                        SettingsActionItem(
+                            icon = Icons.Filled.Feedback,
+                            title = "Email the Developer",
+                            subtitle = "feedback@israrxy.qzz.io",
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_SENDTO,
+                                            Uri.parse("mailto:feedback@israrxy.qzz.io")
+                                        ).apply {
+                                            putExtra(
+                                                Intent.EXTRA_SUBJECT,
+                                                "Raazi feedback (v${BuildConfig.VERSION_NAME})"
+                                            )
+                                        }
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
             SettingsCategory.ABOUT -> {
                 item {
                     SettingsSection(title = "Application") {

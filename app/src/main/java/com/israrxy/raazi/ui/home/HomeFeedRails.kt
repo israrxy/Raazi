@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -111,6 +112,18 @@ fun HomeStatusHeader(
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary
                 )
+            } else {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh home feed",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -235,8 +248,21 @@ fun HomeSectionHeader(
             modifier = Modifier.weight(1f)
         )
         if (section.actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) {
-                Text(section.actionLabel)
+            val refreshLabel = section.actionLabel.contains("refresh", ignoreCase = true) ||
+                section.actionLabel.contains("reload", ignoreCase = true)
+            if (refreshLabel) {
+                IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = section.actionLabel,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                TextButton(onClick = onAction) {
+                    Text(section.actionLabel)
+                }
             }
         }
     }

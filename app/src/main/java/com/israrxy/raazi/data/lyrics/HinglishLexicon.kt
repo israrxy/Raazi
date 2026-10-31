@@ -167,8 +167,9 @@ internal object HinglishLexicon {
         "भुलाऊं" to "bhulaaun",
 
         // Adverbs, particles & connectors
-        "नहीं" to "nahi",
-        "नही" to "nahi",
+        "नहीं" to "nahin",
+        "नही" to "nahin",
+        "नहिं" to "nahin",
         "कहीं" to "kahin",
         "यहीं" to "yahin",
         "वहीं" to "wahin",

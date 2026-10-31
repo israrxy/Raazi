@@ -39,13 +39,17 @@ object LyricsTextVariants {
         if (text.isBlank()) return text
 
         // 1. Check Google Neural Romanization cache first (single-line or multi-line)
-        LyricsTranslator.getCachedRomanization(text)?.let { return it }
+        LyricsTranslator.getCachedRomanization(text)
+            ?.let { return HinglishRomanizer.sanitizeHinglish(it) }
         if (text.contains('\n')) {
             val lines = text.lines()
             val allCached = lines.all { it.isBlank() || LyricsTranslator.getCachedRomanization(it) != null }
             if (allCached) {
                 return lines.joinToString("\n") { line ->
-                    if (line.isBlank()) line else LyricsTranslator.getCachedRomanization(line) ?: line
+                    if (line.isBlank()) line
+                    else HinglishRomanizer.sanitizeHinglish(
+                        LyricsTranslator.getCachedRomanization(line) ?: line
+                    )
                 }
             }
         }
@@ -68,7 +72,7 @@ object LyricsTextVariants {
             }
         }
 
-        return step
+        return HinglishRomanizer.sanitizeHinglish(step)
     }
 
     /**
@@ -86,6 +90,12 @@ object LyricsTextVariants {
         // Sibilants ś / ṣ -> sh
         s = s.replace("ś", "sh").replace("ṣ", "sh")
         s = s.replace("Ś", "Sh").replace("Ṣ", "Sh")
-        return s
+        // Common ISO-15919 vowel/consonant diacritics -> plain Hinglish letters
+        s = s.replace("ā", "a").replace("ī", "i").replace("ū", "u")
+        s = s.replace("ē", "e").replace("ō", "o")
+        s = s.replace("ṛ", "r").replace("ṝ", "r")
+        s = s.replace("ṅ", "n").replace("ñ", "n").replace("ṇ", "n")
+        s = s.replace("ṭ", "t").replace("ḍ", "d")
+        return HinglishRomanizer.sanitizeHinglish(s)
     }
 }

@@ -3,7 +3,6 @@ package com.israrxy.raazi.service
 import android.util.Log
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
-import com.israrxy.raazi.data.lyrics.HinglishLexicon
 import com.israrxy.raazi.data.lyrics.HinglishRomanizer
 import com.israrxy.raazi.data.lyrics.LyricsTextVariants
 import kotlinx.coroutines.Dispatchers
@@ -104,9 +103,19 @@ object LyricsTranslator {
             line.isNotBlank() && romanizationCache[line] == null
         }
 
-        if (uncachedIndices.isNotEmpty()) {
+        for (index in uncachedIndices) {
+            val line = cleanLines[index]
+            if (HinglishRomanizer.containsDevanagari(line)) {
+                romanizationCache[line] = HinglishRomanizer.romanize(line)
+            }
+        }
+
+        val neuralIndices = uncachedIndices.filter {
+            !HinglishRomanizer.containsDevanagari(cleanLines[it])
+        }
+        if (neuralIndices.isNotEmpty()) {
             val batchSize = 20
-            for (chunk in uncachedIndices.chunked(batchSize)) {
+            for (chunk in neuralIndices.chunked(batchSize)) {
                 val joined = chunk.joinToString(LINE_SEPARATOR) { cleanLines[it] }
                 val neuralRoman = fetchGoogleTranslateAndRomanize(
                     text = joined,
@@ -147,45 +156,16 @@ object LyricsTranslator {
      * - Falls back to `HinglishRomanizer` if offline or if line counts did not align.
      */
     internal fun refineNeuralHinglishLine(sourceLine: String, neuralRomanLine: String): String {
-        if (neuralRomanLine.isBlank()) {
+        if (HinglishRomanizer.containsDevanagari(sourceLine)) {
             return HinglishRomanizer.romanize(sourceLine)
+        }
+        if (neuralRomanLine.isBlank()) {
+            return HinglishRomanizer.sanitizeHinglish(sourceLine)
         }
 
         val indicCleaned = LyricsTextVariants.convertIndicDiacriticsToHinglish(neuralRomanLine)
         val modernizedNeural = modernizeGoogleNeuralTokens(indicCleaned)
-
-        if (!HinglishRomanizer.containsDevanagari(sourceLine)) {
-            return HinglishRomanizer.naturalizeLatinHinglish(modernizedNeural)
-        }
-
-        // Align Devanagari source words with Google Neural tokens so known Hinglish lexicon words
-        // and schwa-deleted stems are preserved alongside Google's contextual romanization.
-        val srcWords = sourceLine.split(Regex("\\s+")).filter { it.isNotBlank() }
-        val neuralWords = modernizedNeural.split(Regex("\\s+")).filter { it.isNotBlank() }
-
-        if (srcWords.size != neuralWords.size) {
-            return HinglishRomanizer.naturalizeLatinHinglish(modernizedNeural)
-        }
-
-        return srcWords.indices.joinToString(" ") { idx ->
-            val srcToken = srcWords[idx]
-            val strippedSrc = srcToken.trim { !it.isLetterOrDigit() && it !in '\u0900'..'\u097F' }
-            val lexiconMatch = HinglishLexicon.WORD_OVERRIDES[strippedSrc]
-            if (lexiconMatch != null) {
-                srcToken.replace(strippedSrc, lexiconMatch)
-            } else if (HinglishRomanizer.containsDevanagari(strippedSrc)) {
-                val localRoman = HinglishRomanizer.romanize(srcToken)
-                val googleToken = neuralWords[idx]
-                // If Google kept an un-dropped medial schwa (e.g. "milakara" vs "milkar"), prefer local schwa-deleted form
-                if (googleToken.lowercase().endsWith("a") && !localRoman.lowercase().endsWith("a")) {
-                    localRoman
-                } else {
-                    localRoman
-                }
-            } else {
-                neuralWords[idx]
-            }
-        }
+        return HinglishRomanizer.naturalizeLatinHinglish(modernizedNeural)
     }
 
     internal fun modernizeGoogleNeuralTokens(text: String): String {

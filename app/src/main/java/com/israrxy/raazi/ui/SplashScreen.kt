@@ -1,27 +1,34 @@
 package com.israrxy.raazi.ui
 
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,26 +39,39 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
-    val context = LocalContext.current
-    val scale = remember { androidx.compose.animation.core.Animatable(0.82f) }
-    val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    val logoScale = remember { Animatable(0.82f) }
+    val logoAlpha = remember { Animatable(0f) }
+    val textAlpha = remember { Animatable(0f) }
+    val textOffset = remember { Animatable(18f) }
 
-    LaunchedEffect(key1 = true) {
-        // Parallel Animation
+    LaunchedEffect(Unit) {
         launch {
-            scale.animateTo(
-                targetValue = 1.045f,
-                animationSpec = tween(durationMillis = 620, easing = FastOutSlowInEasing)
+            logoScale.animateTo(
+                targetValue = 1.04f,
+                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
             )
-            scale.animateTo(
+            logoScale.animateTo(
                 targetValue = 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
             )
         }
         launch {
-            alpha.animateTo(targetValue = 1f, animationSpec = tween(700))
+            logoAlpha.animateTo(targetValue = 1f, animationSpec = tween(320))
         }
-        delay(1700)
+        launch {
+            textAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 380, delayMillis = 120)
+            )
+            textOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+            )
+        }
+        delay(620)
         onSplashFinished()
     }
 
@@ -66,18 +86,61 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
             ),
         contentAlignment = Alignment.Center
     ) {
-        // Raazi Logo Animation
-        Image(
-            painter = painterResource(id = R.drawable.raazi_logo),
-            contentDescription = "Raazi Logo",
+        Box(
             modifier = Modifier
-                .size(200.dp)
-                .scale(scale.value)
-                .clip(CircleShape) // Ensure logo is rounded
-                .graphicsLayer(alpha = alpha.value),
-            contentScale = ContentScale.Crop
+                .size(300.dp)
+                .graphicsLayer(alpha = logoAlpha.value * 0.55f)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                            Color.Transparent
+                        )
+                    ),
+                    CircleShape
+                )
         )
 
-        // Top Left Branding Removed
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.raazi_logo),
+                contentDescription = "Raazi Logo",
+                modifier = Modifier
+                    .size(184.dp)
+                    .scale(logoScale.value)
+                    .clip(CircleShape)
+                    .graphicsLayer(alpha = logoAlpha.value),
+                contentScale = ContentScale.Crop
+            )
+
+            Spacer(Modifier.height(22.dp))
+
+            Text(
+                text = "Raazi",
+                color = Color.White,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-1).sp,
+                modifier = Modifier
+                    .offset(y = textOffset.value.dp)
+                    .graphicsLayer(alpha = textAlpha.value)
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = "MUSIC, YOUR WAY",
+                color = Color(0xFFA7F3D0).copy(alpha = 0.78f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 3.5.sp,
+                modifier = Modifier
+                    .offset(y = textOffset.value.dp)
+                    .graphicsLayer(alpha = textAlpha.value)
+            )
+        }
     }
 }

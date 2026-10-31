@@ -78,6 +78,11 @@ internal enum class SettingsCategory(
         title = "About",
         subtitle = "Updates & version info",
         icon = Icons.Filled.Info
+    ),
+    FEEDBACK(
+        title = "Feedback",
+        subtitle = "feedback@israrxy.qzz.io",
+        icon = Icons.Filled.Feedback
     )
 }
 
@@ -243,11 +248,18 @@ fun SettingsScreen(
                                         SettingsCategory.DOWNLOADS -> downloadQuality
                                         SettingsCategory.SECURITY -> if (biometricLock) "On" else "Off"
                                         SettingsCategory.ABOUT -> "v${BuildConfig.VERSION_NAME}"
+                                        SettingsCategory.FEEDBACK -> "Tell us"
                                     }
                                     MinimalSettingsCategoryRow(
                                         category = category,
                                         valueText = valueText,
-                                        onClick = { selectedCategory = category }
+                                        onClick = {
+                                            if (category == SettingsCategory.FEEDBACK) {
+                                                launchFeedbackEmail(context)
+                                            } else {
+                                                selectedCategory = category
+                                            }
+                                        }
                                     )
                                     if (index < SettingsCategory.entries.lastIndex) {
                                         SettingsDivider()

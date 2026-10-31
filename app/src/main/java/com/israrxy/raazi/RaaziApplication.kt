@@ -48,9 +48,13 @@ class RaaziApplication : Application() {
         container = AppContainer(database, applicationContext)
 
         bluetoothDeviceManager = com.israrxy.raazi.data.local.BluetoothDeviceManager(applicationContext)
-        bluetoothDeviceManager.start()
 
         MainScope().launch(Dispatchers.IO) {
+            try {
+                bluetoothDeviceManager.start()
+            } catch (e: Exception) {
+                android.util.Log.e("RaaziApp", "Bluetooth device manager start failed", e)
+            }
             try {
                 com.israrxy.raazi.service.YouTubeMusicExtractor.getInstance()
             } catch (e: Exception) {

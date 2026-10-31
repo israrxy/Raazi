@@ -166,6 +166,15 @@ class MultiSourceLyricsTest {
         assertEquals("kamal", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("कमल"))
         assertEquals("paagalpan", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("पागलपन"))
         assertEquals("samajhna", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("समझना"))
+        assertEquals("nahin", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("नहीं"))
+        assertEquals(
+            "nahin",
+            com.israrxy.raazi.data.lyrics.HinglishRomanizer.sanitizeHinglish("n ā h ī ñ")
+        )
+        assertEquals(
+            "nahin",
+            com.israrxy.raazi.data.lyrics.LyricsTextVariants.romanize("नहीं")
+        )
 
         val variants = com.israrxy.raazi.data.lyrics.LyricsTextVariants.availableVariants("बाजू")
         assertTrue(variants.contains(com.israrxy.raazi.data.lyrics.LyricsViewVariant.ROMANIZED))

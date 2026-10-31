@@ -82,6 +82,7 @@ internal fun MusicPlaybackService.startForegroundService() {
 internal fun MusicPlaybackService.createContentPendingIntent(): PendingIntent {
     val contentIntent = Intent(this, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER, true)
     }
     return PendingIntent.getActivity(
         this,
