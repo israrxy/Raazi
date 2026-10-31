@@ -1,0 +1,12 @@
+# Cloudflare Pages Deep-Link Routing for raazi.pages.dev
+/play       /play.html   200
+/play/*     /play.html   200
+/watch      /play.html   200
+/watch/*    /play.html   200
+/song/*     /play.html   200
+/playlist   /play.html   200
+/playlist/* /play.html   200
+/album      /play.html   200
+/album/*    /play.html   200
+/artist     /play.html   200
+/artist/*   /play.html   200

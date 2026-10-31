@@ -1,0 +1,239 @@
+package com.israrxy.raazi.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.MusicContentType
+import com.israrxy.raazi.model.savedCollectionId
+import com.israrxy.raazi.ui.theme.*
+import com.israrxy.raazi.utils.ThumbnailUtils
+import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import com.israrxy.raazi.data.db.PlaylistEntity
+import kotlinx.coroutines.launch
+
+@Composable
+fun ArtistScreen(
+    artistId: String,
+    artistName: String?,
+    viewModel: MusicPlayerViewModel,
+    onNavigateBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var songs by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var artistThumbnail by remember { mutableStateOf("") }
+    // Add To Playlist Dialog State
+    var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
+    val savedCollectionIds by viewModel.savedCollectionIds.collectAsStateWithLifecycle()
+    
+    LaunchedEffect(artistId) {
+        scope.launch {
+            try {
+                // Fetch artist page for thumbnail
+                try {
+                    val artistPage = com.zionhuang.innertube.YouTube.artist(artistId).getOrNull()
+                    artistThumbnail = artistPage?.artist?.thumbnail.orEmpty()
+                } catch (_: Exception) {}
+
+                // Search for artist's songs
+                val query = artistName ?: artistId
+                val result = com.zionhuang.innertube.YouTube.search(
+                    query, 
+                    com.zionhuang.innertube.YouTube.SearchFilter.FILTER_SONG
+                ).getOrNull()
+                
+                songs = result?.items?.mapNotNull { item ->
+                    when (item) {
+                        is com.zionhuang.innertube.models.SongItem -> MusicItem(
+                            id = item.id ?: return@mapNotNull null,
+                            title = item.title ?: "Unknown",
+                            artist = item.artists?.joinToString(", ") { it.name ?: "" } ?: "Unknown",
+                            duration = (item.duration?.toLong() ?: 0) * 1000,
+                            thumbnailUrl = item.thumbnail ?: "",
+                            audioUrl = "",
+                            videoUrl = item.id ?: return@mapNotNull null,
+                            artistId = item.artists?.firstOrNull()?.id
+                        )
+                        else -> null
+                    }
+                } ?: emptyList()
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+    
+    val normalizedArtistId = remember(artistId, artistName) {
+        artistId.ifBlank { artistName.orEmpty() }
+    }
+    val savedArtistId = remember(normalizedArtistId) {
+        savedCollectionId(MusicContentType.ARTIST, normalizedArtistId)
+    }
+    val isSavedArtist = savedArtistId in savedCollectionIds
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onNavigateBack) {
+                Icon(Icons.Default.ArrowBack, null, tint = MaterialTheme.colorScheme.onBackground)
+            }
+            Text(
+                text = artistName ?: "Artist",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f)
+            )
+            // Play Button
+            IconButton(onClick = {
+                if (songs.isNotEmpty()) {
+                    viewModel.playPlaylist(songs)
+                }
+            }) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = "Play Artist", tint = MaterialTheme.colorScheme.onBackground)
+            }
+            IconButton(
+                onClick = {
+                    viewModel.toggleSavedArtist(
+                        artistId = normalizedArtistId,
+                        artistName = artistName ?: "Unknown Artist",
+                        thumbnailUrl = songs.firstOrNull()?.thumbnailUrl.orEmpty()
+                    )
+                }
+            ) {
+                Icon(
+                    if (isSavedArtist) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = if (isSavedArtist) "Remove artist from library" else "Save artist to library",
+                    tint = if (isSavedArtist) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+        
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 100.dp)
+        ) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Note: artistDetails is not available in this scope. Assuming a placeholder or a different source for thumbnail.
+                    // For now, using a placeholder or a default image.
+                    // If artistDetails is meant to be fetched, it needs to be added to the ViewModel and observed.
+                    AsyncImage(
+                        model = if (artistThumbnail.isNotEmpty()) ThumbnailUtils.getHighQualityThumbnail(artistThumbnail) else "",
+                        contentDescription = "Artist",
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = artistName ?: "Unknown Artist",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
+
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            } else {
+                itemsIndexed(songs) { index, song ->
+                    val musicItem = MusicItem(
+                        id = song.id,
+                        title = song.title,
+                        artist = song.artist,
+                        duration = song.duration,
+                        thumbnailUrl = song.thumbnailUrl,
+                        audioUrl = song.audioUrl,
+                        videoUrl = song.videoUrl,
+                        artistId = song.artistId
+                    )
+
+                    com.israrxy.raazi.ui.components.SongListItem(
+                        song = musicItem,
+                        onClick = {
+                            viewModel.playPlaylist(songs, index)
+                        },
+                        onAddToPlaylist = { showAddToPlaylistItem = musicItem },
+                        onGoToArtist = { /* Already on artist screen, maybe do nothing or navigate */ },
+                        onDownload = { viewModel.downloadTrack(musicItem) },
+                        onDownloadForRingtone = { viewModel.downloadForRingtone(musicItem) },
+                        onAddToQueue = {
+                            viewModel.addToQueue(listOf(musicItem))
+                            android.widget.Toast.makeText(context, "Added to queue", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onShowMoreOptions = {
+                            android.widget.Toast.makeText(context, "More options for ${musicItem.title}", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        showRingtone = true,
+                        onLike = { viewModel.toggleFavorite(musicItem) }
+                    )
+                }
+            }
+        }
+    }
+
+    // Add To Playlist Dialog
+    if (showAddToPlaylistItem != null) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = viewModel,
+            onDismiss = { showAddToPlaylistItem = null },
+            onPlaylistSelected = { playlist ->
+                viewModel.addToPlaylist(playlist.id, showAddToPlaylistItem!!)
+                showAddToPlaylistItem = null
+            }
+        )
+    }
+}

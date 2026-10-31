@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open in Raazi Music</title>
+  <meta name="theme-color" content="#09090b" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #07090d;
+      --card: rgba(20, 26, 34, 0.86);
+      --border: rgba(255, 255, 255, 0.1);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.28);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.18), transparent 55%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 28px 24px;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.14);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34d399;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .artwork-wrap {
+      width: 180px;
+      height: 180px;
+      margin: 0 auto 20px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #18181b;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .artwork-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    p.subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+    .btn-primary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 15px 20px;
+      border-radius: 999px;
+      background: var(--emerald);
+      color: #04130d;
+      font-weight: 700;
+      font-size: 15px;
+      text-decoration: none;
+      box-shadow: 0 10px 28px var(--emerald-glow);
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      margin-bottom: 12px;
+    }
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+    .btn-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 13px 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      margin-bottom: 10px;
+    }
+    .meta-footer {
+      margin-top: 18px;
+      font-size: 12px;
+      color: rgba(148, 163, 184, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge" id="entityBadge">RAAZI DEEP LINK</div>
+    <div class="artwork-wrap" id="artworkWrap">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="#10b981">
+        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+      </svg>
+    </div>
+    <h1 id="headingText">Opening in Raazi...</h1>
+    <p class="subtitle" id="subText">Launching the Raazi Android app to play this selection directly.</p>
+
+    <a id="openAppBtn" href="raazi://play" class="btn-primary">Open in Raazi App</a>
+    <a id="downloadApkBtn" href="https://github.com/israrxy/Raazi/releases/latest" class="btn-secondary">Download Raazi APK</a>
+
+    <div class="meta-footer">raazi.pages.dev • Ad-Free Music Player</div>
+  </div>
+
+  <script>
+    (function () {
+      const url = new URL(window.location.href);
+      const segments = url.pathname.split('/').filter(Boolean);
+      const route = (segments[0] || 'play').toLowerCase().replace('.html', '');
+      const secondSegment = segments[1] || '';
+      const params = url.searchParams;
+
+      let customUri = 'raazi://play';
+      let intentPath = url.pathname + url.search;
+      let badgeLabel = 'SONG LINK';
+      let heading = 'Listen on Raazi';
+      let subtitle = 'Tap below if the Raazi app did not open automatically.';
+      let videoId = null;
+
+      if (route === 'playlist' || route === 'album') {
+        const listId = params.get('list') || params.get('id') || secondSegment;
+        badgeLabel = route === 'album' ? 'ALBUM LINK' : 'PLAYLIST LINK';
+        heading = route === 'album' ? 'Open Album in Raazi' : 'Open Playlist in Raazi';
+        if (listId) {
+          customUri = 'raazi://' + route + '?list=' + encodeURIComponent(listId);
+        }
+      } else if (route === 'artist') {
+        const artistId = params.get('id') || params.get('channelId') || secondSegment;
+        const artistName = params.get('name') || '';
+        badgeLabel = 'ARTIST PROFILE';
+        heading = artistName ? artistName : 'Open Artist in Raazi';
+        if (artistId) {
+          customUri = 'raazi://artist?id=' + encodeURIComponent(artistId) +
+            (artistName ? '&name=' + encodeURIComponent(artistName) : '');
+        }
+      } else {
+        videoId = params.get('id') || params.get('v') || secondSegment;
+        const listFallback = params.get('list');
+        if (videoId) {
+          customUri = 'raazi://play?id=' + encodeURIComponent(videoId);
+          const artWrap = document.getElementById('artworkWrap');
+          const img = document.createElement('img');
+          img.src = 'https://i.ytimg.com/vi/' + encodeURIComponent(videoId) + '/hqdefault.jpg';
+          img.alt = 'Track Artwork';
+          artWrap.innerHTML = '';
+          artWrap.appendChild(img);
+        } else if (listFallback) {
+          badgeLabel = 'PLAYLIST LINK';
+          heading = 'Open Playlist in Raazi';
+          customUri = 'raazi://playlist?list=' + encodeURIComponent(listFallback);
+        }
+      }
+
+      document.getElementById('entityBadge').textContent = badgeLabel;
+      document.getElementById('headingText').textContent = heading;
+      document.getElementById('subText').textContent = subtitle;
+
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      const intentUri = 'intent://raazi.pages.dev' + intentPath +
+        '#Intent;scheme=https;package=com.israrxy.raazi;S.browser_fallback_url=' +
+        encodeURIComponent(window.location.href) + ';end';
+
+      const openBtn = document.getElementById('openAppBtn');
+      openBtn.href = isAndroid ? intentUri : customUri;
+
+      if (isAndroid) {
+        setTimeout(function () {
+          window.location.href = customUri;
+        }, 120);
+      }
+    })();
+  </script>
+</body>
+</html>
