@@ -53,7 +53,7 @@ fun OnboardingScreen(
     viewModel: MusicPlayerViewModel,
     onFinish: () -> Unit
 ) {
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsDataStore = remember { SettingsDataStore(context) }
@@ -65,17 +65,6 @@ fun OnboardingScreen(
     
     // WebView active state
     var isWebViewVisible by remember { mutableStateOf(false) }
-    
-    // Gemini configurations
-    val useGeminiImport by settingsDataStore.useGeminiImport.collectAsState(initial = false)
-    val geminiApiKey by settingsDataStore.geminiApiKey.collectAsState(initial = "")
-    var apiKeyText by remember { mutableStateOf("") }
-    
-    LaunchedEffect(geminiApiKey) {
-        if (geminiApiKey != null && apiKeyText.isEmpty()) {
-            apiKeyText = geminiApiKey!!
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -119,41 +108,25 @@ fun OnboardingScreen(
                     onWebViewVisibilityChange = { isWebViewVisible = it },
                     onConnected = {
                         scope.launch {
-                            delay(1000)
-                            pagerState.animateScrollToPage(3)
+                            delay(600)
+                            onFinish()
                         }
-                    }
-                )
-                3 -> GeminiSetupPage(
-                    useGemini = useGeminiImport,
-                    apiKey = apiKeyText,
-                    onUseGeminiToggle = { enabled -> scope.launch { settingsDataStore.setUseGeminiImport(enabled) } },
-                    onApiKeyChange = {
-                        apiKeyText = it
-                        scope.launch { settingsDataStore.setGeminiApiKey(it) }
                     }
                 )
             }
         }
 
         // Top Skip button
-        if (pagerState.currentPage < 3 && !isWebViewVisible) {
+        if (pagerState.currentPage < 2 && !isWebViewVisible) {
             TextButton(
-                onClick = {
-                    if (pagerState.currentPage == 2) {
-                        // Skip connection
-                        scope.launch { pagerState.animateScrollToPage(3) }
-                    } else {
-                        onFinish()
-                    }
-                },
+                onClick = { onFinish() },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(16.dp)
             ) {
                 Text(
-                    text = if (pagerState.currentPage == 2) "Skip" else "Skip All",
+                    text = "Skip All",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -173,7 +146,7 @@ fun OnboardingScreen(
                     modifier = Modifier.align(Alignment.CenterStart),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    repeat(4) { index ->
+                    repeat(3) { index ->
                         val isSelected = pagerState.currentPage == index
                         val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, label = "width")
                         val color by animateColorAsState(
@@ -194,7 +167,7 @@ fun OnboardingScreen(
                 // Navigation Button
                 Button(
                     onClick = {
-                        if (pagerState.currentPage < 3) {
+                        if (pagerState.currentPage < 2) {
                             scope.launch {
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                             }
@@ -208,10 +181,10 @@ fun OnboardingScreen(
                     shape = RoundedCornerShape(25.dp)
                 ) {
                     Text(
-                        text = if (pagerState.currentPage == 3) "Finish Setup" else "Next",
+                        text = if (pagerState.currentPage == 2) "Finish Setup" else "Next",
                         fontWeight = FontWeight.Bold
                     )
-                    if (pagerState.currentPage < 3) {
+                    if (pagerState.currentPage < 2) {
                         Spacer(Modifier.width(8.dp))
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
                     }

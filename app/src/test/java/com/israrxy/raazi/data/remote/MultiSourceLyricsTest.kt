@@ -139,4 +139,58 @@ class MultiSourceLyricsTest {
         assertNotNull(ytSuggest)
         assertTrue(ytSuggest!!.queries.isNotEmpty())
     }
+
+    @Test
+    fun verifyModernHinglishRomanization() {
+        assertEquals("baaju", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("बाजू"))
+        assertEquals("bajun", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("बजूँ"))
+        assertEquals("bajun", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("बजों"))
+        assertEquals("baajun", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("बाजूँ"))
+        assertEquals(
+            "milkar khushi hui!",
+            com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("मिलकर खुशी हुई!")
+        )
+        assertEquals(
+            "teri baahon mein",
+            com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("तेरी बाहों में")
+        )
+        assertEquals(
+            "dhadkan meri tujhko bulaaye",
+            com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("धड़कन मेरी तुझको बुलाए")
+        )
+        assertEquals(
+            "main tera ban jaaunga",
+            com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("मैं तेरा बन जाऊँगा")
+        )
+        assertEquals("sapna", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("सपना"))
+        assertEquals("kamal", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("कमल"))
+        assertEquals("paagalpan", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("पागलपन"))
+        assertEquals("samajhna", com.israrxy.raazi.data.lyrics.HinglishRomanizer.romanize("समझना"))
+
+        val variants = com.israrxy.raazi.data.lyrics.LyricsTextVariants.availableVariants("बाजू")
+        assertTrue(variants.contains(com.israrxy.raazi.data.lyrics.LyricsViewVariant.ROMANIZED))
+        assertEquals(
+            "baaju",
+            com.israrxy.raazi.data.lyrics.LyricsTextVariants.transform(
+                "बाजू",
+                com.israrxy.raazi.data.lyrics.LyricsViewVariant.ROMANIZED
+            )
+        )
+    }
+
+    @Test
+    fun verifyGoogleNeuralRomanizationAndTranslation() = runBlocking {
+        val romanized = com.israrxy.raazi.service.LyricsTranslator.romanizeLines(
+            listOf("बाजू", "बजूँ", "मिलकर खुशी हुई")
+        )
+        assertEquals("baaju", romanized[0])
+        assertEquals("bajun", romanized[1])
+        assertEquals("milkar khushi hui", romanized[2])
+
+        val translated = com.israrxy.raazi.service.LyricsTranslator.translateLines(
+            listOf("तेरी बाहों में"),
+            "en"
+        )
+        assertTrue(translated.isNotEmpty() && translated.first().isNotBlank())
+    }
 }

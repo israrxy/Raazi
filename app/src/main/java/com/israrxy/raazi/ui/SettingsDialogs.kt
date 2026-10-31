@@ -76,44 +76,6 @@ internal fun SettingsResetDialog(
 }
 
 @Composable
-internal fun SettingsGeminiApiKeyDialog(
-    geminiApiKey: String?,
-    scope: CoroutineScope,
-    settingsDataStore: SettingsDataStore,
-    onDismiss: () -> Unit
-) {
-    var keyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey ?: "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Gemini API Key", fontWeight = FontWeight.SemiBold) },
-        text = {
-            OutlinedTextField(
-                value = keyInput,
-                onValueChange = { keyInput = it },
-                label = { Text("API Key") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    scope.launch { settingsDataStore.setGeminiApiKey(keyInput.trim()) }
-                    onDismiss()
-                }
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
 internal fun SettingsLastFmLoginDialog(
     viewModel: MusicPlayerViewModel,
     settingsDataStore: SettingsDataStore,

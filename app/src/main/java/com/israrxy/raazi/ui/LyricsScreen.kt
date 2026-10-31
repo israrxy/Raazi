@@ -87,10 +87,13 @@ fun LyricsScreen(
     }
 
     val settingsDataStore = remember { SettingsDataStore(context) }
-    val geminiApiKey by settingsDataStore.geminiApiKey.collectAsStateWithLifecycle(initialValue = "")
+    val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
 
     var showTranslation by remember { mutableStateOf(false) }
+    LaunchedEffect(translateEnabledPref) {
+        showTranslation = translateEnabledPref
+    }
     var isTranslating by remember { mutableStateOf(false) }
     val translatedLines = remember { mutableStateListOf<String>() }
     var translatedPlain by remember { mutableStateOf<String?>(null) }
@@ -98,6 +101,7 @@ fun LyricsScreen(
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showTrackDetails by remember { mutableStateOf(false) }
     var selectedVariant by remember(currentTrack?.id) { mutableStateOf(LyricsViewVariant.ORIGINAL) }
+    var neuralRomanVersion by remember { mutableIntStateOf(0) }
 
     val rawSourceText = remember(lyrics) {
         (lyrics?.syncedLyrics ?: lyrics?.plainLyrics.orEmpty()).replace(STRIP_WORD_TAGS_REGEX, "")
@@ -115,7 +119,23 @@ fun LyricsScreen(
         parseLrcLines(lyrics?.syncedLyrics)
     }
 
-    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation) {
+    // Prefetch Google Neural Romanization when non-Latin lyrics are present or Romanized view is selected
+    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, selectedVariant, availableVariants) {
+        if (LyricsViewVariant.ROMANIZED !in availableVariants) return@LaunchedEffect
+        try {
+            if (parsedPairs.isNotEmpty()) {
+                val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
+                LyricsTranslator.romanizeLines(originalTexts)
+                neuralRomanVersion++
+            } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
+                LyricsTranslator.romanizeLines(lyrics!!.plainLyrics!!.lines())
+                neuralRomanVersion++
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation, neuralRomanVersion) {
         buildRichLyricLines(
             rawPairs = parsedPairs,
             durationMs = duration,
@@ -127,8 +147,8 @@ fun LyricsScreen(
     val isSynced = remember(syncedLines) { syncedLines.isNotEmpty() }
     val hasWordSync = remember(syncedLines) { syncedLines.any { it.hasExplicitWordSync } }
 
-    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang, geminiApiKey) {
-        if (!showTranslation || geminiApiKey.isNullOrBlank()) {
+    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang) {
+        if (!showTranslation) {
             translatedLines.clear()
             translatedPlain = null
             return@LaunchedEffect
@@ -140,12 +160,13 @@ fun LyricsScreen(
         try {
             if (parsedPairs.isNotEmpty()) {
                 val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
-                val translations = LyricsTranslator.translateLines(geminiApiKey!!, originalTexts, translateLang)
+                val translations = LyricsTranslator.translateLines(originalTexts, translateLang)
                 translatedLines.clear()
                 translatedLines.addAll(translations)
             } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
-                val translations = LyricsTranslator.translateLines(geminiApiKey!!, listOf(lyrics!!.plainLyrics!!), translateLang)
-                translatedPlain = translations.firstOrNull()
+                val plainLines = lyrics!!.plainLyrics!!.lines()
+                val translations = LyricsTranslator.translateLines(plainLines, translateLang)
+                translatedPlain = translations.joinToString("\n")
             }
         } catch (_: Exception) {
         } finally {
@@ -318,7 +339,6 @@ fun LyricsScreen(
                 availableVariants = availableVariants,
                 selectedVariant = selectedVariant,
                 onSelectVariant = { selectedVariant = it },
-                geminiApiKey = geminiApiKey,
                 showTranslation = showTranslation,
                 isTranslating = isTranslating,
                 translateLang = translateLang,
@@ -342,7 +362,7 @@ fun LyricsScreen(
                     availableVariants = availableVariants,
                     selectedVariant = selectedVariant,
                     onSelectVariant = { selectedVariant = it },
-                    hasTranslationSupport = !geminiApiKey.isNullOrBlank(),
+                    hasTranslationSupport = true,
                     showTranslation = showTranslation,
                     translateLang = translateLang,
                     onToggleTranslation = { showTranslation = !showTranslation },

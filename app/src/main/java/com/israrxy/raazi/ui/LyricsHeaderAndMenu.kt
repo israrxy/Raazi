@@ -165,7 +165,6 @@ internal fun LyricsNowPlayingStrip(
     availableVariants: List<LyricsViewVariant>,
     selectedVariant: LyricsViewVariant,
     onSelectVariant: (LyricsViewVariant) -> Unit,
-    geminiApiKey: String?,
     showTranslation: Boolean,
     isTranslating: Boolean,
     translateLang: String,
@@ -273,40 +272,38 @@ internal fun LyricsNowPlayingStrip(
             }
         }
 
-        if (availableVariants.size > 1 || !geminiApiKey.isNullOrBlank() || lyricsScriptFilter != LyricsScriptFilter.ALL) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (availableVariants.size > 1) {
-                    availableVariants.forEach { variant ->
-                        val selected = selectedVariant == variant
-                        Surface(
-                            onClick = { onSelectVariant(variant) },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selected) Color.White else Color.White.copy(alpha = 0.07f)
-                        ) {
-                            Text(
-                                text = variant.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (selected) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (availableVariants.size > 1) {
+                availableVariants.forEach { variant ->
+                    val selected = selectedVariant == variant
+                    Surface(
+                        onClick = { onSelectVariant(variant) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selected) Color.White else Color.White.copy(alpha = 0.07f)
+                    ) {
+                        Text(
+                            text = variant.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
                     }
                 }
+            }
 
-                if (!geminiApiKey.isNullOrBlank()) {
-                    Surface(
-                        onClick = onToggleTranslation,
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (showTranslation) Color.White else Color.White.copy(alpha = 0.07f)
-                    ) {
+            Surface(
+                onClick = onToggleTranslation,
+                shape = RoundedCornerShape(8.dp),
+                color = if (showTranslation) Color.White else Color.White.copy(alpha = 0.07f)
+            ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -334,23 +331,21 @@ internal fun LyricsNowPlayingStrip(
                             )
                         }
                     }
-                }
 
-                if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
-                    Surface(
-                        onClick = onToggleOptionsMenu,
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.07f)
-                    ) {
-                        Text(
-                            text = "Script: ${lyricsScriptFilter.label}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.78f),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                    if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
+                        Surface(
+                            onClick = onToggleOptionsMenu,
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White.copy(alpha = 0.07f)
+                        ) {
+                            Text(
+                                text = "Script: ${lyricsScriptFilter.label}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.78f),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-}

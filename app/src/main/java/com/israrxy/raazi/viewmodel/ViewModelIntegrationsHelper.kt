@@ -10,7 +10,6 @@ import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackState
-import com.israrxy.raazi.service.GeminiResolverHelper
 import com.israrxy.raazi.service.MusicPlaybackService
 import com.israrxy.raazi.service.RingtoneHelper
 import com.israrxy.raazi.service.RingtoneType
@@ -156,20 +155,6 @@ internal fun MusicPlayerViewModel.startSpotifyImportImpl(playlistUrl: String) {
             _resolvedSpotifyTracks.value = tracksToResolve
             _spotifyImportState.value = MusicPlayerViewModel.SpotifyImportState.ResolvingTracks(0, tracksToResolve.size)
 
-            val useGemini = settingsDataStore.useGeminiImport.first()
-            val geminiKey = settingsDataStore.geminiApiKey.first()
-
-            val geminiQueries = if (useGemini && !geminiKey.isNullOrBlank()) {
-                try {
-                    GeminiResolverHelper.generateOptimizedQueries(geminiKey, spotifyPlaylist.tracks)
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Gemini pre-resolution failed, falling back to legacy cleaner", e)
-                    null
-                }
-            } else {
-                null
-            }
-
             val semaphore = Semaphore(5)
             val total = tracksToResolve.size
             var completedCount = 0
@@ -179,37 +164,18 @@ internal fun MusicPlayerViewModel.startSpotifyImportImpl(playlistUrl: String) {
                     launch {
                         semaphore.withPermit {
                             try {
-                                val geminiInfo = geminiQueries?.get(index)
                                 val cleanedTitle = SpotifyImportHelper.cleanTrackTitleForSearch(resolvedTrack.spotifyTrack.title)
-
-                                val query = geminiInfo?.query ?: "$cleanedTitle ${resolvedTrack.spotifyTrack.artist}"
-                                val preference = geminiInfo?.preference ?: "SONG"
+                                val query = "$cleanedTitle ${resolvedTrack.spotifyTrack.artist}"
 
                                 val searchResult = musicExtractor.searchMusic(query, 0)
 
-                                val bestMatch = if (geminiInfo != null) {
-                                    if (preference == "VIDEO") {
-                                        searchResult.items.firstOrNull {
-                                            it.contentType == MusicContentType.VIDEO
-                                        } ?: searchResult.items.firstOrNull {
-                                            it.contentType == MusicContentType.SONG
-                                        } ?: searchResult.items.firstOrNull()
-                                    } else {
-                                        searchResult.items.firstOrNull {
-                                            it.contentType == MusicContentType.SONG
-                                        } ?: searchResult.items.firstOrNull {
-                                            it.contentType == MusicContentType.VIDEO
-                                        } ?: searchResult.items.firstOrNull()
-                                    }
+                                val songs = searchResult.items.filter { it.contentType == MusicContentType.SONG }
+                                val firstSong = songs.firstOrNull()
+                                val bestMatch = if (firstSong != null && SpotifyImportHelper.checkRelaxedMatch(cleanedTitle, firstSong.title)) {
+                                    firstSong
                                 } else {
-                                    val songs = searchResult.items.filter { it.contentType == MusicContentType.SONG }
-                                    val firstSong = songs.firstOrNull()
-                                    if (firstSong != null && SpotifyImportHelper.checkRelaxedMatch(cleanedTitle, firstSong.title)) {
-                                        firstSong
-                                    } else {
-                                        val videos = searchResult.items.filter { it.contentType == MusicContentType.VIDEO }
-                                        videos.firstOrNull() ?: firstSong ?: searchResult.items.firstOrNull()
-                                    }
+                                    val videos = searchResult.items.filter { it.contentType == MusicContentType.VIDEO }
+                                    videos.firstOrNull() ?: firstSong ?: searchResult.items.firstOrNull()
                                 }
 
                                 updateResolvedTrack(index) {

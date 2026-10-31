@@ -159,9 +159,6 @@ dependencies {
     // Extended Icons
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 
-    // Google AI Client SDK (Gemini)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
-    
     // Android Credential Manager
     implementation("androidx.credentials:credentials:1.2.2")
     implementation("androidx.credentials:credentials-play-services-auth:1.2.2")

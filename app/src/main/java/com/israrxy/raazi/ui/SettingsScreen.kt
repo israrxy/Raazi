@@ -60,9 +60,9 @@ internal enum class SettingsCategory(
         icon = Icons.AutoMirrored.Filled.VolumeUp
     ),
     LYRICS_AI(
-        title = "Lyrics & AI",
-        subtitle = "Translations & smart import",
-        icon = Icons.Filled.AutoAwesome
+        title = "Lyrics & Translation",
+        subtitle = "Google Neural translation & Hinglish",
+        icon = Icons.Filled.Translate
     ),
     DOWNLOADS(
         title = "Downloads & Storage",
@@ -114,11 +114,9 @@ fun SettingsScreen(
     val isScrobblingEnabled by settingsDataStore.lastfmScrobbleEnabled.collectAsStateWithLifecycle(initialValue = false)
     val lastFmMessage by viewModel.lastfmMessage.collectAsStateWithLifecycle()
 
-    // AI & Lyrics State
+    // Lyrics State
     val translateLyrics by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val targetLanguage by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
-    val optimizeImportWithGemini by settingsDataStore.useGeminiImport.collectAsStateWithLifecycle(initialValue = false)
-    val geminiApiKey by settingsDataStore.geminiApiKey.collectAsStateWithLifecycle(initialValue = null)
     val accentColorName by settingsDataStore.pastelAccent.collectAsStateWithLifecycle(initialValue = "Emerald")
 
     // Update State
@@ -145,7 +143,6 @@ fun SettingsScreen(
     var showResetSettingsDialog by remember { mutableStateOf(false) }
     var showLastFmLoginDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    var showApiKeyDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = selectedCategory != null) {
         selectedCategory = null
@@ -336,9 +333,6 @@ fun SettingsScreen(
                         translateLyrics = translateLyrics,
                         targetLanguage = targetLanguage,
                         onShowLanguageDialog = { showLanguageDialog = true },
-                        optimizeImportWithGemini = optimizeImportWithGemini,
-                        geminiApiKey = geminiApiKey,
-                        onShowApiKeyDialog = { showApiKeyDialog = true },
                         downloadQuality = downloadQuality,
                         onShowDownloadQualityDialog = { showDownloadQualityDialog = true },
                         wifiOnlyDownload = wifiOnlyDownload,
@@ -469,15 +463,6 @@ fun SettingsScreen(
             scope = scope,
             settingsDataStore = settingsDataStore,
             onDismiss = { showResetSettingsDialog = false }
-        )
-    }
-
-    if (showApiKeyDialog) {
-        SettingsGeminiApiKeyDialog(
-            geminiApiKey = geminiApiKey,
-            scope = scope,
-            settingsDataStore = settingsDataStore,
-            onDismiss = { showApiKeyDialog = false }
         )
     }
 

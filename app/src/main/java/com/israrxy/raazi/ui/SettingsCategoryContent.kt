@@ -67,9 +67,6 @@ internal fun SettingsCategoryDetailList(
     translateLyrics: Boolean,
     targetLanguage: String,
     onShowLanguageDialog: () -> Unit,
-    optimizeImportWithGemini: Boolean,
-    geminiApiKey: String?,
-    onShowApiKeyDialog: () -> Unit,
     downloadQuality: String,
     onShowDownloadQualityDialog: () -> Unit,
     wifiOnlyDownload: Boolean,
@@ -333,11 +330,11 @@ internal fun SettingsCategoryDetailList(
 
             SettingsCategory.LYRICS_AI -> {
                 item {
-                    SettingsSection(title = "Lyrics & AI") {
+                    SettingsSection(title = "Lyrics & Translation") {
                         SettingsSwitchItem(
                             icon = Icons.Filled.Translate,
                             title = "Translate Lyrics",
-                            subtitle = "Show translated lines below lyrics",
+                            subtitle = "Show Google Neural translated lines below lyrics",
                             checked = translateLyrics,
                             onCheckedChange = { enabled ->
                                 scope.launch { settingsDataStore.setLyricsTranslateEnabled(enabled) }
@@ -352,23 +349,6 @@ internal fun SettingsCategoryDetailList(
                                 onClick = onShowLanguageDialog
                             )
                         }
-                        SettingsDivider()
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.AutoAwesome,
-                            title = "Smart Playlist Import",
-                            subtitle = "Clean track metadata with Gemini",
-                            checked = optimizeImportWithGemini,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setUseGeminiImport(enabled) }
-                            }
-                        )
-                        SettingsDivider()
-                        SettingsActionItem(
-                            icon = Icons.Filled.Key,
-                            title = "Gemini API Key",
-                            subtitle = if (geminiApiKey.isNullOrBlank()) "Not configured" else "Configured",
-                            onClick = onShowApiKeyDialog
-                        )
                     }
                 }
             }

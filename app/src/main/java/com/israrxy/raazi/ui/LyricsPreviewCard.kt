@@ -41,9 +41,15 @@ fun SpotifyLyricsPreviewCard(
     onSeekToLine: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val activeIdx = remember(currentPosition, syncedLines) {
-        if (syncedLines.isEmpty()) -1
-        else syncedLines.indexOfLast { it.first <= currentPosition }.coerceAtLeast(0)
+    val cleanSyncedLines = remember(syncedLines) {
+        syncedLines.map { (timeMs, rawText) ->
+            timeMs to rawText.replace(STRIP_WORD_TAGS_REGEX, "").replace(Regex("\\s+"), " ").trim()
+        }
+    }
+
+    val activeIdx = remember(currentPosition, cleanSyncedLines) {
+        if (cleanSyncedLines.isEmpty()) -1
+        else cleanSyncedLines.indexOfLast { it.first <= currentPosition }.coerceAtLeast(0)
     }
 
     Card(
@@ -172,11 +178,11 @@ fun SpotifyLyricsPreviewCard(
                     }
                 }
 
-                syncedLines.isNotEmpty() && activeIdx >= 0 -> {
-                    val prevLine = syncedLines.getOrNull(activeIdx - 1)
-                    val currLine = syncedLines.getOrNull(activeIdx)
-                    val nextLine1 = syncedLines.getOrNull(activeIdx + 1)
-                    val nextLine2 = syncedLines.getOrNull(activeIdx + 2)
+                cleanSyncedLines.isNotEmpty() && activeIdx >= 0 -> {
+                    val prevLine = cleanSyncedLines.getOrNull(activeIdx - 1)
+                    val currLine = cleanSyncedLines.getOrNull(activeIdx)
+                    val nextLine1 = cleanSyncedLines.getOrNull(activeIdx + 1)
+                    val nextLine2 = cleanSyncedLines.getOrNull(activeIdx + 2)
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),

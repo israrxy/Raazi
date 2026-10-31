@@ -22,8 +22,6 @@ class SettingsDataStore(private val context: Context) {
         val CROSSFADE_DURATION_KEY = stringPreferencesKey("crossfade_duration")
         val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color_enabled")
         val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
-        val GEMINI_API_KEY_KEY = stringPreferencesKey("gemini_api_key")
-        val USE_GEMINI_IMPORT_KEY = booleanPreferencesKey("use_gemini_import")
         val BLUR_PLAYER_BACKGROUND_KEY = booleanPreferencesKey("blur_player_background")
         val PASTEL_ACCENT_KEY = stringPreferencesKey("pastel_accent")
         val IS_ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
@@ -125,12 +123,6 @@ class SettingsDataStore(private val context: Context) {
 
     val useDynamicColor: Flow<Boolean> = prefFlow(DYNAMIC_COLOR_KEY, false)
     suspend fun setDynamicColor(enabled: Boolean) = setPref(DYNAMIC_COLOR_KEY, enabled)
-
-    val geminiApiKey: Flow<String?> = nullablePrefFlow(GEMINI_API_KEY_KEY)
-    suspend fun setGeminiApiKey(key: String) = setPref(GEMINI_API_KEY_KEY, key)
-
-    val useGeminiImport: Flow<Boolean> = prefFlow(USE_GEMINI_IMPORT_KEY, false)
-    suspend fun setUseGeminiImport(enabled: Boolean) = setPref(USE_GEMINI_IMPORT_KEY, enabled)
 
     val blurPlayerBackground: Flow<Boolean> = prefFlow(BLUR_PLAYER_BACKGROUND_KEY, true)
     suspend fun setBlurPlayerBackground(enabled: Boolean) = setPref(BLUR_PLAYER_BACKGROUND_KEY, enabled)
