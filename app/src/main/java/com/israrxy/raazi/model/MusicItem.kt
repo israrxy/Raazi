@@ -25,7 +25,8 @@ data class MusicItem(
     val contentType: MusicContentType = MusicContentType.SONG,
     val setVideoId: String? = null,
     val isrc: String? = null,
-    val viewsText: String? = null
+    val viewsText: String? = null,
+    val albumTitle: String? = null
 )
 
 data class Playlist(

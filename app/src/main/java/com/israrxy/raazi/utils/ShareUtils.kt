@@ -14,7 +14,7 @@ object ShareUtils {
     fun buildTrackLink(trackId: String): String? {
         val cleanId = trackId.trim()
         if (cleanId.isBlank()) return null
-        return "$BASE_DOMAIN/play?id=${android.net.Uri.encode(cleanId)}"
+        return "$BASE_DOMAIN/?video=${android.net.Uri.encode(cleanId)}"
     }
 
     fun buildPlaylistLink(playlistId: String): String? {

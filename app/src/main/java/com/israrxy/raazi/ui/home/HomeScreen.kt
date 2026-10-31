@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -309,7 +310,12 @@ fun HomeScreen(
                                 HomeStatusHeader(
                                     activeCategoryTitle = selectedInnerTubeChip?.title,
                                     isRefreshing = homeFeedState.isRefreshing,
-                                    onRefresh = { viewModel.refreshHomeSection(section.id) }
+                                    onRefresh = { viewModel.refreshHomeSection(section.id) },
+                                    onShuffle = {
+                                        if (viewModel.shuffleHomeFeed()) {
+                                            onNavigateToPlayer()
+                                        }
+                                    }
                                 )
                                 HomeCategoryFilterBar(
                                     chips = allCategoryChips,

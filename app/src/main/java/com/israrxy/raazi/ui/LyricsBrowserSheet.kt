@@ -58,12 +58,6 @@ internal fun LyricsBrowserBottomSheet(
     var showCustomQueryInputs by remember { mutableStateOf(false) }
     var expandedResultKey by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (lyricsSearchResults.isEmpty() && !isLyricsSearchLoading && lyricsSearchTitle.isNotBlank()) {
-            viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
-        }
-    }
-
     val languages = remember(lyricsSearchResults) {
         listOf("All") + lyricsSearchResults
             .mapNotNull { it.lyrics.language?.takeIf { lang -> lang.isNotBlank() } }
@@ -106,6 +100,7 @@ internal fun LyricsBrowserBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.9f)
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp)
                 .padding(bottom = 18.dp),
@@ -343,8 +338,8 @@ internal fun LyricsBrowserBottomSheet(
                 else -> {
                     LazyColumn(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 420.dp),
+                            .weight(1f)
+                            .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(

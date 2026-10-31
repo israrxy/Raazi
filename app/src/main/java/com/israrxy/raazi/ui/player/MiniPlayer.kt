@@ -136,7 +136,22 @@ fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                        .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                        .pointerInput(track.id) {
+                            var dragDistance = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { change, amount ->
+                                    dragDistance += amount
+                                    change.consume()
+                                },
+                                onDragEnd = {
+                                    if (dragDistance < -48.dp.toPx()) viewModel.next()
+                                    else if (dragDistance > 48.dp.toPx()) viewModel.previous()
+                                    dragDistance = 0f
+                                },
+                                onDragCancel = { dragDistance = 0f }
+                            )
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -220,6 +235,7 @@ fun MiniPlayer(
                             )
                         }
                     }
+
                 }
 
                 MiniPlayerProgress(

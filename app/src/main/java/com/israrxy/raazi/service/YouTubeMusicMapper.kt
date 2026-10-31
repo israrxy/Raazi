@@ -262,7 +262,8 @@ internal fun convertYTItemToMusicItem(
                 artistId = item.artists.firstOrNull()?.id,
                 contentType = overrideContentType ?: if (item.isVideo) MusicContentType.VIDEO else MusicContentType.SONG,
                 setVideoId = item.setVideoId,
-                viewsText = item.viewsText
+                viewsText = item.viewsText,
+                albumTitle = item.album?.name
             )
         }
         is com.zionhuang.innertube.models.AlbumItem -> MusicItem(

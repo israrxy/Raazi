@@ -34,12 +34,9 @@ import com.israrxy.raazi.utils.ThumbnailUtils
 
 @Composable
 internal fun LyricsTopNavigationBar(
-    showOptionsMenu: Boolean,
-    selectedVariant: LyricsViewVariant,
-    showTranslation: Boolean,
     onClose: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
-    onToggleOptionsMenu: () -> Unit
+    onOpenTrackDetails: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -139,18 +136,17 @@ internal fun LyricsTopNavigationBar(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        val isOptionsActive = showOptionsMenu || selectedVariant != LyricsViewVariant.ORIGINAL || showTranslation
         Surface(
-            onClick = onToggleOptionsMenu,
+            onClick = onOpenTrackDetails,
             shape = CircleShape,
-            color = if (isOptionsActive) Color.White else Color.White.copy(alpha = 0.08f),
+            color = Color.White.copy(alpha = 0.08f),
             modifier = Modifier.size(38.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Default.MoreHoriz,
-                    contentDescription = "Lyrics options",
-                    tint = if (isOptionsActive) Color(0xFF09090B) else Color.White,
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Song details",
+                    tint = Color.White,
                     modifier = Modifier.size(20.dp)
                 )
             }

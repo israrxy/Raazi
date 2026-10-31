@@ -31,7 +31,14 @@ object LyricsTextVariants {
     private fun romanize(text: String): String {
         val transliterator = anyToLatin ?: return text
         return runCatching {
-            transliterator.transliterate(text)
+            val latin = synchronized(transliterator) { transliterator.transliterate(text) }
+            naturalizeHindi(latin)
         }.getOrDefault(text)
     }
+
+    // ICU's literal Devanagari transliteration often writes colloquial Hindi contractions
+    // as "tujhako". Prefer the spellings listeners expect to read while singing along.
+    private fun naturalizeHindi(text: String): String = text.replace(
+        Regex("\\b(tujh|mujh|tumh?|aap|is|us|kis)ako\\b", RegexOption.IGNORE_CASE)
+    ) { match -> "${match.groupValues[1]}ko" }
 }

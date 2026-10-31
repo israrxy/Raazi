@@ -57,7 +57,7 @@ fun YouTubeLoginScreen(
     var dataSyncId by remember { mutableStateOf<String?>(null) }
     var innerTubeCookie by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember {
-        mutableStateOf("Sign in to YouTube Music to sync likes and playlists into Raazi.")
+        mutableStateOf("Sign-in is optional. Connect YouTube Music to sync your likes and playlists and get recommendations from your account.")
     }
     var isFinalizing by remember { mutableStateOf(false) }
     var isWebViewLoading by remember { mutableStateOf(true) }

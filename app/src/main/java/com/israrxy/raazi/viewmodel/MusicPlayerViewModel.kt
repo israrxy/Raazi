@@ -354,6 +354,7 @@ class MusicPlayerViewModel(
 
     fun loadHomeContent() = loadHomeContentImpl()
     fun refreshHomeContent() = refreshHomeContentImpl()
+    fun shuffleHomeFeed(): Boolean = shuffleHomeFeedImpl()
     fun recordHomeInteraction(itemId: String, sectionId: String, action: String, sourceType: String) = recordHomeInteractionImpl(itemId, sectionId, action, sourceType)
     fun dismissHomeItem(itemId: String, sectionId: String, sourceType: String) = dismissHomeItemImpl(itemId, sectionId, sourceType)
     fun refreshHomeSection(sectionId: String) = refreshHomeSectionImpl(sectionId)
@@ -473,7 +474,7 @@ class MusicPlayerViewModel(
     fun finalizeSpotifyImport(playlistTitle: String, syncedToYouTube: Boolean) = finalizeSpotifyImportImpl(playlistTitle, syncedToYouTube)
     fun resetSpotifyImportState() { _spotifyImportState.value = SpotifyImportState.Idle; _resolvedSpotifyTracks.value = emptyList(); _spotifyPlaylistName.value = "" }
     fun consumeDeepLinkEvent() { _pendingDeepLinkEvent.value = null }
-    fun getShareLink(): String? = playbackState.value.currentTrack?.let { "https://raazi.pages.dev/play?id=${it.id}" }
+    fun getShareLink(): String? = playbackState.value.currentTrack?.let { "https://raazi.pages.dev/?video=${android.net.Uri.encode(it.id)}" }
     fun handleDeepLink(uri: Uri) = handleDeepLinkImpl(uri)
     override fun onCleared() { super.onCleared(); onClearedImpl() }
 

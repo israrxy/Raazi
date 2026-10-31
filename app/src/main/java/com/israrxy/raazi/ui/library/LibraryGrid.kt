@@ -18,7 +18,7 @@ internal fun LazyGridScope.LibraryGridContent(
     actions: LibraryActions,
     sync: LibrarySyncState
 ) {
-    fullSpan("header") { LibraryHeader(summary = state.summary, onOpenSettings = actions.openSettings) }
+    fullSpan("header") { LibraryHeader(summary = state.summary) }
     fullSpan("search") { LibrarySearchField(query = state.query, onQueryChange = actions.search) }
     fullSpan("filters") {
         LibraryFilterBar(

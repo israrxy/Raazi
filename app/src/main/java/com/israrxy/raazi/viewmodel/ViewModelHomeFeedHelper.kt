@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.MusicContentType
+import com.israrxy.raazi.service.convertYTItemToMusicItem
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.AlbumItem
 import com.zionhuang.innertube.models.ArtistItem
@@ -108,6 +110,24 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
             rebuildHomeFeedState()
         }
     }
+}
+
+internal fun MusicPlayerViewModel.shuffleHomeFeedImpl(): Boolean {
+    val tracks = _homeFeedState.value.sections
+        .flatMap { section -> section.items.flatMap { item ->
+            when (item) {
+                is HomeFeedItem.Music -> listOf(item.item)
+                is HomeFeedItem.YouTube -> (item.item as? SongItem)
+                    ?.let { convertYTItemToMusicItem(it, MusicContentType.SONG) }
+                    ?.let(::listOf).orEmpty()
+                is HomeFeedItem.PlaylistResult -> item.playlist.items
+                is HomeFeedItem.Mood -> emptyList()
+            }
+        } }
+        .distinctBy { it.id }
+    if (tracks.isEmpty()) return false
+    playPlaylist(tracks.shuffled(), 0)
+    return true
 }
 
 internal fun MusicPlayerViewModel.refreshHomeContentImpl() {

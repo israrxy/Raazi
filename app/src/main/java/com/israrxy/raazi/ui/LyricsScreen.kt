@@ -13,6 +13,9 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -93,6 +96,7 @@ fun LyricsScreen(
     var translatedPlain by remember { mutableStateOf<String?>(null) }
 
     var showOptionsMenu by remember { mutableStateOf(false) }
+    var showTrackDetails by remember { mutableStateOf(false) }
     var selectedVariant by remember(currentTrack?.id) { mutableStateOf(LyricsViewVariant.ORIGINAL) }
 
     val rawSourceText = remember(lyrics) {
@@ -238,7 +242,7 @@ fun LyricsScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF09090B))) {
         if (currentTrack != null) {
             val isAndroid12 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             AsyncImage(
@@ -296,15 +300,12 @@ fun LyricsScreen(
                 .navigationBarsPadding()
         ) {
             LyricsTopNavigationBar(
-                showOptionsMenu = showOptionsMenu,
-                selectedVariant = selectedVariant,
-                showTranslation = showTranslation,
                 onClose = onClose,
                 onOpenLyricsBrowser = {
                     showOptionsMenu = false
                     onOpenLyricsBrowser()
                 },
-                onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu }
+                onOpenTrackDetails = { showTrackDetails = true }
             )
 
             LyricsNowPlayingStrip(
@@ -394,6 +395,37 @@ fun LyricsScreen(
                 },
                 onToggleShuffle = { viewModel.toggleShuffle() },
                 onToggleRepeat = { viewModel.toggleRepeat() }
+            )
+        }
+
+        if (showTrackDetails && currentTrack != null) {
+            val contentLabel = when (currentTrack.contentType) {
+                com.israrxy.raazi.model.MusicContentType.VIDEO -> "Music video"
+                com.israrxy.raazi.model.MusicContentType.ALBUM -> "Album"
+                com.israrxy.raazi.model.MusicContentType.PLAYLIST -> "Playlist"
+                com.israrxy.raazi.model.MusicContentType.ARTIST -> "Artist"
+                else -> "Song"
+            }
+            AlertDialog(
+                onDismissRequest = { showTrackDetails = false },
+                title = { Text("Song details") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(currentTrack.title)
+                        Text(currentTrack.artist, color = Color.White.copy(alpha = 0.72f))
+                        currentTrack.albumTitle?.takeIf { it.isNotBlank() }?.let { album ->
+                            Text("Album · $album", color = Color.White.copy(alpha = 0.72f))
+                        }
+                        Text("Type · $contentLabel", color = Color.White.copy(alpha = 0.72f))
+                        Text("Lyrics · ${lyrics?.source ?: "Not found"}", color = Color.White.copy(alpha = 0.72f))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showTrackDetails = false }) { Text("Done") }
+                },
+                containerColor = Color(0xFF18181B),
+                titleContentColor = Color.White,
+                textContentColor = Color.White
             )
         }
     }

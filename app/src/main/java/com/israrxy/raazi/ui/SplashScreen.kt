@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -32,36 +33,37 @@ import kotlinx.coroutines.launch
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
     val context = LocalContext.current
-    val scale = remember { androidx.compose.animation.core.Animatable(0.5f) }
+    val scale = remember { androidx.compose.animation.core.Animatable(0.82f) }
     val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
 
     LaunchedEffect(key1 = true) {
         // Parallel Animation
         launch {
             scale.animateTo(
-                targetValue = 1.2f, // Slight overscale
-                animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                targetValue = 1.045f,
+                animationSpec = tween(durationMillis = 620, easing = FastOutSlowInEasing)
             )
             scale.animateTo(
-                targetValue = 1.0f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
             )
         }
         launch {
-            alpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(1000)
-            )
+            alpha.animateTo(targetValue = 1f, animationSpec = tween(700))
         }
-        
-        delay(3000) // Hold for 3 seconds
+        delay(1700)
         onSplashFinished()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black), // Deep black background
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF17211F), Color(0xFF08090B)),
+                    radius = 900f
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
         // Raazi Logo Animation

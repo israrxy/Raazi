@@ -117,6 +117,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val scope = rememberCoroutineScope()
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
+    val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsStateWithLifecycle()
+    LaunchedEffect(isYouTubeLoggedIn) {
+        if (isYouTubeLoggedIn) viewModel.syncYouTubeLibrary()
+    }
 
     val onRingtoneScreen = currentDestination?.route == "ringtone_trimmer"
     val showBottomBar = currentDestination.isTopLevelDestination() &&

@@ -8,10 +8,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,7 +36,8 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 fun HomeStatusHeader(
     activeCategoryTitle: String? = null,
     isRefreshing: Boolean,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onShuffle: (() -> Unit)? = null
 ) {
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = when (hour) {
@@ -38,6 +48,12 @@ fun HomeStatusHeader(
         else -> "Good Night"
     }
     val context = androidx.compose.ui.platform.LocalContext.current
+    var shuffleTurns by remember { mutableIntStateOf(0) }
+    val diceRotation by animateFloatAsState(
+        targetValue = shuffleTurns * 360f,
+        animationSpec = tween(durationMillis = 560),
+        label = "home-shuffle-dice"
+    )
 
     Column(
         modifier = Modifier
@@ -100,12 +116,34 @@ fun HomeStatusHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = activeCategoryTitle ?: greeting,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = activeCategoryTitle ?: greeting,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            if (onShuffle != null) {
+                IconButton(
+                    onClick = {
+                        shuffleTurns++
+                        onShuffle()
+                    },
+                    enabled = !isRefreshing,
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Casino,
+                        contentDescription = "Shuffle home feed",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .size(23.dp)
+                            .graphicsLayer { rotationZ = diceRotation }
+                    )
+                }
+            }
+        }
     }
 }
 

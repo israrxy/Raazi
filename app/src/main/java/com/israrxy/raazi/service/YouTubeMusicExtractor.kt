@@ -287,7 +287,9 @@ class YouTubeMusicExtractor private constructor() {
                 normalizedPlaylistId.startsWith("RD")
             ) {
                 val playlist = com.zionhuang.innertube.YouTube.playlist(normalizedPlaylistId).getOrThrow()
-                val items = playlist.songs.mapNotNull { convertYTItemToMusicItem(it) }
+                val items = playlist.songs.mapNotNull {
+                    convertYTItemToMusicItem(it, overrideContentType = MusicContentType.SONG)
+                }
                 return@withContext Playlist(
                     id = normalizedPlaylistId,
                     title = "Playlist",

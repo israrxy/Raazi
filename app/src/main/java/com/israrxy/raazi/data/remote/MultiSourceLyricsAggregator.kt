@@ -247,7 +247,7 @@ class MultiSourceLyricsAggregator(
     }
 
     companion object {
-        private const val PROVIDER_TIMEOUT_MS = 4800L
+        private const val PROVIDER_TIMEOUT_MS = 3200L
         private const val MIN_METADATA_SCORE = 52
         private val WORD_TAG_REGEX = Regex("""<\d+:\d+(?:\.\d+)?>""")
 
