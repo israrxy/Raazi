@@ -1,11 +1,18 @@
 package com.israrxy.raazi.ui.library
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -254,7 +261,15 @@ fun LibraryScreen(
             }
         }
 
-        if (isTrackSelectionMode) {
+        AnimatedVisibility(
+            visible = isTrackSelectionMode,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
             LibrarySelectionBottomBar(
                 selectedCount = selectedTracks.size,
                 onCancel = {
@@ -272,14 +287,19 @@ fun LibraryScreen(
                     selectedTracks.clear()
                     isTrackSelectionMode = false
                 },
-                deleteLabel = "Delete from history",
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = if (playbackState.currentTrack != null) 80.dp else 16.dp)
+                deleteLabel = "Delete from history"
             )
         }
 
-        if (isPlaylistSelectionMode) {
+        AnimatedVisibility(
+            visible = isPlaylistSelectionMode,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
             LibrarySelectionBottomBar(
                 selectedCount = selectedPlaylists.size,
                 onCancel = {
@@ -293,10 +313,7 @@ fun LibraryScreen(
                     selectedPlaylists.clear()
                     isPlaylistSelectionMode = false
                 },
-                deleteLabel = "Delete playlists",
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = if (playbackState.currentTrack != null) 80.dp else 16.dp)
+                deleteLabel = "Delete playlists"
             )
         }
     }

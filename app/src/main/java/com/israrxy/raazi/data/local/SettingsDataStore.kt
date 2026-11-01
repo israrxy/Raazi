@@ -60,6 +60,10 @@ class SettingsDataStore(private val context: Context) {
         val PREFERRED_LYRICS_TYPE_KEY = stringPreferencesKey("preferred_lyrics_type")
         val LYRICS_AUTO_SCROLL_KEY = booleanPreferencesKey("lyrics_auto_scroll")
         val DEFAULT_LYRICS_VIEW_KEY = stringPreferencesKey("default_lyrics_view")
+        val DOUBLE_TAP_SEEK_DURATION_KEY = stringPreferencesKey("double_tap_seek_duration")
+        val KEEP_SCREEN_AWAKE_KEY = booleanPreferencesKey("keep_screen_awake")
+        val PAUSE_ON_DISCONNECT_KEY = booleanPreferencesKey("pause_on_disconnect")
+        val SAVE_SEARCH_HISTORY_KEY = booleanPreferencesKey("save_search_history")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -101,6 +105,18 @@ class SettingsDataStore(private val context: Context) {
 
     val defaultLyricsView: Flow<String> = prefFlow(DEFAULT_LYRICS_VIEW_KEY, "KARAOKE")
     suspend fun setDefaultLyricsView(view: String) = setPref(DEFAULT_LYRICS_VIEW_KEY, view)
+
+    val doubleTapSeekDuration: Flow<String> = prefFlow(DOUBLE_TAP_SEEK_DURATION_KEY, "10")
+    suspend fun setDoubleTapSeekDuration(duration: String) = setPref(DOUBLE_TAP_SEEK_DURATION_KEY, duration)
+
+    val keepScreenAwake: Flow<Boolean> = prefFlow(KEEP_SCREEN_AWAKE_KEY, false)
+    suspend fun setKeepScreenAwake(enabled: Boolean) = setPref(KEEP_SCREEN_AWAKE_KEY, enabled)
+
+    val pauseOnDisconnect: Flow<Boolean> = prefFlow(PAUSE_ON_DISCONNECT_KEY, true)
+    suspend fun setPauseOnDisconnect(enabled: Boolean) = setPref(PAUSE_ON_DISCONNECT_KEY, enabled)
+
+    val saveSearchHistory: Flow<Boolean> = prefFlow(SAVE_SEARCH_HISTORY_KEY, true)
+    suspend fun setSaveSearchHistory(enabled: Boolean) = setPref(SAVE_SEARCH_HISTORY_KEY, enabled)
 
     val lastfmScrobbleEnabled: Flow<Boolean> = prefFlow(LASTFM_SCROBBLE_ENABLED_KEY, false)
     suspend fun setLastfmScrobbleEnabled(enabled: Boolean) = setPref(LASTFM_SCROBBLE_ENABLED_KEY, enabled)

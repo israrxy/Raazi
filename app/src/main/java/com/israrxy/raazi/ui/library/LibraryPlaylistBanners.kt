@@ -233,6 +233,12 @@ private fun PlaylistArtworkMosaic(
         contentAlignment = Alignment.Center
     ) {
         when {
+            isLiked && artworkUrls.isEmpty() -> Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
+            )
             artworkUrls.isEmpty() -> Icon(
                 imageVector = Icons.Outlined.QueueMusic,
                 contentDescription = null,

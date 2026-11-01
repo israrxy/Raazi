@@ -43,17 +43,17 @@ internal fun LazyListScope.LibraryListContent(
         }
     }
 
-    if (state.isEmptyLibrary) {
-        item("empty") { LibraryEmptyState(actions = actions) }
-        return
-    }
-
     if (state.isNoResults) {
         item("no_results") { LibraryNoResultsState(query = state.query, actions = actions) }
         return
     }
 
     renderPlaylists(state, actions)
+
+    if (state.isEmptyLibrary) {
+        item("empty") { LibraryEmptyState(actions = actions) }
+        return
+    }
 
     if (state.filter == LibraryFilter.SONGS || state.query.isNotBlank()) {
         renderSongs(

@@ -83,72 +83,15 @@ fun HomeScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            AnimatedVisibility(
-                visible = isHomeSelectionMode,
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                    tonalElevation = 6.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "${selectedHomeTracks.size} selected",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = {
-                            if (selectedHomeTracks.isNotEmpty()) {
-                                viewModel.playPlaylist(selectedHomeTracks.toList(), 0)
-                                exitHomeSelection()
-                                onNavigateToPlayer()
-                            }
-                        }) {
-                            Icon(Icons.Filled.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        IconButton(onClick = {
-                            if (selectedHomeTracks.isNotEmpty()) {
-                                viewModel.addToQueue(selectedHomeTracks.toList())
-                                exitHomeSelection()
-                            }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        IconButton(onClick = {
-                            if (selectedHomeTracks.isNotEmpty()) {
-                                bulkAddToPlaylist = selectedHomeTracks.toList()
-                            }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        IconButton(onClick = {
-                            selectedHomeTracks.forEach { viewModel.downloadTrack(it) }
-                            exitHomeSelection()
-                        }) {
-                            Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        IconButton(onClick = exitHomeSelection) {
-                            Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
-                }
-            }
-
-            val allCategoryChips = remember(homePage?.chips) {
+                val allCategoryChips = remember(homePage?.chips) {
                 val dynamicChips = homePage?.chips.orEmpty()
                 val defaultTitles = listOf("Podcasts", "Party", "Relax", "Workout", "Focus", "Romance", "Sleep")
                 val merged = mutableListOf<com.zionhuang.innertube.pages.HomePage.Chip>()
@@ -423,6 +366,70 @@ fun HomeScreen(
                             ) {
                                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             }
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isHomeSelectionMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${selectedHomeTracks.size} selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                viewModel.playPlaylist(selectedHomeTracks.toList(), 0)
+                                exitHomeSelection()
+                                onNavigateToPlayer()
+                            }
+                        }) {
+                            Icon(Icons.Filled.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                viewModel.addToQueue(selectedHomeTracks.toList())
+                                exitHomeSelection()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        IconButton(onClick = {
+                            if (selectedHomeTracks.isNotEmpty()) {
+                                bulkAddToPlaylist = selectedHomeTracks.toList()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = {
+                            selectedHomeTracks.forEach { viewModel.downloadTrack(it) }
+                            exitHomeSelection()
+                        }) {
+                            Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        IconButton(onClick = exitHomeSelection) {
+                            Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
