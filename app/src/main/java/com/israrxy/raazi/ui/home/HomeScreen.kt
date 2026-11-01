@@ -370,8 +370,9 @@ fun HomeScreen(
                     }
                 }
             }
+        }
 
-            AnimatedVisibility(
+        AnimatedVisibility(
                 visible = isHomeSelectionMode,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
