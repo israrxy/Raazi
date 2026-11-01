@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,7 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +40,7 @@ import com.israrxy.raazi.data.db.PlaylistWithTracks
 import com.israrxy.raazi.data.playlist.isYouTubeEditablePlaylist
 import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
 
 internal data class LibraryPlaylistBannerUi(
     val key: String,
@@ -44,6 +48,8 @@ internal data class LibraryPlaylistBannerUi(
     val subtitle: String,
     val artworkUrls: List<String>,
     val isLiked: Boolean,
+    val isSelected: Boolean = false,
+    val isSelectionMode: Boolean = false,
     val menu: List<LibraryMenuItem>,
     val onClick: () -> Unit,
     val onLongClick: (() -> Unit)? = null
@@ -72,9 +78,12 @@ internal fun likedPlaylistBanner(
 
 internal fun PlaylistWithTracks.toPlaylistBannerUi(
     playCounts: Map<String, Int>,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     onOpen: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onLongClick: (() -> Unit)? = onRename
 ): LibraryPlaylistBannerUi {
     val subtitle = when {
         playlist.isYouTubeSyncedPlaylist() && playlist.isYouTubeEditablePlaylist() ->
@@ -91,12 +100,14 @@ internal fun PlaylistWithTracks.toPlaylistBannerUi(
             playCounts = playCounts
         ),
         isLiked = false,
+        isSelected = isSelected,
+        isSelectionMode = isSelectionMode,
         menu = listOf(
             LibraryMenuItem("Rename", onRename),
             LibraryMenuItem("Delete", onDelete, destructive = true)
         ),
         onClick = onOpen,
-        onLongClick = onRename
+        onLongClick = onLongClick
     )
 }
 
@@ -116,52 +127,95 @@ internal fun LibraryPlaylistBanner(
     item: LibraryPlaylistBannerUi,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    val coverUrl = item.artworkUrls.firstOrNull().orEmpty()
+    val dominantColor = rememberPlaylistDominantColor(
+        coverUrl = coverUrl,
+        fallbackColor = MaterialTheme.colorScheme.primary
+    )
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .combinedClickable(onClick = item.onClick, onLongClick = item.onLongClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        PlaylistArtworkMosaic(
-            artworkUrls = item.artworkUrls,
-            isLiked = item.isLiked,
-            modifier = Modifier.size(88.dp)
-        )
-
-        Spacer(Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = item.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        if (coverUrl.isNotBlank()) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .matchParentSize()
+                    .blur(28.dp),
+                contentScale = ContentScale.Crop,
+                alpha = 0.22f
             )
         }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            dominantColor.copy(alpha = 0.26f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
+                        )
+                    )
+                )
+        )
 
-        if (item.menu.isNotEmpty()) {
-            OverflowMenuButton(
-                items = item.menu,
-                contentDescription = "Options for ${item.title}"
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (item.isSelectionMode && !item.isLiked) {
+                Checkbox(
+                    checked = item.isSelected,
+                    onCheckedChange = { item.onClick() },
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            }
+
+            PlaylistArtworkMosaic(
+                artworkUrls = item.artworkUrls,
+                isLiked = item.isLiked,
+                modifier = Modifier.size(88.dp)
             )
-        } else {
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = item.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (item.menu.isNotEmpty()) {
+                OverflowMenuButton(
+                    items = item.menu,
+                    contentDescription = "Options for ${item.title}"
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

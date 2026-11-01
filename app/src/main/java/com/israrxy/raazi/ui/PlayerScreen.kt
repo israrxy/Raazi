@@ -252,7 +252,11 @@ fun PlayerScreen(
                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
                 },
                 topBar = {
-                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                    ) {
                         PlayerTopModeHeader(
                             playbackState = playbackState,
                             isLyricsVisible = true,

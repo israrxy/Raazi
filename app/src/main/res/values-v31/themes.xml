@@ -3,7 +3,7 @@
 
     <style name="Theme.Raazi" parent="Theme.Raazi.Base">
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_animated</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/raazi_logo</item>
         <item name="android:windowSplashScreenAnimationDuration">520</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
     </style>

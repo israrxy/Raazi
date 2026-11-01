@@ -229,6 +229,12 @@ fun SettingsScreen(
                     }
 
                     item {
+                        SettingsSupportBanner(
+                            onClick = { launchUpiSupport(context) }
+                        )
+                    }
+
+                    item {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
@@ -384,10 +390,7 @@ fun SettingsScreen(
             title = "Streaming Audio Quality",
             options = listOf("Low", "Normal", "High", "Very High"),
             selectedOption = audioQuality,
-            onOptionSelected = { selected ->
-                scope.launch { settingsDataStore.setAudioQuality(selected) }
-                showAudioQualityDialog = false
-            },
+            onOptionSelected = { selected -> scope.launch { settingsDataStore.setAudioQuality(selected) }; showAudioQualityDialog = false },
             onDismiss = { showAudioQualityDialog = false }
         )
     }
@@ -397,10 +400,7 @@ fun SettingsScreen(
             title = "Download Quality",
             options = listOf("Low", "Normal", "High", "Very High"),
             selectedOption = downloadQuality,
-            onOptionSelected = { selected ->
-                scope.launch { settingsDataStore.setDownloadQuality(selected) }
-                showDownloadQualityDialog = false
-            },
+            onOptionSelected = { selected -> scope.launch { settingsDataStore.setDownloadQuality(selected) }; showDownloadQualityDialog = false },
             onDismiss = { showDownloadQualityDialog = false }
         )
     }
@@ -410,10 +410,7 @@ fun SettingsScreen(
             title = "Theme Mode",
             options = listOf("System", "Light", "Dark"),
             selectedOption = appTheme,
-            onOptionSelected = { selected ->
-                scope.launch { settingsDataStore.setThemeMode(selected) }
-                showThemeDialog = false
-            },
+            onOptionSelected = { selected -> scope.launch { settingsDataStore.setThemeMode(selected) }; showThemeDialog = false },
             onDismiss = { showThemeDialog = false }
         )
     }

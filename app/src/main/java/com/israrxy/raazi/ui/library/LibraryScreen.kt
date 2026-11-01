@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -79,6 +80,13 @@ fun LibraryScreen(
 
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    val selectedTracks = remember { mutableStateListOf<MusicItem>() }
+    val selectedPlaylists = remember { mutableStateListOf<String>() }
+    var isTrackSelectionMode by remember { mutableStateOf(false) }
+    var isPlaylistSelectionMode by remember { mutableStateOf(false) }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var tracksForPlaylistAdd by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
 
     val state = remember(liked, history, downloads, playlists, saved, playCounts, query, filter, sort) {
         LibraryUiState(
@@ -150,7 +158,43 @@ fun LibraryScreen(
         playTracks = { tracks, startIndex ->
             viewModel.playPlaylist(tracks, startIndex)
             onNavigateToPlayer()
-        }
+        },
+        addToPlaylist = { track ->
+            tracksForPlaylistAdd = listOf(track)
+            showAddToPlaylistDialog = true
+        },
+        onTrackLongClick = { track ->
+            if (!isTrackSelectionMode) {
+                isTrackSelectionMode = true
+                selectedTracks.clear()
+                selectedTracks.add(track)
+            } else {
+                if (selectedTracks.contains(track)) {
+                    selectedTracks.remove(track)
+                    if (selectedTracks.isEmpty()) isTrackSelectionMode = false
+                } else {
+                    selectedTracks.add(track)
+                }
+            }
+        },
+        isTrackSelected = { track -> selectedTracks.contains(track) },
+        isTrackSelectionMode = isTrackSelectionMode,
+        onPlaylistLongClick = { playlistId ->
+            if (!isPlaylistSelectionMode) {
+                isPlaylistSelectionMode = true
+                selectedPlaylists.clear()
+                selectedPlaylists.add(playlistId)
+            } else {
+                if (selectedPlaylists.contains(playlistId)) {
+                    selectedPlaylists.remove(playlistId)
+                    if (selectedPlaylists.isEmpty()) isPlaylistSelectionMode = false
+                } else {
+                    selectedPlaylists.add(playlistId)
+                }
+            }
+        },
+        isPlaylistSelected = { playlistId -> selectedPlaylists.contains(playlistId) },
+        isPlaylistSelectionMode = isPlaylistSelectionMode
     )
 
     val sync = LibrarySyncState(
@@ -188,17 +232,86 @@ fun LibraryScreen(
             LibraryListContent(state = state, actions = actions, sync = sync)
         }
 
-        FloatingActionButton(
-            onClick = actions.createPlaylist,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = 20.dp,
-                    bottom = if (playbackState.currentTrack != null) 90.dp else 20.dp
-                )
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "New playlist")
+        if (!isTrackSelectionMode && !isPlaylistSelectionMode) {
+            FloatingActionButton(
+                onClick = actions.createPlaylist,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = 20.dp,
+                        bottom = if (playbackState.currentTrack != null) 90.dp else 20.dp
+                    )
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New playlist")
+            }
         }
+
+        if (isTrackSelectionMode) {
+            LibrarySelectionBottomBar(
+                selectedCount = selectedTracks.size,
+                onCancel = {
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                },
+                onAddToPlaylist = {
+                    tracksForPlaylistAdd = selectedTracks.toList()
+                    showAddToPlaylistDialog = true
+                },
+                onDelete = {
+                    val count = selectedTracks.size
+                    viewModel.removeTracksFromHistory(selectedTracks.toList())
+                    Toast.makeText(context, "Removed $count tracks from history", Toast.LENGTH_SHORT).show()
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                },
+                deleteLabel = "Delete from history",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (playbackState.currentTrack != null) 80.dp else 16.dp)
+            )
+        }
+
+        if (isPlaylistSelectionMode) {
+            LibrarySelectionBottomBar(
+                selectedCount = selectedPlaylists.size,
+                onCancel = {
+                    selectedPlaylists.clear()
+                    isPlaylistSelectionMode = false
+                },
+                onDelete = {
+                    val count = selectedPlaylists.size
+                    selectedPlaylists.forEach { id -> viewModel.deletePlaylist(id) }
+                    Toast.makeText(context, "Deleted $count playlists", Toast.LENGTH_SHORT).show()
+                    selectedPlaylists.clear()
+                    isPlaylistSelectionMode = false
+                },
+                deleteLabel = "Delete playlists",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (playbackState.currentTrack != null) 80.dp else 16.dp)
+            )
+        }
+    }
+
+    if (showAddToPlaylistDialog && tracksForPlaylistAdd.isNotEmpty()) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = viewModel,
+            tracksToAdd = tracksForPlaylistAdd,
+            onDismiss = {
+                showAddToPlaylistDialog = false
+                tracksForPlaylistAdd = emptyList()
+            },
+            onPlaylistSelected = { targetPlaylist ->
+                viewModel.addToPlaylist(tracksForPlaylistAdd, targetPlaylist)
+                Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
+                showAddToPlaylistDialog = false
+                tracksForPlaylistAdd = emptyList()
+                if (isTrackSelectionMode) {
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                }
+            }
+        )
     }
 
     if (showCreateDialog) {

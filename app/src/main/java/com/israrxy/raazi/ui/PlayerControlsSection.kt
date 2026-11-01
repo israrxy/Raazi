@@ -35,6 +35,7 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.model.RepeatMode
+import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.ui.theme.Zinc500
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -56,6 +57,10 @@ internal fun PlayerControlsAndActionsSection(
 ) {
     val context = LocalContext.current
     val currentTrack = playbackState.currentTrack
+    val songAccentColor = rememberPlaylistDominantColor(
+        coverUrl = currentTrack?.thumbnailUrl.orEmpty(),
+        fallbackColor = MaterialTheme.colorScheme.primary
+    )
     val isPlaying = playbackState.isPlaying
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -201,7 +206,7 @@ internal fun PlayerControlsAndActionsSection(
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.78f),
+                    tint = if (shuffleEnabled) songAccentColor else Color.White.copy(alpha = 0.78f),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -285,7 +290,7 @@ internal fun PlayerControlsAndActionsSection(
                     contentDescription = "Repeat",
                     tint = when (playbackState.repeatMode) {
                         RepeatMode.OFF -> Color.White.copy(alpha = 0.78f)
-                        else -> MaterialTheme.colorScheme.primary
+                        else -> songAccentColor
                     },
                     modifier = Modifier.size(24.dp)
                 )

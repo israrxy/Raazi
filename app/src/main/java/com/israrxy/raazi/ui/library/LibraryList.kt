@@ -114,12 +114,22 @@ private fun LazyListScope.renderPlaylists(
             )
         }
         state.visibleUserPlaylists.forEach { entry ->
+            val isSelected = actions.isPlaylistSelected(entry.playlist.id)
             add(
                 entry.toPlaylistBannerUi(
                     playCounts = state.playCounts,
-                    onOpen = { actions.openPlaylist(entry.playlist.id) },
+                    isSelected = isSelected,
+                    isSelectionMode = actions.isPlaylistSelectionMode,
+                    onOpen = {
+                        if (actions.isPlaylistSelectionMode) {
+                            actions.onPlaylistLongClick?.invoke(entry.playlist.id)
+                        } else {
+                            actions.openPlaylist(entry.playlist.id)
+                        }
+                    },
                     onRename = { actions.renamePlaylist(entry.playlist.id) },
-                    onDelete = { actions.deletePlaylist(entry.playlist.id) }
+                    onDelete = { actions.deletePlaylist(entry.playlist.id) },
+                    onLongClick = actions.onPlaylistLongClick?.let { { it(entry.playlist.id) } }
                 )
             )
         }
@@ -174,7 +184,11 @@ private fun LazyListScope.renderSongs(
         preview = preview,
         queue = queue,
         keyPrefix = keyPrefix,
+        isSelected = actions.isTrackSelected,
+        isSelectionMode = actions.isTrackSelectionMode,
         onPlay = actions.playTracks,
+        onLongClick = actions.onTrackLongClick,
+        onAddToPlaylist = actions.addToPlaylist,
         onRemove = if (keyPrefix == "history") actions.removeHistoryTrack else null
     )
     items(rows, key = { it.key }) { item ->

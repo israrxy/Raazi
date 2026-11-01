@@ -71,7 +71,14 @@ data class LibraryActions(
     val removeSavedCollection: (SavedCollectionItem) -> Unit,
     val removeSavedArtist: (SavedCollectionItem) -> Unit,
     val removeHistoryTrack: (MusicItem) -> Unit,
-    val playTracks: (tracks: List<MusicItem>, startIndex: Int) -> Unit
+    val playTracks: (tracks: List<MusicItem>, startIndex: Int) -> Unit,
+    val addToPlaylist: (MusicItem) -> Unit = {},
+    val onTrackLongClick: ((MusicItem) -> Unit)? = null,
+    val isTrackSelected: (MusicItem) -> Boolean = { false },
+    val isTrackSelectionMode: Boolean = false,
+    val isPlaylistSelected: (String) -> Boolean = { false },
+    val isPlaylistSelectionMode: Boolean = false,
+    val onPlaylistLongClick: ((String) -> Unit)? = null
 )
 
 /**

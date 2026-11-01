@@ -154,7 +154,7 @@ interface MusicDao {
     fun deletePlaybackHistoryByTrackId(trackId: String): Int
 
     // Search History
-    @Query("SELECT * FROM search_history WHERE query LIKE :query || '%' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM search_history WHERE query LIKE '%' || :query || '%' OR (resultTitle IS NOT NULL AND resultTitle LIKE '%' || :query || '%') ORDER BY timestamp DESC")
     fun searchHistory(query: String = ""): Flow<List<SearchHistoryEntity>>
 
     @Transaction

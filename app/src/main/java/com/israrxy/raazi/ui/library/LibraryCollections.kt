@@ -1,7 +1,9 @@
 package com.israrxy.raazi.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,10 +21,12 @@ import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -129,7 +133,11 @@ internal fun LibraryCollectionRow(
 internal data class LibrarySongUi(
     val key: String,
     val track: MusicItem,
+    val isSelected: Boolean = false,
+    val isSelectionMode: Boolean = false,
     val onClick: () -> Unit,
+    val onLongClick: (() -> Unit)? = null,
+    val onAddToPlaylist: (() -> Unit)? = null,
     val onRemove: (() -> Unit)? = null
 )
 
@@ -142,18 +150,34 @@ internal fun buildSongUi(
     preview: List<MusicItem>,
     queue: List<MusicItem>,
     keyPrefix: String,
+    isSelected: (MusicItem) -> Boolean = { false },
+    isSelectionMode: Boolean = false,
     onPlay: (List<MusicItem>, Int) -> Unit,
+    onLongClick: ((MusicItem) -> Unit)? = null,
+    onAddToPlaylist: ((MusicItem) -> Unit)? = null,
     onRemove: ((MusicItem) -> Unit)? = null
 ): List<LibrarySongUi> = preview.map { track ->
+    val selected = isSelected(track)
     LibrarySongUi(
         key = "${keyPrefix}_${track.id}",
         track = track,
-        onClick = { onPlay(queue, queue.indexOf(track).coerceAtLeast(0)) },
+        isSelected = selected,
+        isSelectionMode = isSelectionMode,
+        onClick = {
+            if (isSelectionMode && onLongClick != null) {
+                onLongClick(track)
+            } else {
+                onPlay(queue, queue.indexOf(track).coerceAtLeast(0))
+            }
+        },
+        onLongClick = onLongClick?.let { longClick -> { longClick(track) } },
+        onAddToPlaylist = onAddToPlaylist?.let { add -> { add(track) } },
         onRemove = onRemove?.let { remove -> { remove(track) } }
     )
 }
 
 /** Artwork + title + artist + duration. No chevron: tapping here plays. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LibrarySongRow(
     item: LibrarySongUi,
@@ -163,10 +187,25 @@ internal fun LibrarySongRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = item.onClick)
+            .background(
+                if (item.isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                else Color.Transparent
+            )
+            .combinedClickable(
+                onClick = item.onClick,
+                onLongClick = item.onLongClick
+            )
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (item.isSelectionMode) {
+            Checkbox(
+                checked = item.isSelected,
+                onCheckedChange = { item.onClick() },
+                modifier = Modifier.padding(end = 6.dp)
+            )
+        }
+
         Box(
             modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -218,10 +257,23 @@ internal fun LibrarySongRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        item.onRemove?.let { remove ->
-            IconButton(onClick = remove) {
-                Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove from history", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (!item.isSelectionMode) {
+            val menuItems = buildList {
+                item.onAddToPlaylist?.let { add ->
+                    add(LibraryMenuItem("Add to playlist", add))
+                }
+                item.onRemove?.let { remove ->
+                    add(LibraryMenuItem("Delete from history", remove, destructive = true))
+                }
+            }
+            if (menuItems.isNotEmpty()) {
+                OverflowMenuButton(
+                    items = menuItems,
+                    contentDescription = "Options for ${item.track.title}"
+                )
             }
         }
+    }
     }
 }

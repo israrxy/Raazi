@@ -73,10 +73,21 @@ internal fun SearchSuggestionsAndHistoryList(
                 }
             }
         } else {
-            val matchingHistory = searchHistory.take(2)
-            val topSuggestions = searchSuggestions.take(5)
-            val remainingSuggestions = searchSuggestions.drop(5)
-            val previewResults = topResults.distinctBy { "${it.contentType}:${it.id}" }.take(6)
+            val matchingHistory = searchHistory.take(4)
+            val historyQueries = matchingHistory.map { it.query.trim().lowercase() }.toSet()
+            val historyTrackTitles = matchingHistory.mapNotNull { it.resultTitle?.trim()?.lowercase() }.toSet()
+
+            val topSuggestions = searchSuggestions
+                .filterNot { it.trim().lowercase() in historyQueries }
+                .take(5)
+            val remainingSuggestions = searchSuggestions
+                .filterNot { it.trim().lowercase() in historyQueries }
+                .drop(5)
+                .take(5)
+            val previewResults = topResults
+                .distinctBy { "${it.contentType}:${it.id}" }
+                .filterNot { it.title.trim().lowercase() in historyTrackTitles }
+                .take(6)
 
             // 1. Matching recent history at top (just like YT Music)
             if (matchingHistory.isNotEmpty()) {
