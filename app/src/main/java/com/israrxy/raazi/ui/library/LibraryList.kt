@@ -174,7 +174,8 @@ private fun LazyListScope.renderSongs(
         preview = preview,
         queue = queue,
         keyPrefix = keyPrefix,
-        onPlay = actions.playTracks
+        onPlay = actions.playTracks,
+        onRemove = if (keyPrefix == "history") actions.removeHistoryTrack else null
     )
     items(rows, key = { it.key }) { item ->
         LibrarySongRow(item = item)

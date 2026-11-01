@@ -44,6 +44,7 @@ internal fun SpotifyStylePlaylistTrackRow(
     isDownloaded: Boolean,
     isDownloading: Boolean,
     isEditablePlaylist: Boolean,
+    removeActionLabel: String = "Remove from playlist",
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMoveUp: () -> Unit,
@@ -264,7 +265,7 @@ internal fun SpotifyStylePlaylistTrackRow(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    "Remove from playlist",
+                                    removeActionLabel,
                                     color = MaterialTheme.colorScheme.error
                                 )
                             },

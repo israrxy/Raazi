@@ -412,12 +412,8 @@ class MusicPlayerViewModel(
     fun fetchAutoPlayQueue(track: MusicItem) = fetchAutoPlayQueueImpl(track)
     fun startRadio(track: MusicItem) = startRadioImpl(track)
     fun saveCurrentQueueAsPlaylist(name: String? = null, tracks: List<MusicItem>? = null) = saveCurrentQueueAsPlaylistImpl(name, tracks)
-
-    fun toggleFavorite(musicItem: MusicItem) {
-        viewModelScope.launch {
-            if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem)
-        }
-    }
+    fun toggleFavorite(musicItem: MusicItem) = viewModelScope.launch { if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem) }
+    fun setTracksFavorite(tracks: List<MusicItem>, liked: Boolean) = setTracksFavoriteImpl(tracks, liked)
     fun fetchSongCredits(track: MusicItem) = fetchSongCreditsImpl(track)
     fun toggleSavedCollection(item: MusicItem) { viewModelScope.launch { repository.toggleSavedCollection(item) } }
     fun toggleSavedArtist(artistId: String, artistName: String, thumbnailUrl: String = "") { viewModelScope.launch { repository.toggleSavedArtist(artistId, artistName, thumbnailUrl) } }
@@ -441,11 +437,7 @@ class MusicPlayerViewModel(
 
     fun loadPlaylist(playlistId: String) = loadPlaylistImpl(playlistId)
     fun createPlaylist(name: String, syncedToYouTube: Boolean = false) = createPlaylistImpl(name, syncedToYouTube)
-    fun createPlaylistWithTracks(
-        name: String,
-        tracks: List<MusicItem>,
-        syncedToYouTube: Boolean = false
-    ) = createPlaylistWithTracksImpl(name, tracks, syncedToYouTube)
+    fun createPlaylistWithTracks(name: String, tracks: List<MusicItem>, syncedToYouTube: Boolean = false) = createPlaylistWithTracksImpl(name, tracks, syncedToYouTube)
     fun addToPlaylist(playlistId: String, track: MusicItem) = addToPlaylistByIdImpl(playlistId, track)
     fun addToPlaylist(track: MusicItem, playlist: PlaylistEntity) = addToPlaylistEntityImpl(track, playlist)
     fun addToPlaylist(tracks: List<MusicItem>, playlist: PlaylistEntity) = addTracksToPlaylistEntityImpl(tracks, playlist)
@@ -454,6 +446,7 @@ class MusicPlayerViewModel(
     fun renamePlaylist(playlistId: String, newName: String) = renamePlaylistImpl(playlistId, newName)
     fun removeTrackFromPlaylist(playlistId: String, trackId: String, setVideoId: String? = null) = removeTrackFromPlaylistImpl(playlistId, trackId, setVideoId)
     fun removeTracksFromPlaylist(playlistId: String, tracks: List<MusicItem>) = removeTracksFromPlaylistImpl(playlistId, tracks)
+    fun removeTracksFromHistory(tracks: List<MusicItem>) = removeTracksFromHistoryImpl(tracks)
     fun reorderPlaylistTracks(playlistId: String, trackIds: List<String>) = reorderPlaylistTracksImpl(playlistId, trackIds)
     fun downloadTrack(track: MusicItem) = advancedDownloadManager.downloadTrack(track)
     fun downloadPlaylist(tracks: List<MusicItem>) = advancedDownloadManager.downloadPlaylist(tracks)

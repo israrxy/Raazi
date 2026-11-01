@@ -417,6 +417,24 @@ internal fun MusicPlayerViewModel.removeTracksFromPlaylistImpl(playlistId: Strin
     }
 }
 
+internal fun MusicPlayerViewModel.removeTracksFromHistoryImpl(tracks: List<MusicItem>) {
+    viewModelScope.launch {
+        repository.removeTracksFromPlaybackHistory(tracks)
+        val removedIds = tracks.mapTo(mutableSetOf()) { it.id }
+        _currentPlaylist.value?.takeIf { it.id == "history" }?.let { history ->
+            _currentPlaylist.value = history.copy(items = history.items.filterNot { it.id in removedIds })
+        }
+    }
+}
+
+internal fun MusicPlayerViewModel.setTracksFavoriteImpl(tracks: List<MusicItem>, liked: Boolean) {
+    viewModelScope.launch {
+        tracks.forEach { track ->
+            if (liked) repository.addToFavorites(track) else repository.removeFromFavorites(track)
+        }
+    }
+}
+
 internal fun MusicPlayerViewModel.reorderPlaylistTracksImpl(playlistId: String, trackIds: List<String>) {
     viewModelScope.launch {
         try {

@@ -18,6 +18,8 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -127,7 +129,8 @@ internal fun LibraryCollectionRow(
 internal data class LibrarySongUi(
     val key: String,
     val track: MusicItem,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val onRemove: (() -> Unit)? = null
 )
 
 /**
@@ -139,12 +142,14 @@ internal fun buildSongUi(
     preview: List<MusicItem>,
     queue: List<MusicItem>,
     keyPrefix: String,
-    onPlay: (List<MusicItem>, Int) -> Unit
+    onPlay: (List<MusicItem>, Int) -> Unit,
+    onRemove: ((MusicItem) -> Unit)? = null
 ): List<LibrarySongUi> = preview.map { track ->
     LibrarySongUi(
         key = "${keyPrefix}_${track.id}",
         track = track,
-        onClick = { onPlay(queue, queue.indexOf(track).coerceAtLeast(0)) }
+        onClick = { onPlay(queue, queue.indexOf(track).coerceAtLeast(0)) },
+        onRemove = onRemove?.let { remove -> { remove(track) } }
     )
 }
 
@@ -212,6 +217,11 @@ internal fun LibrarySongRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        item.onRemove?.let { remove ->
+            IconButton(onClick = remove) {
+                Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove from history", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

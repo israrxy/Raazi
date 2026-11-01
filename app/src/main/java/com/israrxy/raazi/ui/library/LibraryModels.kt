@@ -70,6 +70,7 @@ data class LibraryActions(
     val deletePlaylist: (playlistId: String) -> Unit,
     val removeSavedCollection: (SavedCollectionItem) -> Unit,
     val removeSavedArtist: (SavedCollectionItem) -> Unit,
+    val removeHistoryTrack: (MusicItem) -> Unit,
     val playTracks: (tracks: List<MusicItem>, startIndex: Int) -> Unit
 )
 

@@ -459,6 +459,8 @@ class MusicRepository(
         entities.map { mapHistoryToDomain(it) }
     }
 
+    suspend fun removeTracksFromPlaybackHistory(tracks: List<MusicItem>) = withContext(Dispatchers.IO) { tracks.forEach { db.musicDao().deletePlaybackHistoryByTrackId(it.id) } }
+
     val trackPlayCounts: Flow<Map<String, Int>> = db.musicDao().getPlaybackCounts().map { counts ->
         counts.associate { it.id to it.playCount }
     }

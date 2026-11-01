@@ -146,6 +146,7 @@ fun LibraryScreen(
                 thumbnailUrl = savedItem.thumbnailUrl
             )
         },
+        removeHistoryTrack = { track -> viewModel.removeTracksFromHistory(listOf(track)) },
         playTracks = { tracks, startIndex ->
             viewModel.playPlaylist(tracks, startIndex)
             onNavigateToPlayer()

@@ -1,7 +1,6 @@
 package com.israrxy.raazi.ui.playlist
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -201,29 +200,10 @@ fun PlaylistDetailScreen(
         },
         bottomBar = {
             if (isSelectionMode && selectedTracks.isNotEmpty()) {
-                PlaylistSelectionBottomBar(
-                    selectedCount = selectedTracks.size,
-                    isEditablePlaylist = isEditablePlaylist && playlist != null,
-                    onDownloadSelected = {
-                        viewModel.downloadPlaylist(selectedTracks.toList())
-                        Toast.makeText(context, "Downloading ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
-                        isSelectionMode = false
-                        selectedTracks.clear()
-                    },
-                    onQueueSelected = {
-                        viewModel.addToQueue(selectedTracks.toList())
-                        Toast.makeText(context, "Added ${selectedTracks.size} tracks to queue", Toast.LENGTH_SHORT).show()
-                        isSelectionMode = false
-                        selectedTracks.clear()
-                    },
-                    onRemoveSelected = {
-                        if (playlist != null) {
-                            viewModel.removeTracksFromPlaylist(playlist.id, selectedTracks.toList())
-                            Toast.makeText(context, "Removed ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
-                            isSelectionMode = false
-                            selectedTracks.clear()
-                        }
-                    }
+                PlaylistSelectionActionBar(
+                    tracks = selectedTracks.toList(), playlistId = playlist?.id,
+                    isEditablePlaylist = isEditablePlaylist, viewModel = viewModel,
+                    onComplete = { isSelectionMode = false; selectedTracks.clear() }
                 )
             }
         }
@@ -357,7 +337,12 @@ fun PlaylistDetailScreen(
                                 canMoveDown = actualIndex < items.lastIndex,
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
-                                isEditablePlaylist = isEditablePlaylist,
+                                isEditablePlaylist = isEditablePlaylist || playlist.id == "history" || playlist.id == "favorites",
+                                removeActionLabel = when (playlist.id) {
+                                    "history" -> "Remove from history"
+                                    "favorites" -> "Unlike song"
+                                    else -> "Remove from playlist"
+                                },
                                 onClick = {
                                     if (isSelectionMode) {
                                         if (isSelected) selectedTracks.remove(item) else selectedTracks.add(item)
@@ -396,8 +381,12 @@ fun PlaylistDetailScreen(
                                     context.startActivity(Intent.createChooser(sendIntent, "Share Song"))
                                 },
                                 onRemoveFromPlaylist = {
-                                    viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
-                                    Toast.makeText(context, "Removed from playlist", Toast.LENGTH_SHORT).show()
+                                    when (playlist.id) {
+                                        "history" -> viewModel.removeTracksFromHistory(listOf(item))
+                                        "favorites" -> viewModel.toggleFavorite(item)
+                                        else -> viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
+                                    }
+                                    Toast.makeText(context, "Removed song", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
