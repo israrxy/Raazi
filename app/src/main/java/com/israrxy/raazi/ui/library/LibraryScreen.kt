@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,7 @@ import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Library screen.
@@ -68,8 +70,10 @@ fun LibraryScreen(
     val syncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
     val playCounts by viewModel.trackPlayCounts.collectAsStateWithLifecycle()
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
+    val dismissYoutubePrompt by viewModel.settingsDataStore.dismissYoutubeConnectPrompt.collectAsStateWithLifecycle(initialValue = false)
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // User intent - survives configuration changes and process recreation.
     var query by rememberSaveable { mutableStateOf("") }
@@ -129,6 +133,10 @@ fun LibraryScreen(
         openSpotifyImport = onNavigateToSpotifyImport,
         syncLibrary = { viewModel.syncYouTubeLibrary() },
         dismissSyncCard = { syncCardDismissed = true },
+        dismissSyncCardPermanently = {
+            syncCardDismissed = true
+            scope.launch { viewModel.settingsDataStore.setDismissYoutubeConnectPrompt(true) }
+        },
         createPlaylist = {
             createSynced = loggedIn
             playlistName = ""
@@ -216,7 +224,7 @@ fun LibraryScreen(
         loggedIn = loggedIn,
         accountName = accountName,
         syncing = syncing,
-        dismissed = syncCardDismissed
+        dismissed = syncCardDismissed || (!loggedIn && dismissYoutubePrompt)
     )
 
     // First open on an empty library: pull the YouTube Music library down once.

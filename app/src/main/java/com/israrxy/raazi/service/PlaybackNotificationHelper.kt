@@ -171,7 +171,7 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
         .setContentTitle(title)
         .setContentText(artist)
         .setSubText(subText.ifEmpty { null })
-        .setSmallIcon(R.drawable.ic_notification)
+        .setSmallIcon(R.drawable.raazi)
         .setLargeIcon(largeIcon)
         .setContentIntent(contentPendingIntent)
         .setDeleteIntent(stopPending)

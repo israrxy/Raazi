@@ -42,14 +42,12 @@ class MusicRepository(
         item: MusicItem,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
     ): com.israrxy.raazi.data.remote.Lyrics? {
-        return savedLyricsStore.get(item.id)
-            ?: lyricsAggregator.getLyrics(
-                trackId = item.id,
-                trackName = item.title,
-                artistName = item.artist,
-                durationMs = item.duration,
-                preferredScript = preferredScript
-            )
+        savedLyricsStore.get(item.id)?.let { return it }
+        val fetched = lyricsAggregator.getLyrics(item.id, item.title, item.artist, item.duration, preferredScript)
+        if (fetched != null && (!fetched.syncedLyrics.isNullOrBlank() || !fetched.plainLyrics.isNullOrBlank())) {
+            savedLyricsStore.put(item.id, fetched)
+        }
+        return fetched
     }
 
     suspend fun searchLyricsOptions(

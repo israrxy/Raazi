@@ -65,6 +65,7 @@ data class LibraryActions(
     val openSpotifyImport: () -> Unit,
     val syncLibrary: () -> Unit,
     val dismissSyncCard: () -> Unit,
+    val dismissSyncCardPermanently: (() -> Unit)? = null,
     val createPlaylist: () -> Unit,
     val renamePlaylist: (playlistId: String) -> Unit,
     val deletePlaylist: (playlistId: String) -> Unit,

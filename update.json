@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 9,
-    "latestVersionName": "6.5.0",
-    "downloadUrl": "https://github.com/israrxy/Raazi/releases/latest",
-    "forceUpdate": false,
-    "releaseNotes": "v6.5.0 — Sleep Timer, YouTube Music Search Overhaul & Player UI Polish\n\nPlayer & Controls:\n• Added Sleep Timer directly to player controls with 15, 30, and 60 minute presets plus custom duration support and live countdown badge\n• Redesigned the Shuffle button across the player, queue sheet, and playlist header by removing the circular bubble background for a cleaner, minimal look\n\nYouTube Music Search:\n• Fixed YouTube Music search results so full searches match the accuracy of live search suggestions\n• Unwrapped nested section shelves and separated official audio tracks (ATV) from user-uploaded videos (UGC/OMV) and podcast episodes\n• Added relevance ranking that prioritizes official tracks and demotes unrelated slowed/reverb/karaoke uploads unless explicitly searched\n\nUpdates & Maintenance:\n• Bumped app version to 6.5.0 (build 9) with in-app update notification support for older versions"
+    "latestVersionCode": 10,
+    "latestVersionName": "6.6.0",
+    "downloadUrl": "https://raazi.pages.dev",
+    "forceUpdate": true,
+    "releaseNotes": "v6.6.0 — Mandatory Performance & Stability Update\n\n• Correct Playlist Titles: Fixed online playlists and albums showing generic title instead of their actual name.\n• App Notification Branding: Notification player now features official Raazi icon.\n• Instant Lyrics Caching: Lyrics load instantaneously for previously played songs without re-fetching.\n• Library Controls: Added 'Don't show again' option to dismiss YouTube Music sign-in prompt permanently.\n• Micro Player & UI Settings: Enhanced micro player gestures, animations, and controls."
 }

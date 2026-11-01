@@ -96,6 +96,16 @@ internal fun LibrarySyncCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (!sync.loggedIn && actions.dismissSyncCardPermanently != null) {
+                    Text(
+                        text = "Don't show again",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clickable { actions.dismissSyncCardPermanently.invoke() }
+                    )
+                }
             }
 
             if (sync.syncing) {

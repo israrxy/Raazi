@@ -39,6 +39,8 @@ local.properties
 *.keystore
 *.keystore.base64
 keystore.properties
+keystore/
+/keystore/
 .env
 .kotlin/
 .kotlinc/

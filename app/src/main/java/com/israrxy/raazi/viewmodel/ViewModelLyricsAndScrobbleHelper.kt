@@ -15,10 +15,10 @@ import kotlinx.coroutines.launch
 internal fun MusicPlayerViewModel.fetchLyricsImpl(track: MusicItem) {
     lastLyricsTrack = track
     lyricsFetchJob?.cancel()
+    _isLyricsLoading.value = true
+    _lyrics.value = null
     lyricsFetchJob = viewModelScope.launch {
         try {
-            _isLyricsLoading.value = true
-            _lyrics.value = null
             val result = repository.getLyrics(track, preferredScript = _lyricsScriptFilter.value)
             _lyrics.value = result
         } catch (e: Exception) {
