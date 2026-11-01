@@ -26,11 +26,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -78,6 +79,7 @@ private data class MiniPlayerProgressState(
 fun MiniPlayer(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
+    onCollapseToFloating: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val miniPlayerUiStateFlow = remember(viewModel) {
@@ -137,19 +139,41 @@ fun MiniPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
-                        .pointerInput(track.id) {
-                            var dragDistance = 0f
-                            detectHorizontalDragGestures(
-                                onHorizontalDrag = { change, amount ->
-                                    dragDistance += amount
-                                    change.consume()
+                        .pointerInput(track.id, onCollapseToFloating) {
+                            var totalX = 0f
+                            var totalY = 0f
+                            var hasCollapsed = false
+                            detectDragGestures(
+                                onDragStart = {
+                                    totalX = 0f
+                                    totalY = 0f
+                                    hasCollapsed = false
+                                },
+                                onDrag = { change, dragAmount ->
+                                    totalX += dragAmount.x
+                                    totalY += dragAmount.y
+                                    if (!hasCollapsed && totalY > 36.dp.toPx() && onCollapseToFloating != null) {
+                                        hasCollapsed = true
+                                        change.consume()
+                                        onCollapseToFloating()
+                                    } else {
+                                        change.consume()
+                                    }
                                 },
                                 onDragEnd = {
-                                    if (dragDistance < -48.dp.toPx()) viewModel.next()
-                                    else if (dragDistance > 48.dp.toPx()) viewModel.previous()
-                                    dragDistance = 0f
+                                    if (!hasCollapsed) {
+                                        if (totalX < -48.dp.toPx()) viewModel.next()
+                                        else if (totalX > 48.dp.toPx()) viewModel.previous()
+                                    }
+                                    totalX = 0f
+                                    totalY = 0f
+                                    hasCollapsed = false
                                 },
-                                onDragCancel = { dragDistance = 0f }
+                                onDragCancel = {
+                                    totalX = 0f
+                                    totalY = 0f
+                                    hasCollapsed = false
+                                }
                             )
                         },
                     verticalAlignment = Alignment.CenterVertically
@@ -232,6 +256,20 @@ fun MiniPlayer(
                                 contentDescription = if (isPlaying) "Pause" else "Play",
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    if (onCollapseToFloating != null) {
+                        IconButton(
+                            onClick = onCollapseToFloating,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloseFullscreen,
+                                contentDescription = "Collapse to floating",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -70,6 +71,13 @@ fun HomeScreen(
         if (selectedHomeTracks.isEmpty() && isHomeSelectionMode) {
             isHomeSelectionMode = false
         }
+    }
+
+    LaunchedEffect(isHomeSelectionMode) {
+        viewModel.setSelectionModeActive(isHomeSelectionMode)
+    }
+    DisposableEffect(Unit) {
+        onDispose { viewModel.setSelectionModeActive(false) }
     }
 
     Scaffold(

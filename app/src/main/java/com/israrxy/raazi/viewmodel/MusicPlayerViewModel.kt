@@ -457,13 +457,12 @@ class MusicPlayerViewModel(
     fun getDownloadStorageUsed(): Long = advancedDownloadManager.getDownloadStorageUsed()
     fun getAvailableStorage(): Long = advancedDownloadManager.getAvailableStorage()
     fun deleteAllDownloads() = advancedDownloadManager.deleteAllDownloads()
+    val isSelectionModeActive = MutableStateFlow(false)
+    fun setSelectionModeActive(active: Boolean) { isSelectionModeActive.value = active }
     fun getPlayer(): ExoPlayer? = playbackService?.getPlayer()
     fun togglePlaybackMode(): Boolean = playbackService?.togglePlaybackMode() ?: false
     fun setPlaybackMediaMode(mode: PlaybackMediaMode): Boolean = playbackService?.setPlaybackMediaMode(mode) ?: false
-    fun setPlaybackVideoQuality(quality: PlaybackVideoQuality): Boolean {
-        viewModelScope.launch { settingsDataStore.setVideoQuality(quality.wireName) }
-        return playbackService?.setPlaybackVideoQuality(quality) ?: false
-    }
+    fun setPlaybackVideoQuality(quality: PlaybackVideoQuality): Boolean { viewModelScope.launch { settingsDataStore.setVideoQuality(quality.wireName) }; return playbackService?.setPlaybackVideoQuality(quality) ?: false }
     fun toggleAudioSource() { StreamResolver.sessionFlacEnabled = false; _audioSourceLabel.value = "YouTube" }
     fun setAudioSource(mode: String) { StreamResolver.sessionFlacEnabled = false; _audioSourceLabel.value = "YouTube" }
     fun setVideoSurface(surface: Surface?) { playbackService?.setVideoSurface(surface) }

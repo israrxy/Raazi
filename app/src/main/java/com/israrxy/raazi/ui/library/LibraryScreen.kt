@@ -88,6 +88,13 @@ fun LibraryScreen(
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var tracksForPlaylistAdd by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
 
+    LaunchedEffect(isTrackSelectionMode, isPlaylistSelectionMode) {
+        viewModel.setSelectionModeActive(isTrackSelectionMode || isPlaylistSelectionMode)
+    }
+    DisposableEffect(Unit) {
+        onDispose { viewModel.setSelectionModeActive(false) }
+    }
+
     val state = remember(liked, history, downloads, playlists, saved, playCounts, query, filter, sort) {
         LibraryUiState(
             query = query.trim(),

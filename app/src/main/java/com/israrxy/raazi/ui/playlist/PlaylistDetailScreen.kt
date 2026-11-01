@@ -71,6 +71,8 @@ fun PlaylistDetailScreen(
         searchQuery = ""
         currentSortOrder = PlaylistSortOrder.DEFAULT
     }
+    LaunchedEffect(isSelectionMode) { viewModel.setSelectionModeActive(isSelectionMode) }
+    DisposableEffect(Unit) { onDispose { viewModel.setSelectionModeActive(false) } }
 
     val playlist = currentPlaylist
     val items = playlist?.items ?: emptyList()
