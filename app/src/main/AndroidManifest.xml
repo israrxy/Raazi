@@ -52,9 +52,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="raazi.pages.dev" />
+                <data android:path="/" />
                 <data android:pathPrefix="/play" />
                 <data android:pathPrefix="/watch" />
                 <data android:pathPrefix="/song" />
+                <data android:pathPrefix="/songs" />
                 <data android:pathPrefix="/playlist" />
                 <data android:pathPrefix="/album" />
                 <data android:pathPrefix="/artist" />
@@ -67,9 +69,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="raazi.app" />
+                <data android:path="/" />
                 <data android:pathPrefix="/play" />
                 <data android:pathPrefix="/watch" />
                 <data android:pathPrefix="/song" />
+                <data android:pathPrefix="/songs" />
                 <data android:pathPrefix="/playlist" />
                 <data android:pathPrefix="/album" />
                 <data android:pathPrefix="/artist" />
@@ -83,6 +87,7 @@
                 <data android:scheme="raazi" android:host="play" />
                 <data android:scheme="raazi" android:host="watch" />
                 <data android:scheme="raazi" android:host="song" />
+                <data android:scheme="raazi" android:host="songs" />
                 <data android:scheme="raazi" android:host="playlist" />
                 <data android:scheme="raazi" android:host="album" />
                 <data android:scheme="raazi" android:host="artist" />

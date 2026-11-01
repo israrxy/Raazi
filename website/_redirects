@@ -3,7 +3,10 @@
 /play/*     /play.html   200
 /watch      /play.html   200
 /watch/*    /play.html   200
+/song       /play.html   200
 /song/*     /play.html   200
+/songs      /play.html   200
+/songs/*    /play.html   200
 /playlist   /play.html   200
 /playlist/* /play.html   200
 /album      /play.html   200

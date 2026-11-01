@@ -479,7 +479,7 @@ class MusicPlayerViewModel(
     fun resetSpotifyImportState() { _spotifyImportState.value = SpotifyImportState.Idle; _resolvedSpotifyTracks.value = emptyList(); _spotifyPlaylistName.value = "" }
     fun consumeDeepLinkEvent() { _pendingDeepLinkEvent.value = null }
     fun requestExpandPlayer() { _pendingDeepLinkEvent.value = DeepLinkEvent.ExpandPlayer }
-    fun getShareLink(): String? = playbackState.value.currentTrack?.let { "https://raazi.pages.dev/?video=${android.net.Uri.encode(it.id)}" }
+    fun getShareLink(): String? = playbackState.value.currentTrack?.let { com.israrxy.raazi.utils.ShareUtils.buildTrackLink(it.id) }
     fun handleDeepLink(uri: Uri) = handleDeepLinkImpl(uri)
     override fun onCleared() { super.onCleared(); onClearedImpl() }
 

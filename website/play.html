@@ -180,7 +180,7 @@
             (artistName ? '&name=' + encodeURIComponent(artistName) : '');
         }
       } else {
-        videoId = params.get('id') || params.get('v') || secondSegment;
+        videoId = params.get('video') || params.get('id') || params.get('v') || secondSegment;
         const listFallback = params.get('list');
         if (videoId) {
           customUri = 'raazi://play?id=' + encodeURIComponent(videoId);

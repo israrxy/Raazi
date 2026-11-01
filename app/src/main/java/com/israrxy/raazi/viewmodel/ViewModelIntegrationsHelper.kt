@@ -278,7 +278,7 @@ internal fun MusicPlayerViewModel.handleDeepLinkImpl(uri: Uri) {
     val videoId = uri.getQueryParameter("id")
         ?: uri.getQueryParameter("video")
         ?: uri.getQueryParameter("v")
-        ?: (if (routeType == "song" || routeType == "play" || routeType == "watch") secondSegment else null)
+        ?: (if (routeType == "song" || routeType == "songs" || routeType == "play" || routeType == "watch") secondSegment else null)
 
     if (videoId.isNullOrBlank()) {
         val fallbackListId = uri.getQueryParameter("list")?.trim()?.removePrefix("VL")
