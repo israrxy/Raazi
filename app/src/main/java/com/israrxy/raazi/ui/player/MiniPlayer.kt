@@ -139,7 +139,7 @@ fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
                         .pointerInput(track.id, onCollapseToFloating) {
                             var totalX = 0f
                             var totalY = 0f
@@ -220,58 +220,66 @@ fun MiniPlayer(
                         )
                     }
 
-                    if (!compactLayout && miniPlayerUiState.canSkipNext) {
-                        IconButton(
-                            onClick = { viewModel.next() },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SkipNext,
-                                contentDescription = "Next",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(
-                        onClick = {
-                            if (isPlaying) viewModel.pause() else viewModel.resume()
-                        },
-                        enabled = !miniPlayerUiState.isLoading || isPlaying,
-                        modifier = Modifier
-                            .size(playButtonSize)
-                            .background(
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = CircleShape
-                            )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(if (compactLayout) 4.dp else 6.dp)
                     ) {
-                        if (isBusy && !isPlaying) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(22.dp)
-                            )
+                        if (!compactLayout && miniPlayerUiState.canSkipNext) {
+                            IconButton(
+                                onClick = { viewModel.next() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SkipNext,
+                                    contentDescription = "Next",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
-                    }
 
-                    if (onCollapseToFloating != null) {
                         IconButton(
-                            onClick = onCollapseToFloating,
-                            modifier = Modifier.size(36.dp)
+                            onClick = {
+                                if (isPlaying) viewModel.pause() else viewModel.resume()
+                            },
+                            enabled = !miniPlayerUiState.isLoading || isPlaying,
+                            modifier = Modifier
+                                .size(playButtonSize)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = CircleShape
+                                )
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CloseFullscreen,
-                                contentDescription = "Collapse to floating",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            if (isBusy && !isPlaying) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause" else "Play",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        if (onCollapseToFloating != null) {
+                            IconButton(
+                                onClick = onCollapseToFloating,
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloseFullscreen,
+                                    contentDescription = "Collapse to floating",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
 

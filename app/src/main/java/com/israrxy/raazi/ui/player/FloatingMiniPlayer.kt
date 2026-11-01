@@ -7,18 +7,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -34,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -70,8 +66,8 @@ fun FloatingMiniPlayer(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    val cardWidth = 122.dp
-    val cardHeight = 64.dp
+    val cardWidth = 112.dp
+    val cardHeight = 62.dp
     val cardWidthPx = with(density) { cardWidth.toPx() }
     val cardHeightPx = with(density) { cardHeight.toPx() }
     val marginPx = with(density) { 16.dp.toPx() }
@@ -172,6 +168,7 @@ fun FloatingMiniPlayer(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Photo banner on the left - clicking expands to normal
             Box(
                 modifier = Modifier
                     .size(cardHeight)
@@ -186,6 +183,7 @@ fun FloatingMiniPlayer(
                 )
             }
 
+            // Extended right side with song blurred ambient background
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -202,42 +200,21 @@ fun FloatingMiniPlayer(
                     .clickable(onClick = onExpand),
                 contentAlignment = Alignment.Center
             ) {
-                Row(
+                // Bigger play/pause button
+                IconButton(
+                    onClick = {
+                        if (isPlaying) viewModel.pause() else viewModel.resume()
+                    },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(36.dp)
+                        .background(accentColor, CircleShape)
                 ) {
-                    IconButton(
-                        onClick = {
-                            if (isPlaying) viewModel.pause() else viewModel.resume()
-                        },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(accentColor, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onExpand,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .background(Color.Black.copy(alpha = 0.35f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInFull,
-                            contentDescription = "Expand to normal",
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
