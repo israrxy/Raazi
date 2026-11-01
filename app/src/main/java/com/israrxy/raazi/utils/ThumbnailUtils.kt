@@ -15,15 +15,24 @@ object ThumbnailUtils {
         if (url.isNullOrEmpty()) return ""
         
         // Local storage paths don't need resizing
-        if (url.startsWith("/storage")) return url
+        if (url.startsWith("/storage") || url.startsWith("file:")) return url
         
-        // YouTube Music thumbnail URLs
-        if (url.contains("googleusercontent.com") || url.contains("ytimg.com")) {
-            // Remove existing size parameters
+        // YouTube Music album art (Google CDN supports dynamic sizing parameters)
+        if (url.contains("googleusercontent.com")) {
             val baseUrl = url.substringBefore("=w").substringBefore("=s")
-            
-            // Add new size and format parameters (-rw for WebP, -l85 for balanced quality & small size)
-            return "$baseUrl=w$width-h$height-l85-rw"
+            return "$baseUrl=w$width-h$height-l90-rj"
+        }
+
+        // Standard YouTube video thumbnails (ytimg.com does not support query resize params)
+        if (url.contains("ytimg.com/vi/")) {
+            val videoId = url.substringAfter("ytimg.com/vi/").substringBefore("/")
+            if (videoId.isNotBlank() && videoId != url) {
+                return if (width >= 400) {
+                    "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                } else {
+                    "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+                }
+            }
         }
         
         return url

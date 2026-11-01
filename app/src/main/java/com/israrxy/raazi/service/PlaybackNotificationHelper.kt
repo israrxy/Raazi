@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
@@ -99,7 +101,7 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
     val title = currentTrack?.title ?: "No Track"
     val artist = currentTrack?.artist ?: "Unknown Artist"
     val isPlaying = playbackState.isPlaying
-    val largeIcon = currentAlbumArt ?: BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+    val largeIcon = currentAlbumArt
 
     val isFav = isTrackFavorite(currentTrack?.id)
 
@@ -172,7 +174,9 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
         .setContentText(artist)
         .setSubText(subText.ifEmpty { null })
         .setSmallIcon(R.drawable.raazi)
-        .setLargeIcon(largeIcon)
+        .apply {
+            if (largeIcon != null) setLargeIcon(largeIcon)
+        }
         .setContentIntent(contentPendingIntent)
         .setDeleteIntent(stopPending)
         .setOngoing(isPlaying)
@@ -326,6 +330,7 @@ internal fun MusicPlaybackService.loadAlbumArt(url: String?) {
     if (url.isNullOrEmpty()) {
         currentAlbumArt = null
         updateNotification()
+        updateMediaSessionState()
         return
     }
 
@@ -336,27 +341,39 @@ internal fun MusicPlaybackService.loadAlbumArt(url: String?) {
             val loader = this@loadAlbumArt.imageLoader
             val request = ImageRequest.Builder(this@loadAlbumArt)
                 .data(url)
+                .size(512, 512)
                 .allowHardware(false)
                 .build()
 
             val result = loader.execute(request).drawable
-            val bitmap = (result as? BitmapDrawable)?.bitmap
+            val bitmap = when (result) {
+                is BitmapDrawable -> result.bitmap
+                null -> null
+                else -> runCatching {
+                    val bmp = Bitmap.createBitmap(
+                        result.intrinsicWidth.coerceAtLeast(1),
+                        result.intrinsicHeight.coerceAtLeast(1),
+                        Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = Canvas(bmp)
+                    result.setBounds(0, 0, canvas.width, canvas.height)
+                    result.draw(canvas)
+                    bmp
+                }.getOrNull()
+            }
 
-            withContext(Dispatchers.Main) {
-                if (expectedTrackId != null && getCurrentTrack()?.id != expectedTrackId) {
-                    return@withContext
+            if (bitmap != null) {
+                withContext(Dispatchers.Main) {
+                    if (expectedTrackId != null && getCurrentTrack()?.id != expectedTrackId) {
+                        return@withContext
+                    }
+                    currentAlbumArt = bitmap
+                    updateNotification()
+                    updateMediaSessionState()
                 }
-                currentAlbumArt = bitmap
-                updateNotification()
             }
         } catch (_: Exception) {
-            withContext(Dispatchers.Main) {
-                if (expectedTrackId != null && getCurrentTrack()?.id != expectedTrackId) {
-                    return@withContext
-                }
-                currentAlbumArt = null
-                updateNotification()
-            }
+            // Keep existing artwork rather than wiping to null
         }
     }
 }

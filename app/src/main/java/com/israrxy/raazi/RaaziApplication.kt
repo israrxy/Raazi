@@ -33,8 +33,6 @@ class RaaziApplication : Application(), ImageLoaderFactory {
                     .maxSizePercent(0.20)
                     .build()
             }
-            .crossfade(true)
-            .respectCacheHeaders(false)
             .build()
     }
 

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.widget.RemoteViews
 import coil.ImageLoader
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.israrxy.raazi.MainActivity
@@ -95,7 +96,7 @@ class NowPlayingWidget : AppWidgetProvider() {
             if (!thumbnailUrl.isNullOrEmpty()) {
                 scope.launch {
                     try {
-                        val loader = ImageLoader(context)
+                        val loader = context.imageLoader
                         val request = ImageRequest.Builder(context)
                             .data(thumbnailUrl)
                             .size(128, 128)

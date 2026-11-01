@@ -33,7 +33,6 @@ internal fun MusicPlaybackService.createPlayerListenerImpl() = object : Player.L
                     isVideoAvailable = false
                     transitionTargetPositionMs = null
                     transitionTrackId = null
-                    currentAlbumArt = null
                     pendingNotificationTrackId = tag.id
                     loadAlbumArt(tag.thumbnailUrl)
                     notifyTrackChanged(tag)
