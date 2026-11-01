@@ -286,6 +286,27 @@ internal fun MusicPlayerViewModel.createPlaylistImpl(name: String, syncedToYouTu
     }
 }
 
+internal fun MusicPlayerViewModel.createPlaylistWithTracksImpl(
+    name: String,
+    tracks: List<MusicItem>,
+    syncedToYouTube: Boolean = false
+) {
+    viewModelScope.launch {
+        try {
+            val playlist = repository.createPlaylist(name, syncedToYouTube = syncedToYouTube)
+            if (tracks.isNotEmpty()) {
+                repository.addToPlaylist(tracks, playlist)
+            }
+            val songCount = if (tracks.size == 1) "1 song" else "${tracks.size} songs"
+            _youTubeSyncStatus.value =
+                "Created playlist \"${playlist.title}\" with $songCount."
+        } catch (e: Exception) {
+            Log.e("MusicVM", "Error creating playlist with tracks", e)
+            _error.value = "Failed to create playlist: ${e.message}"
+        }
+    }
+}
+
 internal fun MusicPlayerViewModel.addToPlaylistByIdImpl(playlistId: String, track: MusicItem) {
     viewModelScope.launch {
         try {

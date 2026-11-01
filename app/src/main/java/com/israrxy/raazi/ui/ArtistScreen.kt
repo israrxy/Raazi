@@ -229,6 +229,7 @@ fun ArtistScreen(
     if (showAddToPlaylistItem != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = viewModel,
+            tracksToAdd = listOf(showAddToPlaylistItem!!),
             onDismiss = { showAddToPlaylistItem = null },
             onPlaylistSelected = { playlist ->
                 viewModel.addToPlaylist(playlist.id, showAddToPlaylistItem!!)

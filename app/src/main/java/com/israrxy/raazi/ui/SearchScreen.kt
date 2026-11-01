@@ -470,6 +470,7 @@ fun SearchScreen(
     if (targetForPlaylist != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = playerViewModel,
+            tracksToAdd = targetForPlaylist,
             onDismiss = { showAddToPlaylistItem = null; tracksToAddToPlaylist = null },
             onPlaylistSelected = { playlist ->
                 playerViewModel.addToPlaylist(targetForPlaylist, playlist)

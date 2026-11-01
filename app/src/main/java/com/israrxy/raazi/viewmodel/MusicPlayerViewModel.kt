@@ -436,6 +436,11 @@ class MusicPlayerViewModel(
 
     fun loadPlaylist(playlistId: String) = loadPlaylistImpl(playlistId)
     fun createPlaylist(name: String, syncedToYouTube: Boolean = false) = createPlaylistImpl(name, syncedToYouTube)
+    fun createPlaylistWithTracks(
+        name: String,
+        tracks: List<MusicItem>,
+        syncedToYouTube: Boolean = false
+    ) = createPlaylistWithTracksImpl(name, tracks, syncedToYouTube)
     fun addToPlaylist(playlistId: String, track: MusicItem) = addToPlaylistByIdImpl(playlistId, track)
     fun addToPlaylist(track: MusicItem, playlist: PlaylistEntity) = addToPlaylistEntityImpl(track, playlist)
     fun addToPlaylist(tracks: List<MusicItem>, playlist: PlaylistEntity) = addTracksToPlaylistEntityImpl(tracks, playlist)

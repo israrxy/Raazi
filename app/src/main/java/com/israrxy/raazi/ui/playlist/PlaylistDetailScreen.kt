@@ -472,7 +472,11 @@ fun PlaylistDetailScreen(
         }
     }
     if (showAddToPlaylistDialog && selectedTrackForAdd != null) {
-        AddToPlaylistDialog(viewModel, { showAddToPlaylistDialog = false; selectedTrackForAdd = null }) { targetPlaylist ->
+        AddToPlaylistDialog(
+            viewModel = viewModel,
+            tracksToAdd = listOf(selectedTrackForAdd!!),
+            onDismiss = { showAddToPlaylistDialog = false; selectedTrackForAdd = null }
+        ) { targetPlaylist ->
             viewModel.addToPlaylist(selectedTrackForAdd!!, targetPlaylist)
             Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
             showAddToPlaylistDialog = false

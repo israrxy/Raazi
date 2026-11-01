@@ -167,11 +167,14 @@ internal fun PlayerSheetsAndDialogsHost(
                     onClick = {
                         val targetTrack = playlistTargetTrack ?: currentTrack
                         if (newPlaylistName.isNotBlank() && targetTrack != null) {
-                            viewModel.createPlaylist(newPlaylistName)
+                            viewModel.createPlaylistWithTracks(
+                                name = newPlaylistName,
+                                tracks = listOf(targetTrack)
+                            )
                             onDismissCreateDialog()
                             onNewPlaylistNameChange("")
                             onClearPlaylistTargetTrack()
-                            Toast.makeText(context, "Playlist created! Add the song from the menu.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Playlist created with song.", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

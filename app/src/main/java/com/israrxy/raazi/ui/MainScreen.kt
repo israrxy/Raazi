@@ -371,7 +371,6 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
-                            onNavigateToDownloads = { navController.navigate("downloads") },
                             onNavigateToSettings = { navController.navigate("settings") },
                             onNavigateToSpotifyImport = { navController.navigate("spotify_import") }
                         )

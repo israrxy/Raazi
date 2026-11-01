@@ -111,14 +111,6 @@ internal fun SpotifyYoutubeLyricItem(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(34.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(if (isCurrent) Color.White else Color.Transparent)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             if (isCurrent && words.isNotEmpty()) {
                 val karaokeText = buildAnnotatedString {

@@ -3,12 +3,9 @@ package com.israrxy.raazi.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -32,137 +28,6 @@ import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.Zinc800
 import com.israrxy.raazi.utils.ThumbnailUtils
-
-@Composable
-internal fun LyricsTopNavigationBar(
-    onSelectAudio: () -> Unit,
-    onSelectVideo: () -> Unit,
-    onOpenLyricsBrowser: () -> Unit,
-    onOpenTrackDetails: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)
-                )
-            )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Spacer(modifier = Modifier.size(38.dp))
-
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            val pillSegmentWidth = 54.dp
-            Box(
-                modifier = Modifier
-                    .height(34.dp)
-                    .width(pillSegmentWidth * 3)
-                    .clip(RoundedCornerShape(17.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(pillSegmentWidth)
-                        .offset(x = pillSegmentWidth * 2)
-                        .clip(RoundedCornerShape(17.dp))
-                        .background(Color.White)
-                )
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelectAudio() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Headphones,
-                            contentDescription = "Audio Mode",
-                            tint = Color.White.copy(alpha = 0.72f),
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onSelectVideo() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.OndemandVideo,
-                            contentDescription = "Video Mode",
-                            tint = Color.White.copy(alpha = 0.72f),
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Subject,
-                            contentDescription = "Lyrics View",
-                            tint = Color(0xFF09090B),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        Surface(
-            onClick = onOpenLyricsBrowser,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.ManageSearch,
-                    contentDescription = "Lyrics source",
-                    tint = Color.White.copy(alpha = 0.88f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Surface(
-            onClick = onOpenTrackDetails,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Song details",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 internal fun LyricsNowPlayingStrip(
@@ -182,6 +47,7 @@ internal fun LyricsNowPlayingStrip(
     lyricsScriptFilter: LyricsScriptFilter,
     onToggleOptionsMenu: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
+    onOpenTrackDetails: () -> Unit,
     onToggleFavorite: (MusicItem) -> Unit
 ) {
     val cleanSourceLabel = remember(lyricsSource, isSynced) {
@@ -279,6 +145,18 @@ internal fun LyricsNowPlayingStrip(
                         modifier = Modifier.size(19.dp)
                     )
                 }
+            }
+
+            IconButton(
+                onClick = onOpenTrackDetails,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Song details",
+                    tint = Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.size(19.dp)
+                )
             }
         }
 

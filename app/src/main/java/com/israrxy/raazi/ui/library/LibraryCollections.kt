@@ -1,10 +1,7 @@
 package com.israrxy.raazi.ui.library
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +20,6 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -43,7 +39,7 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.SavedCollectionItem
 
 // ---------------------------------------------------------------------------------------
-// Playlists, albums and artists - one presentation model, two layouts.
+// Playlists, albums and artists in the compact library list.
 // ---------------------------------------------------------------------------------------
 
 /** Everything a card/row needs, built once so grid and list stay visually consistent. */
@@ -102,67 +98,6 @@ internal fun SavedCollectionItem.toCollectionUi(
     onClick = onOpen,
     onLongClick = onRemove
 )
-
-/** Landscape-free grid card: artwork on top, two lines of text underneath. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun LibraryCollectionCard(
-    item: LibraryCollectionUi,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .combinedClickable(onClick = item.onClick, onLongClick = item.onLongClick)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            if (item.thumbnailUrl != null) {
-                AsyncImage(
-                    model = item.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Icon(
-                    imageVector = item.fallbackIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(46.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-            OverflowMenuButton(
-                items = item.menu,
-                contentDescription = "Options for ${item.title}",
-                modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
-                scrim = item.thumbnailUrl != null
-            )
-        }
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 9.dp, bottom = 12.dp)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = item.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
 
 /** Compact one-line variant used by the list layout. */
 @Composable

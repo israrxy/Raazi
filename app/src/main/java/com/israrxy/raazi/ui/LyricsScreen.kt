@@ -33,7 +33,6 @@ import coil.request.ImageRequest
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.lyrics.LyricsTextVariants
 import com.israrxy.raazi.data.lyrics.LyricsViewVariant
-import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.service.LyricsTranslator
 import com.israrxy.raazi.utils.BlurTransformation
 import com.israrxy.raazi.utils.ThumbnailUtils
@@ -51,8 +50,8 @@ import kotlin.math.abs
 @Composable
 fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
-    onClose: () -> Unit,
-    onOpenLyricsBrowser: () -> Unit = {}
+    onOpenLyricsBrowser: () -> Unit = {},
+    topBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -353,21 +352,7 @@ fun LyricsScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            LyricsTopNavigationBar(
-                onSelectAudio = {
-                    viewModel.setPlaybackMediaMode(PlaybackMediaMode.AUDIO)
-                    onClose()
-                },
-                onSelectVideo = {
-                    viewModel.setPlaybackMediaMode(PlaybackMediaMode.VIDEO)
-                    onClose()
-                },
-                onOpenLyricsBrowser = {
-                    showOptionsMenu = false
-                    onOpenLyricsBrowser()
-                },
-                onOpenTrackDetails = { showTrackDetails = true }
-            )
+            topBar()
 
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
@@ -386,6 +371,7 @@ fun LyricsScreen(
                 lyricsScriptFilter = lyricsScriptFilter,
                 onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
                 onOpenLyricsBrowser = onOpenLyricsBrowser,
+                onOpenTrackDetails = { showTrackDetails = true },
                 onToggleFavorite = { viewModel.toggleFavorite(it) }
             )
 

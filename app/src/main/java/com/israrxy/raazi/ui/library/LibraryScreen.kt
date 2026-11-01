@@ -6,9 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,15 +29,14 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
  * Library screen.
  *
  * Responsibilities kept here (and nowhere else): collecting flows, holding user intent
- * (query / filter / sort / layout / dialogs), and building one immutable [LibraryUiState].
- * What gets drawn lives in [LibraryGridContent].
+ * (query / filter / sort / dialogs), and building one immutable [LibraryUiState].
+ * What gets drawn lives in [LibraryListContent].
  */
 @Composable
 fun LibraryScreen(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToDownloads: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
     onNavigateToSpotifyImport: () -> Unit = {}
@@ -59,7 +57,7 @@ fun LibraryScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
     var sort by rememberSaveable { mutableStateOf(LibrarySort.RECENT) }
-    var layout by rememberSaveable { mutableStateOf(LibraryLayout.GRID) }
+    var syncCardDismissed by rememberSaveable { mutableStateOf(false) }
 
     // Dialog state.
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -73,12 +71,11 @@ fun LibraryScreen(
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val state = remember(liked, history, downloads, playlists, saved, query, filter, sort, layout) {
+    val state = remember(liked, history, downloads, playlists, saved, query, filter, sort) {
         LibraryUiState(
             query = query.trim(),
             filter = filter,
             sort = sort,
-            layout = layout,
             likedSongs = liked,
             history = history,
             userPlaylists = playlists,
@@ -93,13 +90,12 @@ fun LibraryScreen(
         search = { query = it },
         selectFilter = { filter = it },
         selectSort = { sort = it },
-        selectLayout = { layout = it },
         openPlaylist = onNavigateToPlaylist,
         openArtist = onNavigateToArtist,
-        openDownloads = onNavigateToDownloads,
         openSettings = onNavigateToSettings,
         openSpotifyImport = onNavigateToSpotifyImport,
         syncLibrary = { viewModel.syncYouTubeLibrary() },
+        dismissSyncCard = { syncCardDismissed = true },
         createPlaylist = {
             createSynced = loggedIn
             playlistName = ""
@@ -146,7 +142,12 @@ fun LibraryScreen(
         }
     )
 
-    val sync = LibrarySyncState(loggedIn = loggedIn, accountName = accountName, syncing = syncing)
+    val sync = LibrarySyncState(
+        loggedIn = loggedIn,
+        accountName = accountName,
+        syncing = syncing,
+        dismissed = syncCardDismissed
+    )
 
     // First open on an empty library: pull the YouTube Music library down once.
     var hasAutoSynced by remember { mutableStateOf(false) }
@@ -163,18 +164,16 @@ fun LibraryScreen(
         viewModel.clearYouTubeSyncStatus()
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 132.dp),
-        state = rememberLazyGridState(),
+    LazyColumn(
+        state = rememberLazyListState(),
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LibraryGridContent(state = state, actions = actions, sync = sync)
+        LibraryListContent(state = state, actions = actions, sync = sync)
     }
 
     if (showCreateDialog) {

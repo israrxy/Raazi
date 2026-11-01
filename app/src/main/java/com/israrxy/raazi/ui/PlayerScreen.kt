@@ -256,10 +256,22 @@ fun PlayerScreen(
         ) {
             LyricsScreen(
                 viewModel = viewModel,
-                onClose = { onLyricsVisibilityChange(false) },
                 onOpenLyricsBrowser = {
                     showLyricsBrowser = true
                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                },
+                topBar = {
+                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = true,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true }
+                        )
+                    }
                 }
             )
         }

@@ -428,6 +428,7 @@ fun HomeScreen(
     if (showAddToPlaylistItem != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = viewModel,
+            tracksToAdd = listOf(showAddToPlaylistItem!!),
             onDismiss = { showAddToPlaylistItem = null },
             onPlaylistSelected = { playlist ->
                 viewModel.addToPlaylist(playlist.id, showAddToPlaylistItem!!)
@@ -439,6 +440,7 @@ fun HomeScreen(
     if (bulkAddToPlaylist != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = viewModel,
+            tracksToAdd = bulkAddToPlaylist!!,
             onDismiss = { bulkAddToPlaylist = null },
             onPlaylistSelected = { playlist ->
                 viewModel.addToPlaylist(bulkAddToPlaylist!!, playlist)

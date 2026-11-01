@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Run targeted unit tests
-        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibrarySmartMixesTest" --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --stacktrace
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace

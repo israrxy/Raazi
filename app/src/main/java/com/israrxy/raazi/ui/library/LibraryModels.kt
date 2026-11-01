@@ -39,11 +39,6 @@ enum class LibrarySort(val label: String) {
     TITLE_DESC("Name Z-A");
 }
 
-enum class LibraryLayout(val label: String) {
-    GRID("Grid"),
-    LIST("List");
-}
-
 /** A single row of the overflow (three-dot) menu. */
 data class LibraryMenuItem(
     val label: String,
@@ -55,21 +50,21 @@ data class LibraryMenuItem(
 data class LibrarySyncState(
     val loggedIn: Boolean,
     val accountName: String?,
-    val syncing: Boolean
+    val syncing: Boolean,
+    val dismissed: Boolean = false
 )
 
-/** Callbacks the grid emits. Kept in one place so screens and grids stay in sync. */
+/** Callbacks the library list emits. Kept in one place so screens and lists stay in sync. */
 data class LibraryActions(
     val search: (String) -> Unit,
     val selectFilter: (LibraryFilter) -> Unit,
     val selectSort: (LibrarySort) -> Unit,
-    val selectLayout: (LibraryLayout) -> Unit,
     val openPlaylist: (String) -> Unit,
     val openArtist: (String, String) -> Unit,
-    val openDownloads: () -> Unit,
     val openSettings: () -> Unit,
     val openSpotifyImport: () -> Unit,
     val syncLibrary: () -> Unit,
+    val dismissSyncCard: () -> Unit,
     val createPlaylist: () -> Unit,
     val renamePlaylist: (playlistId: String) -> Unit,
     val deletePlaylist: (playlistId: String) -> Unit,
@@ -79,7 +74,7 @@ data class LibraryActions(
 )
 
 /**
- * Immutable snapshot of everything the library grid draws.
+ * Immutable snapshot of everything the library list draws.
  *
  * All filtering and sorting happens once, here, when any input changes - the composition
  * only ever reads finished lists. That keeps recomposition cheap and makes the rules
@@ -89,7 +84,6 @@ internal data class LibraryUiState(
     val query: String,
     val filter: LibraryFilter,
     val sort: LibrarySort,
-    val layout: LibraryLayout,
     val likedSongs: List<MusicItem>,
     val history: List<MusicItem>,
     val userPlaylists: List<PlaylistWithTracks>,
@@ -118,10 +112,6 @@ internal data class LibraryUiState(
 
     /** While browsing (no query, no filter) the song lists stay short and offer "See all". */
     private val isBrowsing: Boolean = query.isBlank() && filter == LibraryFilter.ALL
-
-    /** Data-driven mixes built from the user's own plays and likes. */
-    val smartMixes: List<LibrarySmartMix> =
-        if (isBrowsing) buildLibrarySmartMixes(likedSongs, history) else emptyList()
 
     val likedPreview: List<MusicItem> =
         if (isBrowsing) visibleLikedSongs.take(LIKED_PREVIEW_LIMIT) else visibleLikedSongs
@@ -162,76 +152,13 @@ internal data class LibraryUiState(
 
     companion object {
         const val LIKED_PREVIEW_LIMIT = 10
-        const val HISTORY_PREVIEW_LIMIT = 6
+        const val HISTORY_PREVIEW_LIMIT = 10
     }
 }
 
 // ---------------------------------------------------------------------------------------
 // Pure helpers - no Compose, no Android, safe to unit test.
 // ---------------------------------------------------------------------------------------
-
-enum class LibrarySmartMixKind { ON_REPEAT, REDISCOVER, DISCOVER }
-
-data class LibrarySmartMix(
-    val key: String,
-    val title: String,
-    val subtitle: String,
-    val kind: LibrarySmartMixKind,
-    val tracks: List<MusicItem>
-)
-
-internal fun buildLibrarySmartMixes(
-    likedSongs: List<MusicItem>,
-    history: List<MusicItem>
-): List<LibrarySmartMix> {
-    val liked = likedSongs.distinctBy { it.id }
-    val recent = history.distinctBy { it.id }
-    val likedIds = liked.mapTo(HashSet()) { it.id }
-    val recentIds = recent.mapTo(HashSet()) { it.id }
-
-    val onRepeat = recent.filter { it.id in likedIds }.take(SMART_MIX_LIMIT)
-    val rediscover = liked.filterNot { it.id in recentIds }.take(SMART_MIX_LIMIT)
-    val discover = recent.filterNot { it.id in likedIds }.take(SMART_MIX_LIMIT)
-
-    return buildList {
-        if (onRepeat.size >= MIN_SMART_MIX_TRACKS) {
-            add(
-                LibrarySmartMix(
-                    key = "smart_on_repeat",
-                    title = "On repeat",
-                    subtitle = "Liked songs back in rotation",
-                    kind = LibrarySmartMixKind.ON_REPEAT,
-                    tracks = onRepeat
-                )
-            )
-        }
-        if (rediscover.size >= MIN_SMART_MIX_TRACKS) {
-            add(
-                LibrarySmartMix(
-                    key = "smart_rediscover",
-                    title = "Rediscover",
-                    subtitle = "From your likes, not played lately",
-                    kind = LibrarySmartMixKind.REDISCOVER,
-                    tracks = rediscover
-                )
-            )
-        }
-        if (discover.size >= MIN_SMART_MIX_TRACKS) {
-            add(
-                LibrarySmartMix(
-                    key = "smart_discover",
-                    title = "Fresh rotation",
-                    subtitle = "Recent plays outside your likes",
-                    kind = LibrarySmartMixKind.DISCOVER,
-                    tracks = discover
-                )
-            )
-        }
-    }
-}
-
-private const val MIN_SMART_MIX_TRACKS = 3
-private const val SMART_MIX_LIMIT = 8
 
 internal fun matchesQuery(query: String, vararg fields: String): Boolean {
     if (query.isEmpty()) return true
@@ -272,18 +199,6 @@ internal fun List<MusicItem>.applyLibraryTracks(
 
 /** "1 playlist" / "12 playlists". */
 internal fun counted(size: Int, noun: String): String = "$size $noun" + if (size == 1) "" else "s"
-
-/** Compact numbers for the quick-access tiles: 999, 1.2k, 3.4M. */
-internal fun compactCount(size: Int): String = when {
-    size < 1_000 -> size.toString()
-    size < 1_000_000 -> trimZero(size / 1_000.0) + "k"
-    else -> trimZero(size / 1_000_000.0) + "M"
-}
-
-private fun trimZero(value: Double): String {
-    val rounded = "%.1f".format(value)
-    return if (rounded.endsWith(".0")) rounded.dropLast(2) else rounded
-}
 
 /** m:ss for track durations, blank when unknown. */
 internal fun formatDuration(millis: Long): String {
