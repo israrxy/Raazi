@@ -65,6 +65,7 @@ class SettingsDataStore(private val context: Context) {
         val PAUSE_ON_DISCONNECT_KEY = booleanPreferencesKey("pause_on_disconnect")
         val SAVE_SEARCH_HISTORY_KEY = booleanPreferencesKey("save_search_history")
         val DISMISS_YOUTUBE_CONNECT_PROMPT_KEY = booleanPreferencesKey("dismiss_youtube_connect_prompt")
+        val CACHED_SONGS_LIMIT_KEY = intPreferencesKey("cached_songs_limit")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -121,6 +122,9 @@ class SettingsDataStore(private val context: Context) {
 
     val dismissYoutubeConnectPrompt: Flow<Boolean> = prefFlow(DISMISS_YOUTUBE_CONNECT_PROMPT_KEY, false)
     suspend fun setDismissYoutubeConnectPrompt(dismiss: Boolean) = setPref(DISMISS_YOUTUBE_CONNECT_PROMPT_KEY, dismiss)
+
+    val cachedSongsLimit: Flow<Int> = prefFlow(CACHED_SONGS_LIMIT_KEY, 300)
+    suspend fun setCachedSongsLimit(limit: Int) = setPref(CACHED_SONGS_LIMIT_KEY, limit)
 
     val lastfmScrobbleEnabled: Flow<Boolean> = prefFlow(LASTFM_SCROBBLE_ENABLED_KEY, false)
     suspend fun setLastfmScrobbleEnabled(enabled: Boolean) = setPref(LASTFM_SCROBBLE_ENABLED_KEY, enabled)

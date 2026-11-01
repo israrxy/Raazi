@@ -2,6 +2,10 @@ package com.israrxy.raazi
 
 import android.app.Application
 import androidx.room.Room
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.AppDatabase
 import com.israrxy.raazi.data.local.SettingsDataStore
@@ -12,9 +16,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.first
 
-class RaaziApplication : Application() {
+class RaaziApplication : Application(), ImageLoaderFactory {
     lateinit var database: AppDatabase
     lateinit var container: AppContainer
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(250L * 1024 * 1024) // 250 MB ceiling for artwork
+                    .build()
+            }
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.20)
+                    .build()
+            }
+            .crossfade(true)
+            .respectCacheHeaders(false)
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()

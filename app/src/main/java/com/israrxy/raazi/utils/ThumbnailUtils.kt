@@ -22,8 +22,8 @@ object ThumbnailUtils {
             // Remove existing size parameters
             val baseUrl = url.substringBefore("=w").substringBefore("=s")
             
-            // Add new size parameters
-            return "$baseUrl=w$width-h$height-l90-rj"
+            // Add new size and format parameters (-rw for WebP, -l85 for balanced quality & small size)
+            return "$baseUrl=w$width-h$height-l85-rw"
         }
         
         return url

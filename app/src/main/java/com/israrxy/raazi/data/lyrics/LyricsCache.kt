@@ -42,6 +42,25 @@ class LyricsCache(context: Context) {
                     .put("source", lyrics.source)
                     .toString()
             )
+            pruneIfExceeds(300)
+        }
+    }
+
+    fun clearAll() {
+        synchronized(memoryCache) {
+            memoryCache.clear()
+        }
+        runCatching {
+            cacheDirectory.listFiles()?.forEach { it.delete() }
+        }
+    }
+
+    private fun pruneIfExceeds(maxEntries: Int) {
+        val files = cacheDirectory.listFiles() ?: return
+        if (files.size > maxEntries) {
+            files.sortedBy { it.lastModified() }
+                .take(files.size - maxEntries)
+                .forEach { it.delete() }
         }
     }
 
@@ -50,6 +69,8 @@ class LyricsCache(context: Context) {
         if (!file.exists()) {
             return null
         }
+
+        runCatching { file.setLastModified(System.currentTimeMillis()) }
 
         return runCatching {
             val json = JSONObject(file.readText())
