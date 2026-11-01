@@ -1,8 +1,10 @@
 package com.israrxy.raazi.ui
 
 import android.net.Uri
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +30,6 @@ import com.israrxy.raazi.data.lyrics.LyricsMetadataSanitizer
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.savedCollectionId
-import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
 import com.israrxy.raazi.ui.theme.Zinc800
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -51,10 +52,6 @@ fun PlayerScreen(
 
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val currentTrack = playbackState.currentTrack
-    val songAccentColor = rememberPlaylistDominantColor(
-        coverUrl = currentTrack?.thumbnailUrl.orEmpty(),
-        fallbackColor = MaterialTheme.colorScheme.primary
-    )
     val rawProgress = playbackState.currentPosition
     val duration = playbackState.duration
     var isDraggingSlider by remember(currentTrack?.id) { mutableStateOf(false) }
@@ -130,137 +127,144 @@ fun PlayerScreen(
             isLoading = isLoading
         )
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 24.dp)
-            ) {
-                PlayerTopModeHeader(
-                    playbackState = playbackState,
-                    isLyricsVisible = isLyricsVisible,
-                    sleepTimerActive = sleepTimerActive,
-                    onCollapse = onCollapse,
-                    onLyricsVisibilityChange = onLyricsVisibilityChange,
-                    onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                    onShowOptionsSheet = { showOptionsSheet = true }
-                )
-            }
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(300)),
+            exit = fadeOut(tween(300))
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val screenHeight = maxHeight
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 0.dp, max = screenHeight)
+                            .statusBarsPadding()
+                            .padding(horizontal = 24.dp)
+                    ) {
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = isLyricsVisible,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true }
+                        )
 
-            Crossfade(
-                targetState = isLyricsVisible,
-                animationSpec = tween(90),
-                label = "PlayerModeContent",
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) { lyricsVisible ->
-                if (lyricsVisible) {
-                    LyricsScreen(
-                        viewModel = viewModel,
-                        onOpenLyricsBrowser = {
-                            showLyricsBrowser = true
-                            viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
-                        }
-                    )
-                } else {
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                        val screenHeight = maxHeight
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 0.dp, max = screenHeight)
-                                    .padding(horizontal = 24.dp)
-                            ) {
-                                Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
-                                PlayerArtworkOrVideoSection(
-                                    viewModel = viewModel,
-                                    playbackState = playbackState
-                                )
+                        PlayerArtworkOrVideoSection(
+                            viewModel = viewModel,
+                            playbackState = playbackState
+                        )
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
-                                PlayerControlsAndActionsSection(
-                                    viewModel = viewModel,
-                                    playbackState = playbackState,
-                                    favoriteTracks = favoriteTracks,
-                                    progress = progress,
-                                    duration = duration,
-                                    accentColor = songAccentColor,
-                                    isDraggingSlider = isDraggingSlider,
-                                    dragFraction = dragFraction,
-                                    onSliderChange = { fraction ->
-                                        isDraggingSlider = true
-                                        dragFraction = fraction.coerceIn(0f, 1f)
-                                    },
-                                    onSliderFinished = {
-                                        if (duration > 0L) {
-                                            val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
-                                            pendingSeekPositionMs = seekPosition
-                                            pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
-                                            viewModel.seekTo(seekPosition)
-                                        }
-                                        isDraggingSlider = false
-                                    },
-                                    hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                                    onShowQueueSheet = { showPlayNextSheet = true },
-                                    onShowSleepTimer = { showSleepTimer = true }
-                                )
-                            }
+                        PlayerControlsAndActionsSection(
+                            viewModel = viewModel,
+                            playbackState = playbackState,
+                            favoriteTracks = favoriteTracks,
+                            progress = progress,
+                            duration = duration,
+                            isDraggingSlider = isDraggingSlider,
+                            dragFraction = dragFraction,
+                            onSliderChange = { fraction ->
+                                isDraggingSlider = true
+                                dragFraction = fraction.coerceIn(0f, 1f)
+                            },
+                            onSliderFinished = {
+                                if (duration > 0L) {
+                                    val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                                    pendingSeekPositionMs = seekPosition
+                                    pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                                    viewModel.seekTo(seekPosition)
+                                }
+                                isDraggingSlider = false
+                            },
+                            hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
+                            onShowQueueSheet = { showPlayNextSheet = true },
+                            onShowSleepTimer = { showSleepTimer = true }
+                        )
+                    }
 
-                            // --- Extra content cards (scrollable below the player) ---
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp)
-                                    .padding(bottom = 32.dp)
-                                    .navigationBarsPadding()
-                            ) {
-                                Spacer(modifier = Modifier.height(20.dp))
-                                SpotifyLyricsPreviewCard(
-                                    syncedLines = parsedSyncedLines,
-                                    plainLyrics = lyrics?.plainLyrics,
-                                    currentPosition = progress,
-                                    isLyricsLoading = isLyricsLoading,
-                                    onExpandLyrics = { onLyricsVisibilityChange(true) },
-                                    onSearchLyrics = {
-                                        showLyricsBrowser = true
-                                        viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
-                                    },
-                                    onSeekToLine = { viewModel.seekTo(it) }
-                                )
+                    // --- Extra content cards (scrollable below the player) ---
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 32.dp)
+                            .navigationBarsPadding()
+                    ) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        SpotifyLyricsPreviewCard(
+                            syncedLines = parsedSyncedLines,
+                            plainLyrics = lyrics?.plainLyrics,
+                            currentPosition = progress,
+                            isLyricsLoading = isLyricsLoading,
+                            onExpandLyrics = { onLyricsVisibilityChange(true) },
+                            onSearchLyrics = {
+                                showLyricsBrowser = true
+                                viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                            },
+                            onSeekToLine = { viewModel.seekTo(it) }
+                        )
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
-                                PlayerAboutArtistCard(
-                                    currentTrack = currentTrack,
-                                    currentArtistSongs = currentArtistSongs,
-                                    savedCollectionIds = savedCollectionIds,
-                                    onNavigateToArtist = { route ->
-                                        onCollapse()
-                                        navController.navigate(route)
-                                    },
-                                    onToggleSavedArtist = { artistId, artistName, thumbnailUrl ->
-                                        viewModel.toggleSavedArtist(
-                                            artistId = artistId,
-                                            artistName = artistName,
-                                            thumbnailUrl = thumbnailUrl
-                                        )
-                                    }
+                        PlayerAboutArtistCard(
+                            currentTrack = currentTrack,
+                            currentArtistSongs = currentArtistSongs,
+                            savedCollectionIds = savedCollectionIds,
+                            onNavigateToArtist = { route ->
+                                onCollapse()
+                                navController.navigate(route)
+                            },
+                            onToggleSavedArtist = { artistId, artistName, thumbnailUrl ->
+                                viewModel.toggleSavedArtist(
+                                    artistId = artistId,
+                                    artistName = artistName,
+                                    thumbnailUrl = thumbnailUrl
                                 )
                             }
-                        }
+                        )
                     }
                 }
             }
+        }
+
+        // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY
+        AnimatedVisibility(
+            visible = isLyricsVisible,
+            enter = fadeIn(tween(140)),
+            exit = fadeOut(tween(100)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LyricsScreen(
+                viewModel = viewModel,
+                onOpenLyricsBrowser = {
+                    showLyricsBrowser = true
+                    viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                },
+                topBar = {
+                    Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = true,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true }
+                        )
+                    }
+                }
+            )
         }
 
         if (showLyricsBrowser) {

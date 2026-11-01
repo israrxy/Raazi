@@ -46,7 +46,6 @@ internal fun PlayerControlsAndActionsSection(
     favoriteTracks: List<MusicItem>,
     progress: Long,
     duration: Long,
-    accentColor: Color,
     isDraggingSlider: Boolean,
     dragFraction: Float,
     onSliderChange: (Float) -> Unit,
@@ -202,7 +201,7 @@ internal fun PlayerControlsAndActionsSection(
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (shuffleEnabled) accentColor else Color.White.copy(alpha = 0.78f),
+                    tint = if (shuffleEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.78f),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -286,7 +285,7 @@ internal fun PlayerControlsAndActionsSection(
                     contentDescription = "Repeat",
                     tint = when (playbackState.repeatMode) {
                         RepeatMode.OFF -> Color.White.copy(alpha = 0.78f)
-                        else -> accentColor
+                        else -> MaterialTheme.colorScheme.primary
                     },
                     modifier = Modifier.size(24.dp)
                 )

@@ -157,7 +157,7 @@ internal fun PlayerTopModeHeader(
         val pillSegmentWidth = 52.dp
         val pillOffset by animateDpAsState(
             targetValue = pillSegmentWidth * playerModeIndex,
-            animationSpec = tween(durationMillis = 140),
+            animationSpec = tween(durationMillis = 220),
             label = "pill_offset"
         )
 
