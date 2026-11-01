@@ -11,8 +11,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -445,12 +443,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             )
         }
 
-        AnimatedVisibility(
-            visible = showFloatingBubble,
-            enter = scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-            exit = scaleOut(targetScale = 0.5f, animationSpec = tween(150)) + fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
+        if (showFloatingBubble) {
             FloatingMiniPlayer(
                 viewModel = viewModel,
                 onExpand = { isFloatingCollapsed = false }

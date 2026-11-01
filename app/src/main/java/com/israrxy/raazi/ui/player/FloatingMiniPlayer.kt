@@ -7,20 +7,32 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -54,8 +66,8 @@ fun FloatingMiniPlayer(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    val bubbleSize = 58.dp
-    val bubbleSizePx = with(density) { bubbleSize.toPx() }
+    val tileSize = 74.dp
+    val tileSizePx = with(density) { tileSize.toPx() }
     val marginPx = with(density) { 16.dp.toPx() }
     val topInsetPx = with(density) { 72.dp.toPx() }
     val bottomInsetPx = with(density) { 110.dp.toPx() }
@@ -64,30 +76,50 @@ fun FloatingMiniPlayer(
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
 
     val minX = marginPx
-    val maxX = (screenWidthPx - bubbleSizePx - marginPx).coerceAtLeast(minX)
+    val maxX = (screenWidthPx - tileSizePx - marginPx).coerceAtLeast(minX)
     val minY = topInsetPx
-    val maxY = (screenHeightPx - bubbleSizePx - bottomInsetPx).coerceAtLeast(minY)
+    val maxY = (screenHeightPx - tileSizePx - bottomInsetPx).coerceAtLeast(minY)
 
-    // Initial position: Bottom-Right corner
     val offsetX = remember { Animatable(maxX) }
     val offsetY = remember { Animatable(maxY) }
+    val animScale = remember { Animatable(0.7f) }
+
+    LaunchedEffect(Unit) {
+        animScale.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        )
+    }
 
     LaunchedEffect(maxX, maxY) {
         if (offsetX.value > maxX) offsetX.snapTo(maxX)
         if (offsetY.value > maxY) offsetY.snapTo(maxY)
     }
 
+    val tileShape = RoundedCornerShape(14.dp)
+
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
-            .size(bubbleSize)
+            .size(tileSize)
+            .graphicsLayer {
+                scaleX = animScale.value
+                scaleY = animScale.value
+            }
+            .shadow(10.dp, tileShape)
+            .clip(tileShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.5.dp, dominantColor.copy(alpha = 0.85f), tileShape)
             .pointerInput(track.id, minX, maxX, minY, maxY) {
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
                         change.consume()
                         scope.launch {
-                            offsetX.snapTo(offsetX.value + dragAmount.x)
-                            offsetY.snapTo(offsetY.value + dragAmount.y)
+                            offsetX.snapTo((offsetX.value + dragAmount.x).coerceIn(minX, maxX))
+                            offsetY.snapTo((offsetY.value + dragAmount.y).coerceIn(minY, maxY))
                         }
                     },
                     onDragEnd = {
@@ -129,46 +161,61 @@ fun FloatingMiniPlayer(
                     }
                 )
             }
-            .shadow(12.dp, CircleShape)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(2.5.dp, dominantColor, CircleShape)
-            .clickable(onClick = onExpand),
-        contentAlignment = Alignment.Center
+            .clickable(onClick = onExpand)
     ) {
         AsyncImage(
             model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
             contentDescription = track.title,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape),
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
 
-        Surface(
+        Box(
             modifier = Modifier
-                .size(22.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = (-2).dp, y = (-2).dp),
-            shape = CircleShape,
-            color = dominantColor,
-            shadowElevation = 4.dp
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable {
-                        if (isPlaying) viewModel.pause() else viewModel.resume()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = Color.White,
-                    modifier = Modifier.size(13.dp)
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.4f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.55f)
+                        )
+                    )
                 )
-            }
+        )
+
+        IconButton(
+            onClick = onExpand,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(3.dp)
+                .size(26.dp)
+                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Default.OpenInFull,
+                contentDescription = "Expand to normal",
+                tint = Color.White,
+                modifier = Modifier.size(13.dp)
+            )
+        }
+
+        IconButton(
+            onClick = {
+                if (isPlaying) viewModel.pause() else viewModel.resume()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(3.dp)
+                .size(26.dp)
+                .background(dominantColor, CircleShape)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp)
+            )
         }
     }
 }
