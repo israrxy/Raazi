@@ -1,5 +1,6 @@
 package com.israrxy.raazi.ui.playlist
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -216,7 +217,12 @@ internal fun SpotifyStylePlaylistTrackRow(
 
                 DropdownMenu(
                     expanded = showTrackMenu,
-                    onDismissRequest = { showTrackMenu = false }
+                    onDismissRequest = { showTrackMenu = false },
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 8.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)),
+                    modifier = Modifier.widthIn(min = 200.dp)
                 ) {
                     DropdownMenuItem(
                         text = { Text("Play next") },

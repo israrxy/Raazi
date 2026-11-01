@@ -7,7 +7,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -61,13 +64,16 @@ fun FloatingMiniPlayer(
         coverUrl = track.thumbnailUrl,
         fallbackColor = MaterialTheme.colorScheme.primary
     )
+    val accentColor = MaterialTheme.colorScheme.primary
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    val tileSize = 74.dp
-    val tileSizePx = with(density) { tileSize.toPx() }
+    val cardWidth = 122.dp
+    val cardHeight = 64.dp
+    val cardWidthPx = with(density) { cardWidth.toPx() }
+    val cardHeightPx = with(density) { cardHeight.toPx() }
     val marginPx = with(density) { 16.dp.toPx() }
     val topInsetPx = with(density) { 72.dp.toPx() }
     val bottomInsetPx = with(density) { 110.dp.toPx() }
@@ -76,9 +82,9 @@ fun FloatingMiniPlayer(
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
 
     val minX = marginPx
-    val maxX = (screenWidthPx - tileSizePx - marginPx).coerceAtLeast(minX)
+    val maxX = (screenWidthPx - cardWidthPx - marginPx).coerceAtLeast(minX)
     val minY = topInsetPx
-    val maxY = (screenHeightPx - tileSizePx - bottomInsetPx).coerceAtLeast(minY)
+    val maxY = (screenHeightPx - cardHeightPx - bottomInsetPx).coerceAtLeast(minY)
 
     val offsetX = remember { Animatable(maxX) }
     val offsetY = remember { Animatable(maxY) }
@@ -88,8 +94,8 @@ fun FloatingMiniPlayer(
         animScale.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessLow
             )
         )
     }
@@ -99,20 +105,20 @@ fun FloatingMiniPlayer(
         if (offsetY.value > maxY) offsetY.snapTo(maxY)
     }
 
-    val tileShape = RoundedCornerShape(14.dp)
+    val cardShape = RoundedCornerShape(18.dp)
 
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.value.roundToInt(), offsetY.value.roundToInt()) }
-            .size(tileSize)
+            .size(width = cardWidth, height = cardHeight)
             .graphicsLayer {
                 scaleX = animScale.value
                 scaleY = animScale.value
             }
-            .shadow(10.dp, tileShape)
-            .clip(tileShape)
+            .shadow(12.dp, cardShape)
+            .clip(cardShape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.5.dp, dominantColor.copy(alpha = 0.85f), tileShape)
+            .border(2.dp, accentColor, cardShape)
             .pointerInput(track.id, minX, maxX, minY, maxY) {
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
@@ -143,8 +149,8 @@ fun FloatingMiniPlayer(
                                 offsetX.animateTo(
                                     targetValue = closest.first,
                                     animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium
+                                        dampingRatio = Spring.DampingRatioLowBouncy,
+                                        stiffness = Spring.StiffnessLow
                                     )
                                 )
                             }
@@ -152,8 +158,8 @@ fun FloatingMiniPlayer(
                                 offsetY.animateTo(
                                     targetValue = closest.second,
                                     animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium
+                                        dampingRatio = Spring.DampingRatioLowBouncy,
+                                        stiffness = Spring.StiffnessLow
                                     )
                                 )
                             }
@@ -161,61 +167,79 @@ fun FloatingMiniPlayer(
                     }
                 )
             }
-            .clickable(onClick = onExpand)
     ) {
-        AsyncImage(
-            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
-            contentDescription = track.title,
+        Row(
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(cardHeight)
+                    .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                    .clickable(onClick = onExpand)
+            ) {
+                AsyncImage(
+                    model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
+                    contentDescription = track.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.4f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.55f)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                dominantColor.copy(alpha = 0.50f),
+                                dominantColor.copy(alpha = 0.30f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                            )
                         )
                     )
-                )
-        )
+                    .clickable(onClick = onExpand),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (isPlaying) viewModel.pause() else viewModel.resume()
+                        },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(accentColor, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-        IconButton(
-            onClick = onExpand,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(3.dp)
-                .size(26.dp)
-                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-        ) {
-            Icon(
-                imageVector = Icons.Default.OpenInFull,
-                contentDescription = "Expand to normal",
-                tint = Color.White,
-                modifier = Modifier.size(13.dp)
-            )
-        }
-
-        IconButton(
-            onClick = {
-                if (isPlaying) viewModel.pause() else viewModel.resume()
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(3.dp)
-                .size(26.dp)
-                .background(dominantColor, CircleShape)
-        ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = Color.White,
-                modifier = Modifier.size(14.dp)
-            )
+                    IconButton(
+                        onClick = onExpand,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInFull,
+                            contentDescription = "Expand to normal",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

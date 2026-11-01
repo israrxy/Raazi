@@ -129,13 +129,14 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
 
     var isFloatingCollapsed by rememberSaveable { mutableStateOf(false) }
     val isSelectionModeActive by viewModel.isSelectionModeActive.collectAsStateWithLifecycle()
+    val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsStateWithLifecycle(initialValue = true)
     val onRingtoneScreen = currentDestination?.route == "ringtone_trimmer"
     val onSettingsScreen = currentDestination?.route == "settings" || currentDestination?.route?.startsWith("settings") == true
     val showBottomBar = currentDestination.isTopLevelDestination() &&
         sheetState.currentValue != SheetValue.Expanded && !onRingtoneScreen
     val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen || sheetState.currentValue == SheetValue.Expanded
-    val showMiniPlayerBar = currentTrack != null && !isFloatingCollapsed && !isMiniPlayerSuppressed
-    val showFloatingBubble = currentTrack != null && isFloatingCollapsed && !isMiniPlayerSuppressed
+    val showMiniPlayerBar = currentTrack != null && (!isFloatingCollapsed || !microPlayerEnabled) && !isMiniPlayerSuppressed
+    val showFloatingBubble = currentTrack != null && isFloatingCollapsed && microPlayerEnabled && !isMiniPlayerSuppressed
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val collapsedMiniPlayerBottomPadding =
         if (showBottomBar) {
@@ -438,7 +439,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             MiniPlayer(
                 viewModel = viewModel,
                 onNavigateToPlayer = { scope.launch { sheetState.expand() } },
-                onCollapseToFloating = { isFloatingCollapsed = true },
+                onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
                 modifier = Modifier.fillMaxWidth()
             )
         }

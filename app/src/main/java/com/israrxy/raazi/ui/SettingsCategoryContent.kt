@@ -21,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -286,6 +288,21 @@ internal fun SettingsCategoryDetailList(
                         }
                     }
                 }
+
+                item {
+                    val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsState(initial = true)
+                    SettingsSection(title = "Player Experience") {
+                        SettingsSwitchItem(
+                            icon = Icons.Filled.OpenInFull,
+                            title = "Floating Micro Player",
+                            subtitle = "Collapse MiniPlayer into a draggable corner tile with cover art and controls",
+                            checked = microPlayerEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) }
+                            }
+                        )
+                    }
+                }
             }
 
             SettingsCategory.PLAYBACK -> {
@@ -329,28 +346,13 @@ internal fun SettingsCategoryDetailList(
             }
 
             SettingsCategory.LYRICS_AI -> {
-                item {
-                    SettingsSection(title = "Lyrics & Translation") {
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.Translate,
-                            title = "Translate Lyrics",
-                            subtitle = "Show Google Neural translated lines below lyrics",
-                            checked = translateLyrics,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setLyricsTranslateEnabled(enabled) }
-                            }
-                        )
-                        if (translateLyrics) {
-                            SettingsDivider()
-                            SettingsSelectItem(
-                                icon = Icons.Filled.Language,
-                                title = "Target Language",
-                                value = targetLanguage.uppercase(),
-                                onClick = onShowLanguageDialog
-                            )
-                        }
-                    }
-                }
+                settingsLyricsSection(
+                    settingsDataStore = settingsDataStore,
+                    scope = scope,
+                    translateLyrics = translateLyrics,
+                    targetLanguage = targetLanguage,
+                    onShowLanguageDialog = onShowLanguageDialog
+                )
             }
 
             SettingsCategory.DOWNLOADS -> {
@@ -457,30 +459,21 @@ internal fun SettingsCategoryDetailList(
                             icon = Icons.Filled.Code,
                             title = "Source Code",
                             subtitle = "github.com/israrxy/Raazi",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/israrxy/Raazi"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/israrxy/Raazi"))) }
                         )
                         SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.Person,
                             title = "Instagram",
                             subtitle = "@israrxy",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))) }
                         )
                         SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.Language,
                             title = "Website",
                             subtitle = "israrxy.qzz.io",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://israrxy.qzz.io"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://israrxy.qzz.io"))) }
                         )
                     }
                 }

@@ -56,6 +56,10 @@ class SettingsDataStore(private val context: Context) {
         val FLAC_ENABLED_KEY = booleanPreferencesKey("flac_enabled")
         val HIFI_API_URL_KEY = stringPreferencesKey("hifi_api_url")
         val FLAC_QUALITY_KEY = stringPreferencesKey("flac_quality")
+        val MICRO_PLAYER_ENABLED_KEY = booleanPreferencesKey("micro_player_enabled")
+        val PREFERRED_LYRICS_TYPE_KEY = stringPreferencesKey("preferred_lyrics_type")
+        val LYRICS_AUTO_SCROLL_KEY = booleanPreferencesKey("lyrics_auto_scroll")
+        val DEFAULT_LYRICS_VIEW_KEY = stringPreferencesKey("default_lyrics_view")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -85,6 +89,18 @@ class SettingsDataStore(private val context: Context) {
 
     val lyricsTranslateLang: Flow<String> = prefFlow(LYRICS_TRANSLATE_LANG_KEY, "en")
     suspend fun setLyricsTranslateLang(lang: String) = setPref(LYRICS_TRANSLATE_LANG_KEY, lang)
+
+    val microPlayerEnabled: Flow<Boolean> = prefFlow(MICRO_PLAYER_ENABLED_KEY, true)
+    suspend fun setMicroPlayerEnabled(enabled: Boolean) = setPref(MICRO_PLAYER_ENABLED_KEY, enabled)
+
+    val preferredLyricsType: Flow<String> = prefFlow(PREFERRED_LYRICS_TYPE_KEY, "ROMANIZED")
+    suspend fun setPreferredLyricsType(type: String) = setPref(PREFERRED_LYRICS_TYPE_KEY, type)
+
+    val lyricsAutoScroll: Flow<Boolean> = prefFlow(LYRICS_AUTO_SCROLL_KEY, true)
+    suspend fun setLyricsAutoScroll(enabled: Boolean) = setPref(LYRICS_AUTO_SCROLL_KEY, enabled)
+
+    val defaultLyricsView: Flow<String> = prefFlow(DEFAULT_LYRICS_VIEW_KEY, "KARAOKE")
+    suspend fun setDefaultLyricsView(view: String) = setPref(DEFAULT_LYRICS_VIEW_KEY, view)
 
     val lastfmScrobbleEnabled: Flow<Boolean> = prefFlow(LASTFM_SCROBBLE_ENABLED_KEY, false)
     suspend fun setLastfmScrobbleEnabled(enabled: Boolean) = setPref(LASTFM_SCROBBLE_ENABLED_KEY, enabled)

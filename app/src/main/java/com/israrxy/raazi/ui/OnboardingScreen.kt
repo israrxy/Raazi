@@ -53,7 +53,7 @@ fun OnboardingScreen(
     viewModel: MusicPlayerViewModel,
     onFinish: () -> Unit
 ) {
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsDataStore = remember { SettingsDataStore(context) }
@@ -62,6 +62,9 @@ fun OnboardingScreen(
     val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
     val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = true)
     val pastelAccent by settingsDataStore.pastelAccent.collectAsState(initial = "Emerald")
+    val preferredLyricsType by settingsDataStore.preferredLyricsType.collectAsState(initial = "ROMANIZED")
+    val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsState(initial = true)
+    val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
     
     // WebView active state
     var isWebViewVisible by remember { mutableStateOf(false) }
@@ -90,7 +93,7 @@ fun OnboardingScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = pagerState.currentPage != 2 // Disable swiping when WebView is active
+            userScrollEnabled = pagerState.currentPage != 3 // Disable swiping when WebView is active
         ) { page ->
             when (page) {
                 0 -> WelcomeIntroPage()
@@ -102,7 +105,15 @@ fun OnboardingScreen(
                     onDynamicColorToggle = { enabled -> scope.launch { settingsDataStore.setDynamicColor(enabled) } },
                     onPastelAccentChange = { accent -> scope.launch { settingsDataStore.setPastelAccent(accent) } }
                 )
-                2 -> YouTubeConnectPage(
+                2 -> OnboardingPreferencesPage(
+                    preferredLyricsType = preferredLyricsType,
+                    microPlayerEnabled = microPlayerEnabled,
+                    lyricsAutoScroll = lyricsAutoScroll,
+                    onLyricsTypeChange = { type -> scope.launch { settingsDataStore.setPreferredLyricsType(type) } },
+                    onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } },
+                    onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } }
+                )
+                3 -> YouTubeConnectPage(
                     viewModel = viewModel,
                     settingsDataStore = settingsDataStore,
                     onWebViewVisibilityChange = { isWebViewVisible = it },
@@ -117,7 +128,7 @@ fun OnboardingScreen(
         }
 
         // Top Skip button
-        if (pagerState.currentPage < 2 && !isWebViewVisible) {
+        if (pagerState.currentPage < 3 && !isWebViewVisible) {
             TextButton(
                 onClick = { onFinish() },
                 modifier = Modifier
@@ -167,7 +178,7 @@ fun OnboardingScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    repeat(3) { index ->
+                    repeat(4) { index ->
                         val isSelected = pagerState.currentPage == index
                         val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, label = "width")
                         val color by animateColorAsState(
@@ -191,7 +202,7 @@ fun OnboardingScreen(
                 ) {
                     Button(
                         onClick = {
-                            if (pagerState.currentPage < 2) {
+                            if (pagerState.currentPage < 3) {
                                 scope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 }
@@ -204,10 +215,10 @@ fun OnboardingScreen(
                         contentPadding = PaddingValues(horizontal = 14.dp)
                     ) {
                         Text(
-                            text = if (pagerState.currentPage == 2) "Finish" else "Next",
+                            text = if (pagerState.currentPage == 3) "Finish" else "Next",
                             fontWeight = FontWeight.Bold
                         )
-                        if (pagerState.currentPage < 2) {
+                        if (pagerState.currentPage < 3) {
                             Spacer(Modifier.width(6.dp))
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
                         }
