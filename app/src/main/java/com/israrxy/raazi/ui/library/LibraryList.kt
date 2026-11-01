@@ -19,7 +19,8 @@ internal fun LazyListScope.LibraryListContent(
     item("header") {
         LibraryHeader(
             summary = state.summary,
-            onOpenHistory = { actions.openPlaylist("history") }
+            onOpenHistory = { actions.openPlaylist("history") },
+            onOpenSpotifyImport = actions.openSpotifyImport
         )
     }
     item("search") { LibrarySearchField(query = state.query, onQueryChange = actions.search) }
@@ -44,27 +45,33 @@ internal fun LazyListScope.LibraryListContent(
 
     if (state.isEmptyLibrary) {
         item("empty") { LibraryEmptyState(actions = actions) }
-        item("pills_empty") { LibraryActionPills(actions = actions) }
         return
     }
-
-    item("pills") { LibraryActionPills(actions = actions) }
 
     if (state.isNoResults) {
         item("no_results") { LibraryNoResultsState(query = state.query, actions = actions) }
         return
     }
 
-    renderSongs(
-        title = "Liked songs",
-        preview = state.likedPreview,
-        queue = state.visibleLikedSongs,
-        keyPrefix = "liked",
-        capped = state.likedPreviewCapped,
-        openAll = { actions.openPlaylist("favorites") },
+    renderPlaylists(state, actions)
+
+    if (state.filter == LibraryFilter.SONGS || state.query.isNotBlank()) {
+        renderSongs(
+            title = "Liked songs",
+            preview = state.likedPreview,
+            queue = state.visibleLikedSongs,
+            keyPrefix = "liked",
+            capped = state.likedPreviewCapped,
+            openAll = { actions.openPlaylist("favorites") },
+            actions = actions
+        )
+    }
+
+    renderSavedGroup(
+        title = "Artists",
+        items = state.visibleArtists,
         actions = actions
     )
-    renderUserPlaylists(state, actions)
     renderSavedGroup(
         title = "Saved playlists",
         items = state.visibleSavedPlaylists,
@@ -73,11 +80,6 @@ internal fun LazyListScope.LibraryListContent(
     renderSavedGroup(
         title = "Albums",
         items = state.visibleAlbums,
-        actions = actions
-    )
-    renderSavedGroup(
-        title = "Artists",
-        items = state.visibleArtists,
         actions = actions
     )
     renderSongs(
@@ -95,24 +97,41 @@ internal fun LazyListScope.LibraryListContent(
 // Sections
 // ---------------------------------------------------------------------------------------
 
-private fun LazyListScope.renderUserPlaylists(
+private fun LazyListScope.renderPlaylists(
     state: LibraryUiState,
     actions: LibraryActions
 ) {
-    val playlists = state.visibleUserPlaylists
-    if (playlists.isEmpty()) return
+    if (state.filter != LibraryFilter.ALL && state.filter != LibraryFilter.PLAYLISTS) return
+
+    val banners = buildList {
+        if (state.query.isBlank()) {
+            add(
+                likedPlaylistBanner(
+                    likedSongs = state.likedSongs,
+                    playCounts = state.playCounts,
+                    onOpen = { actions.openPlaylist("favorites") }
+                )
+            )
+        }
+        state.visibleUserPlaylists.forEach { entry ->
+            add(
+                entry.toPlaylistBannerUi(
+                    playCounts = state.playCounts,
+                    onOpen = { actions.openPlaylist(entry.playlist.id) },
+                    onRename = { actions.renamePlaylist(entry.playlist.id) },
+                    onDelete = { actions.deletePlaylist(entry.playlist.id) }
+                )
+            )
+        }
+    }
+    if (banners.isEmpty()) return
 
     item("header_playlists") {
-        LibrarySectionHeader(title = "Playlists", count = playlists.size)
+        LibrarySectionHeader(title = "Playlists", count = banners.size)
     }
-    val rows = playlists.map { entry ->
-        entry.toCollectionUi(
-            onOpen = { actions.openPlaylist(entry.playlist.id) },
-            onRename = { actions.renamePlaylist(entry.playlist.id) },
-            onDelete = { actions.deletePlaylist(entry.playlist.id) }
-        )
+    items(banners, key = { it.key }) { banner ->
+        LibraryPlaylistBanner(item = banner)
     }
-    collectionItems(rows)
 }
 
 private fun LazyListScope.renderSavedGroup(

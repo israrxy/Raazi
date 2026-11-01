@@ -3,11 +3,17 @@ package com.israrxy.raazi.ui.library
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -50,6 +57,8 @@ fun LibraryScreen(
     val accountName by viewModel.youTubeAccountName.collectAsStateWithLifecycle()
     val syncing by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
     val syncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
+    val playCounts by viewModel.trackPlayCounts.collectAsStateWithLifecycle()
+    val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
 
@@ -71,7 +80,7 @@ fun LibraryScreen(
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val state = remember(liked, history, downloads, playlists, saved, query, filter, sort) {
+    val state = remember(liked, history, downloads, playlists, saved, playCounts, query, filter, sort) {
         LibraryUiState(
             query = query.trim(),
             filter = filter,
@@ -82,7 +91,8 @@ fun LibraryScreen(
             savedPlaylists = saved.filter { it.contentType == MusicContentType.PLAYLIST },
             albums = saved.filter { it.contentType == MusicContentType.ALBUM },
             artists = saved.filter { it.contentType == MusicContentType.ARTIST },
-            downloadCount = downloads.size
+            downloadCount = downloads.size,
+            playCounts = playCounts
         )
     }
 
@@ -164,16 +174,30 @@ fun LibraryScreen(
         viewModel.clearYouTubeSyncStatus()
     }
 
-    LazyColumn(
-        state = rememberLazyListState(),
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        LibraryListContent(state = state, actions = actions, sync = sync)
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = rememberLazyListState(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LibraryListContent(state = state, actions = actions, sync = sync)
+        }
+
+        FloatingActionButton(
+            onClick = actions.createPlaylist,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(
+                    end = 20.dp,
+                    bottom = if (playbackState.currentTrack != null) 90.dp else 20.dp
+                )
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New playlist")
+        }
     }
 
     if (showCreateDialog) {

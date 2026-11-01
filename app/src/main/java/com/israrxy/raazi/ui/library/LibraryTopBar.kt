@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 internal fun LibraryHeader(
     summary: String,
     onOpenHistory: () -> Unit,
+    onOpenSpotifyImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -71,6 +73,13 @@ internal fun LibraryHeader(
                     maxLines = 1
                 )
             }
+        }
+        IconButton(onClick = onOpenSpotifyImport) {
+            Icon(
+                imageVector = Icons.Default.CloudDownload,
+                contentDescription = "Import playlists",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         IconButton(onClick = onOpenHistory) {
             Icon(

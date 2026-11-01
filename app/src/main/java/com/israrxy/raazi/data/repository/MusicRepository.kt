@@ -459,6 +459,10 @@ class MusicRepository(
         entities.map { mapHistoryToDomain(it) }
     }
 
+    val trackPlayCounts: Flow<Map<String, Int>> = db.musicDao().getPlaybackCounts().map { counts ->
+        counts.associate { it.id to it.playCount }
+    }
+
     val quickPicks: Flow<List<MusicItem>> = db.musicDao().getSmartRecommendations().map { entities ->
         entities.map { mapTrackToDomain(it) }
     }

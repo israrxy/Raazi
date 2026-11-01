@@ -128,6 +128,9 @@ interface MusicDao {
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 100")
     fun getPlaybackHistory(): Flow<List<PlaybackHistoryEntity>>
 
+    @Query("SELECT id, playCount FROM playback_history")
+    fun getPlaybackCounts(): Flow<List<TrackPlayCount>>
+
     @Query("SELECT * FROM playback_history WHERE timestamp < :cutoff ORDER BY playCount DESC, timestamp DESC LIMIT 50")
     fun getForgottenFavorites(cutoff: Long): Flow<List<PlaybackHistoryEntity>>
 
@@ -301,4 +304,9 @@ data class PlaylistWithTracks(
         )
     )
     val tracks: List<TrackEntity>
+)
+
+data class TrackPlayCount(
+    val id: String,
+    val playCount: Int
 )

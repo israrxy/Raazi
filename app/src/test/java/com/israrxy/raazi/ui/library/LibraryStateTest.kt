@@ -39,6 +39,24 @@ class LibraryStateTest {
         assertTrue(state.visibleUserPlaylists.isEmpty())
     }
 
+    @Test
+    fun `playlist artwork uses the four most played tracks`() {
+        val tracks = listOf(
+            "a" to "a.jpg",
+            "b" to "b.jpg",
+            "c" to "c.jpg",
+            "d" to "d.jpg",
+            "e" to "e.jpg"
+        )
+
+        val artwork = topPlayedArtwork(
+            tracks = tracks,
+            playCounts = mapOf("a" to 2, "b" to 5, "c" to 9, "d" to 1, "e" to 4)
+        )
+
+        assertEquals(listOf("c.jpg", "b.jpg", "e.jpg", "a.jpg"), artwork)
+    }
+
     private fun libraryState(
         query: String = "",
         filter: LibraryFilter = LibraryFilter.ALL,

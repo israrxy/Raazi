@@ -262,6 +262,11 @@ class MusicPlayerViewModel(
     internal val _filteredPlaylists = MutableStateFlow<List<Playlist>?>(null)
     val filteredPlaylists: StateFlow<List<Playlist>?> = _filteredPlaylists.asStateFlow()
     val playbackHistory: StateFlow<List<MusicItem>> = repository.playbackHistory.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val trackPlayCounts: StateFlow<Map<String, Int>> = repository.trackPlayCounts.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        emptyMap()
+    )
     internal val _currentPlaylist = MutableStateFlow<Playlist?>(null)
     val currentPlaylist: StateFlow<Playlist?> = _currentPlaylist.asStateFlow()
     val userPlaylists: StateFlow<List<PlaylistEntity>> = musicDao.getAllPlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

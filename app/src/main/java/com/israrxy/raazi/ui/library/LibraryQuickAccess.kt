@@ -2,7 +2,6 @@ package com.israrxy.raazi.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,16 +12,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,7 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------------------
-// Account / sync card and the two library action pills.
+// Account / sync card.
 // ---------------------------------------------------------------------------------------
 
 @Composable
@@ -118,34 +114,6 @@ internal fun LibrarySyncCard(
                     modifier = Modifier.size(18.dp)
                 )
             }
-        }
-    }
-}
-
-/** Two full-width pill buttons: the two things people actually create here. */
-@Composable
-internal fun LibraryActionPills(actions: LibraryActions, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        OutlinedButton(
-            onClick = actions.createPlaylist,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("New playlist", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        OutlinedButton(
-            onClick = actions.openSpotifyImport,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Import", maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

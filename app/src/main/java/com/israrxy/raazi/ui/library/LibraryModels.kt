@@ -90,7 +90,8 @@ internal data class LibraryUiState(
     val savedPlaylists: List<SavedCollectionItem>,
     val albums: List<SavedCollectionItem>,
     val artists: List<SavedCollectionItem>,
-    val downloadCount: Int
+    val downloadCount: Int,
+    val playCounts: Map<String, Int> = emptyMap()
 ) {
     val visibleUserPlaylists: List<PlaylistWithTracks> =
         if (filter.showsUserPlaylists) userPlaylists.applyLibraryPlaylists(query, sort) else emptyList()
