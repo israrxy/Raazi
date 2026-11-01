@@ -128,6 +128,9 @@ interface MusicDao {
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 100")
     fun getPlaybackHistory(): Flow<List<PlaybackHistoryEntity>>
 
+    @Query("SELECT id, playCount FROM playback_history")
+    fun getPlaybackCounts(): Flow<List<TrackPlayCount>>
+
     @Query("SELECT * FROM playback_history WHERE timestamp < :cutoff ORDER BY playCount DESC, timestamp DESC LIMIT 50")
     fun getForgottenFavorites(cutoff: Long): Flow<List<PlaybackHistoryEntity>>
 
@@ -147,8 +150,11 @@ interface MusicDao {
     @Delete
     fun deletePlaybackHistory(item: PlaybackHistoryEntity): Int
 
+    @Query("DELETE FROM playback_history WHERE id = :trackId")
+    fun deletePlaybackHistoryByTrackId(trackId: String): Int
+
     // Search History
-    @Query("SELECT * FROM search_history WHERE query LIKE :query || '%' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM search_history WHERE query LIKE '%' || :query || '%' OR (resultTitle IS NOT NULL AND resultTitle LIKE '%' || :query || '%') ORDER BY timestamp DESC")
     fun searchHistory(query: String = ""): Flow<List<SearchHistoryEntity>>
 
     @Transaction
@@ -301,4 +307,9 @@ data class PlaylistWithTracks(
         )
     )
     val tracks: List<TrackEntity>
+)
+
+data class TrackPlayCount(
+    val id: String,
+    val playCount: Int
 )

@@ -286,6 +286,27 @@ internal fun MusicPlayerViewModel.createPlaylistImpl(name: String, syncedToYouTu
     }
 }
 
+internal fun MusicPlayerViewModel.createPlaylistWithTracksImpl(
+    name: String,
+    tracks: List<MusicItem>,
+    syncedToYouTube: Boolean = false
+) {
+    viewModelScope.launch {
+        try {
+            val playlist = repository.createPlaylist(name, syncedToYouTube = syncedToYouTube)
+            if (tracks.isNotEmpty()) {
+                repository.addToPlaylist(tracks, playlist)
+            }
+            val songCount = if (tracks.size == 1) "1 song" else "${tracks.size} songs"
+            _youTubeSyncStatus.value =
+                "Created playlist \"${playlist.title}\" with $songCount."
+        } catch (e: Exception) {
+            Log.e("MusicVM", "Error creating playlist with tracks", e)
+            _error.value = "Failed to create playlist: ${e.message}"
+        }
+    }
+}
+
 internal fun MusicPlayerViewModel.addToPlaylistByIdImpl(playlistId: String, track: MusicItem) {
     viewModelScope.launch {
         try {
@@ -392,6 +413,24 @@ internal fun MusicPlayerViewModel.removeTracksFromPlaylistImpl(playlistId: Strin
         } catch (e: Exception) {
             Log.e("MusicVM", "Error removing tracks from playlist", e)
             _error.value = e.message ?: "Failed to remove songs."
+        }
+    }
+}
+
+internal fun MusicPlayerViewModel.removeTracksFromHistoryImpl(tracks: List<MusicItem>) {
+    viewModelScope.launch {
+        repository.removeTracksFromPlaybackHistory(tracks)
+        val removedIds = tracks.mapTo(mutableSetOf()) { it.id }
+        _currentPlaylist.value?.takeIf { it.id == "history" }?.let { history ->
+            _currentPlaylist.value = history.copy(items = history.items.filterNot { it.id in removedIds })
+        }
+    }
+}
+
+internal fun MusicPlayerViewModel.setTracksFavoriteImpl(tracks: List<MusicItem>, liked: Boolean) {
+    viewModelScope.launch {
+        tracks.forEach { track ->
+            if (liked) repository.addToFavorites(track) else repository.removeFromFavorites(track)
         }
     }
 }

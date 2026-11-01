@@ -161,6 +161,14 @@ fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
 
                 Spacer(Modifier.height(16.dp))
 
+                // Macro tone controls
+                EqualizerToneControls(
+                    state = equalizerState,
+                    onToneChange = { group, gain -> viewModel.setToneLevel(group, gain) }
+                )
+
+                Spacer(Modifier.height(16.dp))
+
                 // Frequency Bands
                 GlassBox(
                     modifier = Modifier.fillMaxWidth(),

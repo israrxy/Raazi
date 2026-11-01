@@ -50,8 +50,8 @@ import kotlin.math.abs
 @Composable
 fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
-    onClose: () -> Unit,
-    onOpenLyricsBrowser: () -> Unit = {}
+    onOpenLyricsBrowser: () -> Unit = {},
+    topBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -216,7 +216,7 @@ fun LyricsScreen(
             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
             if (targetItem != null && viewportHeight > 0) {
-                val desiredY = (viewportHeight * 0.28f).toInt()
+                val desiredY = (viewportHeight * 0.38f).toInt()
                 val itemCenter = targetItem.offset + (targetItem.size / 2)
                 val diff = itemCenter - desiredY
                 if (abs(diff) > 10) {
@@ -226,7 +226,7 @@ fun LyricsScreen(
                     )
                 }
             } else {
-                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.25f).toInt() else -160
+                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.35f).toInt() else -160
                 listState.animateScrollToItem(
                     index = targetLazyIndex,
                     scrollOffset = anchorOffset
@@ -293,10 +293,42 @@ fun LyricsScreen(
                 .background(
                     Brush.verticalGradient(
                         colorStops = arrayOf(
-                            0.0f to Color.Black.copy(alpha = 0.72f),
-                            0.25f to Color.Black.copy(alpha = 0.54f),
-                            0.75f to Color.Black.copy(alpha = 0.66f),
-                            1.0f to Color.Black.copy(alpha = 0.88f)
+                            0.0f to Color.Black.copy(alpha = 0.58f),
+                            0.22f to Color.Black.copy(alpha = 0.34f),
+                            0.62f to Color.Black.copy(alpha = 0.52f),
+                            1.0f to Color.Black.copy(alpha = 0.84f)
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(210.dp)
+                .align(androidx.compose.ui.Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.58f),
+                            Color.Black.copy(alpha = 0.18f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(190.dp)
+                .align(androidx.compose.ui.Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.88f)
                         )
                     )
                 )
@@ -320,14 +352,7 @@ fun LyricsScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            LyricsTopNavigationBar(
-                onClose = onClose,
-                onOpenLyricsBrowser = {
-                    showOptionsMenu = false
-                    onOpenLyricsBrowser()
-                },
-                onOpenTrackDetails = { showTrackDetails = true }
-            )
+            topBar()
 
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
@@ -346,6 +371,7 @@ fun LyricsScreen(
                 lyricsScriptFilter = lyricsScriptFilter,
                 onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
                 onOpenLyricsBrowser = onOpenLyricsBrowser,
+                onOpenTrackDetails = { showTrackDetails = true },
                 onToggleFavorite = { viewModel.toggleFavorite(it) }
             )
 

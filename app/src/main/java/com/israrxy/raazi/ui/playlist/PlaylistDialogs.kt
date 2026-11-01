@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +30,9 @@ enum class PlaylistSortOrder(val label: String) {
 @Composable
 internal fun PlaylistSelectionBottomBar(
     selectedCount: Int,
-    isEditablePlaylist: Boolean,
+    canRemoveSelected: Boolean,
+    likeActionLabel: String,
+    onLikeSelected: () -> Unit,
     onDownloadSelected: () -> Unit,
     onQueueSelected: () -> Unit,
     onRemoveSelected: () -> Unit
@@ -48,6 +51,7 @@ internal fun PlaylistSelectionBottomBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            SelectionAction(Icons.Filled.Favorite, likeActionLabel, onLikeSelected, Emerald500)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -88,7 +92,7 @@ internal fun PlaylistSelectionBottomBar(
                 )
             }
 
-            if (isEditablePlaylist) {
+            if (canRemoveSelected) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -110,6 +114,24 @@ internal fun PlaylistSelectionBottomBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SelectionAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    tint: androidx.compose.ui.graphics.Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Icon(icon, contentDescription = label, tint = tint)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

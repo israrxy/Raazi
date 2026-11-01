@@ -205,6 +205,7 @@ class MusicPlayerViewModel(
         val currentLevels: List<Short> = emptyList(), val centerFreqs: List<Int> = emptyList(),
         val presets: List<String> = emptyList(), val currentPreset: String = "Custom",
         val bassBoostStrength: Short = 0, val virtualizerStrength: Short = 0, val reverbPreset: Int = 0,
+        val toneBassDb: Int = 0, val toneMidDb: Int = 0, val toneTrebleDb: Int = 0,
         val bassBoostSupported: Boolean = false, val virtualizerSupported: Boolean = false, val reverbSupported: Boolean = false
     )
     data class CustomPreset(val name: String, val levels: List<Short>, val bassBoost: Short = 0, val virtualizer: Short = 0, val reverb: Int = 0)
@@ -261,6 +262,11 @@ class MusicPlayerViewModel(
     internal val _filteredPlaylists = MutableStateFlow<List<Playlist>?>(null)
     val filteredPlaylists: StateFlow<List<Playlist>?> = _filteredPlaylists.asStateFlow()
     val playbackHistory: StateFlow<List<MusicItem>> = repository.playbackHistory.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val trackPlayCounts: StateFlow<Map<String, Int>> = repository.trackPlayCounts.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        emptyMap()
+    )
     internal val _currentPlaylist = MutableStateFlow<Playlist?>(null)
     val currentPlaylist: StateFlow<Playlist?> = _currentPlaylist.asStateFlow()
     val userPlaylists: StateFlow<List<PlaylistEntity>> = musicDao.getAllPlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -338,6 +344,7 @@ class MusicPlayerViewModel(
 
     fun loadEqualizerState() = loadEqualizerStateImpl()
     fun setBandLevel(band: Short, level: Short) = setBandLevelImpl(band, level)
+    fun setToneLevel(group: EqualizerToneGroup, gainDb: Int) = setToneLevelImpl(group, gainDb)
     fun usePreset(presetName: String) = usePresetImpl(presetName)
     fun saveEqualizerSettings() = saveEqualizerSettingsImpl()
     fun applyDeviceEqProfileIfAny() = applyDeviceEqProfileIfAnyImpl()
@@ -405,12 +412,8 @@ class MusicPlayerViewModel(
     fun fetchAutoPlayQueue(track: MusicItem) = fetchAutoPlayQueueImpl(track)
     fun startRadio(track: MusicItem) = startRadioImpl(track)
     fun saveCurrentQueueAsPlaylist(name: String? = null, tracks: List<MusicItem>? = null) = saveCurrentQueueAsPlaylistImpl(name, tracks)
-
-    fun toggleFavorite(musicItem: MusicItem) {
-        viewModelScope.launch {
-            if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem)
-        }
-    }
+    fun toggleFavorite(musicItem: MusicItem) = viewModelScope.launch { if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem) }
+    fun setTracksFavorite(tracks: List<MusicItem>, liked: Boolean) = setTracksFavoriteImpl(tracks, liked)
     fun fetchSongCredits(track: MusicItem) = fetchSongCreditsImpl(track)
     fun toggleSavedCollection(item: MusicItem) { viewModelScope.launch { repository.toggleSavedCollection(item) } }
     fun toggleSavedArtist(artistId: String, artistName: String, thumbnailUrl: String = "") { viewModelScope.launch { repository.toggleSavedArtist(artistId, artistName, thumbnailUrl) } }
@@ -434,6 +437,7 @@ class MusicPlayerViewModel(
 
     fun loadPlaylist(playlistId: String) = loadPlaylistImpl(playlistId)
     fun createPlaylist(name: String, syncedToYouTube: Boolean = false) = createPlaylistImpl(name, syncedToYouTube)
+    fun createPlaylistWithTracks(name: String, tracks: List<MusicItem>, syncedToYouTube: Boolean = false) = createPlaylistWithTracksImpl(name, tracks, syncedToYouTube)
     fun addToPlaylist(playlistId: String, track: MusicItem) = addToPlaylistByIdImpl(playlistId, track)
     fun addToPlaylist(track: MusicItem, playlist: PlaylistEntity) = addToPlaylistEntityImpl(track, playlist)
     fun addToPlaylist(tracks: List<MusicItem>, playlist: PlaylistEntity) = addTracksToPlaylistEntityImpl(tracks, playlist)
@@ -442,6 +446,7 @@ class MusicPlayerViewModel(
     fun renamePlaylist(playlistId: String, newName: String) = renamePlaylistImpl(playlistId, newName)
     fun removeTrackFromPlaylist(playlistId: String, trackId: String, setVideoId: String? = null) = removeTrackFromPlaylistImpl(playlistId, trackId, setVideoId)
     fun removeTracksFromPlaylist(playlistId: String, tracks: List<MusicItem>) = removeTracksFromPlaylistImpl(playlistId, tracks)
+    fun removeTracksFromHistory(tracks: List<MusicItem>) = removeTracksFromHistoryImpl(tracks)
     fun reorderPlaylistTracks(playlistId: String, trackIds: List<String>) = reorderPlaylistTracksImpl(playlistId, trackIds)
     fun downloadTrack(track: MusicItem) = advancedDownloadManager.downloadTrack(track)
     fun downloadPlaylist(tracks: List<MusicItem>) = advancedDownloadManager.downloadPlaylist(tracks)
@@ -452,13 +457,12 @@ class MusicPlayerViewModel(
     fun getDownloadStorageUsed(): Long = advancedDownloadManager.getDownloadStorageUsed()
     fun getAvailableStorage(): Long = advancedDownloadManager.getAvailableStorage()
     fun deleteAllDownloads() = advancedDownloadManager.deleteAllDownloads()
+    val isSelectionModeActive = MutableStateFlow(false)
+    fun setSelectionModeActive(active: Boolean) { isSelectionModeActive.value = active }
     fun getPlayer(): ExoPlayer? = playbackService?.getPlayer()
     fun togglePlaybackMode(): Boolean = playbackService?.togglePlaybackMode() ?: false
     fun setPlaybackMediaMode(mode: PlaybackMediaMode): Boolean = playbackService?.setPlaybackMediaMode(mode) ?: false
-    fun setPlaybackVideoQuality(quality: PlaybackVideoQuality): Boolean {
-        viewModelScope.launch { settingsDataStore.setVideoQuality(quality.wireName) }
-        return playbackService?.setPlaybackVideoQuality(quality) ?: false
-    }
+    fun setPlaybackVideoQuality(quality: PlaybackVideoQuality): Boolean { viewModelScope.launch { settingsDataStore.setVideoQuality(quality.wireName) }; return playbackService?.setPlaybackVideoQuality(quality) ?: false }
     fun toggleAudioSource() { StreamResolver.sessionFlacEnabled = false; _audioSourceLabel.value = "YouTube" }
     fun setAudioSource(mode: String) { StreamResolver.sessionFlacEnabled = false; _audioSourceLabel.value = "YouTube" }
     fun setVideoSurface(surface: Surface?) { playbackService?.setVideoSurface(surface) }
@@ -474,6 +478,7 @@ class MusicPlayerViewModel(
     fun finalizeSpotifyImport(playlistTitle: String, syncedToYouTube: Boolean) = finalizeSpotifyImportImpl(playlistTitle, syncedToYouTube)
     fun resetSpotifyImportState() { _spotifyImportState.value = SpotifyImportState.Idle; _resolvedSpotifyTracks.value = emptyList(); _spotifyPlaylistName.value = "" }
     fun consumeDeepLinkEvent() { _pendingDeepLinkEvent.value = null }
+    fun requestExpandPlayer() { _pendingDeepLinkEvent.value = DeepLinkEvent.ExpandPlayer }
     fun getShareLink(): String? = playbackState.value.currentTrack?.let { "https://raazi.pages.dev/?video=${android.net.Uri.encode(it.id)}" }
     fun handleDeepLink(uri: Uri) = handleDeepLinkImpl(uri)
     override fun onCleared() { super.onCleared(); onClearedImpl() }

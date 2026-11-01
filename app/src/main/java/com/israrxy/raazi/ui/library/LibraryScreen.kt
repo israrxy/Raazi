@@ -1,22 +1,38 @@
 package com.israrxy.raazi.ui.library
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -25,20 +41,20 @@ import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Library screen.
  *
  * Responsibilities kept here (and nowhere else): collecting flows, holding user intent
- * (query / filter / sort / layout / dialogs), and building one immutable [LibraryUiState].
- * What gets drawn lives in [LibraryGridContent].
+ * (query / filter / sort / dialogs), and building one immutable [LibraryUiState].
+ * What gets drawn lives in [LibraryListContent].
  */
 @Composable
 fun LibraryScreen(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToDownloads: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
     onNavigateToSpotifyImport: () -> Unit = {}
@@ -52,14 +68,18 @@ fun LibraryScreen(
     val accountName by viewModel.youTubeAccountName.collectAsStateWithLifecycle()
     val syncing by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
     val syncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
+    val playCounts by viewModel.trackPlayCounts.collectAsStateWithLifecycle()
+    val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
+    val dismissYoutubePrompt by viewModel.settingsDataStore.dismissYoutubeConnectPrompt.collectAsStateWithLifecycle(initialValue = false)
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // User intent - survives configuration changes and process recreation.
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
     var sort by rememberSaveable { mutableStateOf(LibrarySort.RECENT) }
-    var layout by rememberSaveable { mutableStateOf(LibraryLayout.GRID) }
+    var syncCardDismissed by rememberSaveable { mutableStateOf(false) }
 
     // Dialog state.
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -73,19 +93,33 @@ fun LibraryScreen(
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val state = remember(liked, history, downloads, playlists, saved, query, filter, sort, layout) {
+    val selectedTracks = remember { mutableStateListOf<MusicItem>() }
+    val selectedPlaylists = remember { mutableStateListOf<String>() }
+    var isTrackSelectionMode by remember { mutableStateOf(false) }
+    var isPlaylistSelectionMode by remember { mutableStateOf(false) }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var tracksForPlaylistAdd by remember { mutableStateOf<List<MusicItem>>(emptyList()) }
+
+    LaunchedEffect(isTrackSelectionMode, isPlaylistSelectionMode) {
+        viewModel.setSelectionModeActive(isTrackSelectionMode || isPlaylistSelectionMode)
+    }
+    DisposableEffect(Unit) {
+        onDispose { viewModel.setSelectionModeActive(false) }
+    }
+
+    val state = remember(liked, history, downloads, playlists, saved, playCounts, query, filter, sort) {
         LibraryUiState(
             query = query.trim(),
             filter = filter,
             sort = sort,
-            layout = layout,
             likedSongs = liked,
             history = history,
             userPlaylists = playlists,
             savedPlaylists = saved.filter { it.contentType == MusicContentType.PLAYLIST },
             albums = saved.filter { it.contentType == MusicContentType.ALBUM },
             artists = saved.filter { it.contentType == MusicContentType.ARTIST },
-            downloadCount = downloads.size
+            downloadCount = downloads.size,
+            playCounts = playCounts
         )
     }
 
@@ -93,13 +127,16 @@ fun LibraryScreen(
         search = { query = it },
         selectFilter = { filter = it },
         selectSort = { sort = it },
-        selectLayout = { layout = it },
         openPlaylist = onNavigateToPlaylist,
         openArtist = onNavigateToArtist,
-        openDownloads = onNavigateToDownloads,
         openSettings = onNavigateToSettings,
         openSpotifyImport = onNavigateToSpotifyImport,
         syncLibrary = { viewModel.syncYouTubeLibrary() },
+        dismissSyncCard = { syncCardDismissed = true },
+        dismissSyncCardPermanently = {
+            syncCardDismissed = true
+            scope.launch { viewModel.settingsDataStore.setDismissYoutubeConnectPrompt(true) }
+        },
         createPlaylist = {
             createSynced = loggedIn
             playlistName = ""
@@ -140,13 +177,55 @@ fun LibraryScreen(
                 thumbnailUrl = savedItem.thumbnailUrl
             )
         },
+        removeHistoryTrack = { track -> viewModel.removeTracksFromHistory(listOf(track)) },
         playTracks = { tracks, startIndex ->
             viewModel.playPlaylist(tracks, startIndex)
             onNavigateToPlayer()
-        }
+        },
+        addToPlaylist = { track ->
+            tracksForPlaylistAdd = listOf(track)
+            showAddToPlaylistDialog = true
+        },
+        onTrackLongClick = { track ->
+            if (!isTrackSelectionMode) {
+                isTrackSelectionMode = true
+                selectedTracks.clear()
+                selectedTracks.add(track)
+            } else {
+                if (selectedTracks.contains(track)) {
+                    selectedTracks.remove(track)
+                    if (selectedTracks.isEmpty()) isTrackSelectionMode = false
+                } else {
+                    selectedTracks.add(track)
+                }
+            }
+        },
+        isTrackSelected = { track -> selectedTracks.contains(track) },
+        isTrackSelectionMode = isTrackSelectionMode,
+        onPlaylistLongClick = { playlistId ->
+            if (!isPlaylistSelectionMode) {
+                isPlaylistSelectionMode = true
+                selectedPlaylists.clear()
+                selectedPlaylists.add(playlistId)
+            } else {
+                if (selectedPlaylists.contains(playlistId)) {
+                    selectedPlaylists.remove(playlistId)
+                    if (selectedPlaylists.isEmpty()) isPlaylistSelectionMode = false
+                } else {
+                    selectedPlaylists.add(playlistId)
+                }
+            }
+        },
+        isPlaylistSelected = { playlistId -> selectedPlaylists.contains(playlistId) },
+        isPlaylistSelectionMode = isPlaylistSelectionMode
     )
 
-    val sync = LibrarySyncState(loggedIn = loggedIn, accountName = accountName, syncing = syncing)
+    val sync = LibrarySyncState(
+        loggedIn = loggedIn,
+        accountName = accountName,
+        syncing = syncing,
+        dismissed = syncCardDismissed || (!loggedIn && dismissYoutubePrompt)
+    )
 
     // First open on an empty library: pull the YouTube Music library down once.
     var hasAutoSynced by remember { mutableStateOf(false) }
@@ -163,18 +242,109 @@ fun LibraryScreen(
         viewModel.clearYouTubeSyncStatus()
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 132.dp),
-        state = rememberLazyGridState(),
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        LibraryGridContent(state = state, actions = actions, sync = sync)
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = rememberLazyListState(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LibraryListContent(state = state, actions = actions, sync = sync)
+        }
+
+        if (!isTrackSelectionMode && !isPlaylistSelectionMode) {
+            FloatingActionButton(
+                onClick = actions.createPlaylist,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = 20.dp,
+                        bottom = if (playbackState.currentTrack != null) 90.dp else 20.dp
+                    )
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New playlist")
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isTrackSelectionMode,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
+            LibrarySelectionBottomBar(
+                selectedCount = selectedTracks.size,
+                onCancel = {
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                },
+                onAddToPlaylist = {
+                    tracksForPlaylistAdd = selectedTracks.toList()
+                    showAddToPlaylistDialog = true
+                },
+                onDelete = {
+                    val count = selectedTracks.size
+                    viewModel.removeTracksFromHistory(selectedTracks.toList())
+                    Toast.makeText(context, "Removed $count tracks from history", Toast.LENGTH_SHORT).show()
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                },
+                deleteLabel = "Delete from history"
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isPlaylistSelectionMode,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
+            LibrarySelectionBottomBar(
+                selectedCount = selectedPlaylists.size,
+                onCancel = {
+                    selectedPlaylists.clear()
+                    isPlaylistSelectionMode = false
+                },
+                onDelete = {
+                    val count = selectedPlaylists.size
+                    selectedPlaylists.forEach { id -> viewModel.deletePlaylist(id) }
+                    Toast.makeText(context, "Deleted $count playlists", Toast.LENGTH_SHORT).show()
+                    selectedPlaylists.clear()
+                    isPlaylistSelectionMode = false
+                },
+                deleteLabel = "Delete playlists"
+            )
+        }
+    }
+
+    if (showAddToPlaylistDialog && tracksForPlaylistAdd.isNotEmpty()) {
+        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
+            viewModel = viewModel,
+            tracksToAdd = tracksForPlaylistAdd,
+            onDismiss = {
+                showAddToPlaylistDialog = false
+                tracksForPlaylistAdd = emptyList()
+            },
+            onPlaylistSelected = { targetPlaylist ->
+                viewModel.addToPlaylist(tracksForPlaylistAdd, targetPlaylist)
+                Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
+                showAddToPlaylistDialog = false
+                tracksForPlaylistAdd = emptyList()
+                if (isTrackSelectionMode) {
+                    selectedTracks.clear()
+                    isTrackSelectionMode = false
+                }
+            }
+        )
     }
 
     if (showCreateDialog) {

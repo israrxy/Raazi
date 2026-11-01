@@ -5,8 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -243,16 +241,32 @@ fun PlayerScreen(
         // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY
         AnimatedVisibility(
             visible = isLyricsVisible,
-            enter = slideInVertically(initialOffsetY = { it / 3 }, animationSpec = tween(320)) + fadeIn(tween(260)),
-            exit = slideOutVertically(targetOffsetY = { it / 3 }, animationSpec = tween(260)) + fadeOut(tween(200)),
+            enter = fadeIn(tween(140)),
+            exit = fadeOut(tween(100)),
             modifier = Modifier.fillMaxSize()
         ) {
             LyricsScreen(
                 viewModel = viewModel,
-                onClose = { onLyricsVisibilityChange(false) },
                 onOpenLyricsBrowser = {
                     showLyricsBrowser = true
                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                },
+                topBar = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                    ) {
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = true,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true }
+                        )
+                    }
                 }
             )
         }

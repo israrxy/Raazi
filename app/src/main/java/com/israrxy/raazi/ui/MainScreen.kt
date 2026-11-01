@@ -12,7 +12,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -88,6 +92,7 @@ import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.downloads.DownloadsScreen
 import com.israrxy.raazi.ui.home.HomeScreen
 import com.israrxy.raazi.ui.library.LibraryScreen
+import com.israrxy.raazi.ui.player.FloatingMiniPlayer
 import com.israrxy.raazi.ui.player.MiniPlayer
 import com.israrxy.raazi.ui.ringtone.RingtoneTrimmerScreen
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -122,11 +127,16 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         if (isYouTubeLoggedIn) viewModel.syncYouTubeLibrary()
     }
 
+    var isFloatingCollapsed by rememberSaveable { mutableStateOf(false) }
+    val isSelectionModeActive by viewModel.isSelectionModeActive.collectAsStateWithLifecycle()
+    val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsStateWithLifecycle(initialValue = true)
     val onRingtoneScreen = currentDestination?.route == "ringtone_trimmer"
+    val onSettingsScreen = currentDestination?.route == "settings" || currentDestination?.route?.startsWith("settings") == true
     val showBottomBar = currentDestination.isTopLevelDestination() &&
         sheetState.currentValue != SheetValue.Expanded && !onRingtoneScreen
-    val showMiniPlayer = currentTrack != null &&
-        sheetState.currentValue != SheetValue.Expanded && !onRingtoneScreen
+    val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen || sheetState.currentValue == SheetValue.Expanded
+    val showMiniPlayerBar = currentTrack != null && (!isFloatingCollapsed || !microPlayerEnabled) && !isMiniPlayerSuppressed
+    val showFloatingBubble = currentTrack != null && isFloatingCollapsed && microPlayerEnabled && !isMiniPlayerSuppressed
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val collapsedMiniPlayerBottomPadding =
         if (showBottomBar) {
@@ -160,6 +170,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     LaunchedEffect(currentTrack) {
         if (currentTrack == null) {
             isLyricsModeOpen = false
+            isFloatingCollapsed = false
         }
     }
 
@@ -284,48 +295,20 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         .padding(innerPadding)
                         .padding(bottom = contentBottomPadding),
                     enterTransition = {
-                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
-                        if (isPeer) {
-                            fadeIn(animationSpec = tween(150))
-                        } else {
-                            slideInHorizontally(
-                                initialOffsetX = { (it * 0.08f).toInt() },
-                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
-                            ) + fadeIn(animationSpec = tween(250))
-                        }
+                        if (initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()) fadeIn(tween(150))
+                        else slideInHorizontally(initialOffsetX = { (it * 0.08f).toInt() }, animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(250))
                     },
                     exitTransition = {
-                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
-                        if (isPeer) {
-                            fadeOut(animationSpec = tween(150))
-                        } else {
-                            slideOutHorizontally(
-                                targetOffsetX = { -(it * 0.08f).toInt() },
-                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(250))
-                        }
+                        if (initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()) fadeOut(tween(150))
+                        else slideOutHorizontally(targetOffsetX = { -(it * 0.08f).toInt() }, animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeOut(tween(250))
                     },
                     popEnterTransition = {
-                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
-                        if (isPeer) {
-                            fadeIn(animationSpec = tween(150))
-                        } else {
-                            slideInHorizontally(
-                                initialOffsetX = { -(it * 0.08f).toInt() },
-                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
-                            ) + fadeIn(animationSpec = tween(250))
-                        }
+                        if (initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()) fadeIn(tween(150))
+                        else slideInHorizontally(initialOffsetX = { -(it * 0.08f).toInt() }, animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(250))
                     },
                     popExitTransition = {
-                        val isPeer = initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()
-                        if (isPeer) {
-                            fadeOut(animationSpec = tween(150))
-                        } else {
-                            slideOutHorizontally(
-                                targetOffsetX = { (it * 0.08f).toInt() },
-                                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(250))
-                        }
+                        if (initialState.destination.isTopLevelDestination() && targetState.destination.isTopLevelDestination()) fadeOut(tween(150))
+                        else slideOutHorizontally(targetOffsetX = { (it * 0.08f).toInt() }, animationSpec = tween(250, easing = FastOutSlowInEasing)) + fadeOut(tween(250))
                     }
                 ) {
                     composable("home") {
@@ -371,7 +354,6 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
-                            onNavigateToDownloads = { navController.navigate("downloads") },
                             onNavigateToSettings = { navController.navigate("settings") },
                             onNavigateToSpotifyImport = { navController.navigate("spotify_import") }
                         )
@@ -438,20 +420,35 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             }
         }
 
-        if (showMiniPlayer) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = collapsedMiniPlayerBottomPadding)
-            ) {
-                MiniPlayer(
-                    viewModel = viewModel,
-                    onNavigateToPlayer = { scope.launch { sheetState.expand() } },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+        AnimatedVisibility(
+            visible = showMiniPlayerBar,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy)
+            ) + fadeIn(animationSpec = tween(200)),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(150)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = collapsedMiniPlayerBottomPadding)
+        ) {
+            MiniPlayer(
+                viewModel = viewModel,
+                onNavigateToPlayer = { scope.launch { sheetState.expand() } },
+                onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        if (showFloatingBubble) {
+            FloatingMiniPlayer(
+                viewModel = viewModel,
+                onExpand = { isFloatingCollapsed = false }
+            )
         }
 
         if (showBottomBar) {

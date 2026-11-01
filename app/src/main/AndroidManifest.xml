@@ -92,7 +92,8 @@
         <service
             android:name=".service.MusicPlaybackService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false" />
         
         <!-- Now Playing Widget -->
         <receiver

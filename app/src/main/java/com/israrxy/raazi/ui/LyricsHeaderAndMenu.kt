@@ -3,12 +3,9 @@ package com.israrxy.raazi.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -33,128 +30,6 @@ import com.israrxy.raazi.ui.theme.Zinc800
 import com.israrxy.raazi.utils.ThumbnailUtils
 
 @Composable
-internal fun LyricsTopNavigationBar(
-    onClose: () -> Unit,
-    onOpenLyricsBrowser: () -> Unit,
-    onOpenTrackDetails: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            onClick = onClose,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Back to player",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            val pillSegmentWidth = 54.dp
-            Box(
-                modifier = Modifier
-                    .height(34.dp)
-                    .width(pillSegmentWidth * 2)
-                    .clip(RoundedCornerShape(17.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(pillSegmentWidth)
-                        .offset(x = pillSegmentWidth)
-                        .clip(RoundedCornerShape(17.dp))
-                        .background(Color.White)
-                )
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onClose() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Headphones,
-                            contentDescription = "Song View",
-                            tint = Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Subject,
-                            contentDescription = "Lyrics View",
-                            tint = Color(0xFF09090B),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        Surface(
-            onClick = onOpenLyricsBrowser,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.ManageSearch,
-                    contentDescription = "Lyrics source",
-                    tint = Color.White.copy(alpha = 0.88f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Surface(
-            onClick = onOpenTrackDetails,
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.08f),
-            modifier = Modifier.size(38.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Song details",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 internal fun LyricsNowPlayingStrip(
     currentTrack: MusicItem?,
     lyricsSource: String?,
@@ -172,6 +47,7 @@ internal fun LyricsNowPlayingStrip(
     lyricsScriptFilter: LyricsScriptFilter,
     onToggleOptionsMenu: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
+    onOpenTrackDetails: () -> Unit,
     onToggleFavorite: (MusicItem) -> Unit
 ) {
     val cleanSourceLabel = remember(lyricsSource, isSynced) {
@@ -269,6 +145,18 @@ internal fun LyricsNowPlayingStrip(
                         modifier = Modifier.size(19.dp)
                     )
                 }
+            }
+
+            IconButton(
+                onClick = onOpenTrackDetails,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Song details",
+                    tint = Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.size(19.dp)
+                )
             }
         }
 

@@ -7,6 +7,7 @@ import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.WatchEndpoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -81,46 +82,62 @@ class LyricaAndYtLyricsExtractor {
             }
         }
 
-        val results = mutableListOf<Lyrics>()
-        for ((videoId, meta) in targetVideoIds.take(2)) {
-            supervisorScope {
-                val browseDeferred = async {
-                    runCatching {
-                        val nextResult = YouTube.next(WatchEndpoint(videoId = videoId)).getOrNull()
-                        val lyricsEndpoint = nextResult?.lyricsEndpoint ?: return@runCatching null
-                        YouTube.lyrics(lyricsEndpoint).getOrNull()
-                            ?.trim()
-                            ?.takeIf { it.isNotBlank() && it.length > 20 }
-                    }.getOrNull()
-                }
+        supervisorScope {
+            targetVideoIds.take(2).map { (videoId, meta) ->
+                async {
+                    val nextDeferred = async {
+                        runCatching {
+                            YouTube.next(WatchEndpoint(videoId = videoId)).getOrNull()
+                        }.getOrNull()
+                    }
 
-                val transcriptDeferred = async {
-                    runCatching {
-                        YouTube.transcript(videoId).getOrNull()
-                            ?.trim()
-                            ?.takeIf { isValidLrcTranscript(it) }
-                    }.getOrNull()
-                }
+                    val transcriptDeferred = async {
+                        runCatching {
+                            YouTube.transcript(videoId).getOrNull()
+                                ?.trim()
+                                ?.takeIf { isValidLrcTranscript(it) }
+                        }.getOrNull()
+                    }
 
-                val plainText = browseDeferred.await()
-                val syncedTranscript = transcriptDeferred.await()
+                    val lyricsEndpoint = nextDeferred.await()?.lyricsEndpoint
 
-                if (!syncedTranscript.isNullOrBlank() || !plainText.isNullOrBlank()) {
-                    val plainFallback = plainText ?: syncedTranscript?.let(::stripLrcTags)
-                    results += Lyrics(
-                        id = videoId.hashCode(),
-                        trackName = meta.trackName.ifBlank { trackName },
-                        artistName = meta.artistName.ifBlank { artistName },
-                        plainLyrics = plainFallback,
-                        syncedLyrics = syncedTranscript,
-                        duration = durationSeconds,
-                        language = null,
-                        source = "YT Music"
-                    )
+                    val timedDeferred = async {
+                        lyricsEndpoint?.let { endpoint ->
+                            runCatching { YouTube.timedLyrics(endpoint).getOrNull() }.getOrNull()
+                        }
+                    }
+
+                    val plainDeferred = async {
+                        lyricsEndpoint?.let { endpoint ->
+                            runCatching {
+                                YouTube.lyrics(endpoint).getOrNull()
+                                    ?.trim()
+                                    ?.takeIf { it.isNotBlank() && it.length > 20 }
+                            }.getOrNull()
+                        }
+                    }
+
+                    val syncedTimed = timedDeferred.await()?.takeIf(::isValidLrcTranscript)
+                    val plainText = if (syncedTimed == null) plainDeferred.await() else null
+                    val syncedLyrics = syncedTimed ?: transcriptDeferred.await()
+
+                    if (syncedLyrics.isNullOrBlank() && plainText.isNullOrBlank()) {
+                        null
+                    } else {
+                        Lyrics(
+                            id = videoId.hashCode(),
+                            trackName = meta.trackName.ifBlank { trackName },
+                            artistName = meta.artistName.ifBlank { artistName },
+                            plainLyrics = plainText ?: syncedLyrics?.let(::stripLrcTags),
+                            syncedLyrics = syncedLyrics,
+                            duration = durationSeconds,
+                            language = null,
+                            source = "YT Music"
+                        )
+                    }
                 }
-            }
+            }.awaitAll().filterNotNull()
         }
-        results
     }
 
     private fun fetchFromLyrist(

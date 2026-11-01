@@ -22,10 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -44,12 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------------------
-// Header, search field and the filter / sort / layout control bar.
+// Header, search field and the filter / sort control bar.
 // ---------------------------------------------------------------------------------------
 
 @Composable
 internal fun LibraryHeader(
     summary: String,
+    onOpenHistory: () -> Unit,
+    onOpenSpotifyImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -71,6 +73,20 @@ internal fun LibraryHeader(
                     maxLines = 1
                 )
             }
+        }
+        IconButton(onClick = onOpenSpotifyImport) {
+            Icon(
+                imageVector = Icons.Default.CloudDownload,
+                contentDescription = "Import playlists",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(onClick = onOpenHistory) {
+            Icon(
+                imageVector = Icons.Default.History,
+                contentDescription = "Listening history",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -125,8 +141,8 @@ internal fun LibrarySearchField(
 }
 
 /**
- * Filter chips + sort + layout toggle in one bar. The chips scroll horizontally and the
- * two icon buttons stay pinned, so the bar never overflows on small phones.
+ * Filter chips + sort in one bar. The chips scroll horizontally and the sort button stays
+ * pinned, so the bar never overflows on small phones.
  */
 @Composable
 internal fun LibraryFilterBar(
@@ -134,8 +150,6 @@ internal fun LibraryFilterBar(
     onFilterChange: (LibraryFilter) -> Unit,
     sort: LibrarySort,
     onSortChange: (LibrarySort) -> Unit,
-    layout: LibraryLayout,
-    onLayoutChange: (LibraryLayout) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -156,7 +170,6 @@ internal fun LibraryFilterBar(
         }
         Spacer(Modifier.width(4.dp))
         LibrarySortMenu(current = sort, onSelect = onSortChange)
-        LibraryLayoutToggle(layout = layout, onToggle = onLayoutChange)
     }
 }
 
@@ -196,30 +209,5 @@ private fun LibrarySortMenu(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun LibraryLayoutToggle(
-    layout: LibraryLayout,
-    onToggle: (LibraryLayout) -> Unit
-) {
-    IconButton(
-        onClick = {
-            onToggle(if (layout == LibraryLayout.GRID) LibraryLayout.LIST else LibraryLayout.GRID)
-        }
-    ) {
-        Icon(
-            imageVector = if (layout == LibraryLayout.GRID) {
-                Icons.Default.ViewList
-            } else {
-                Icons.Default.GridView
-            },
-            contentDescription = if (layout == LibraryLayout.GRID) {
-                "Switch to list view"
-            } else {
-                "Switch to grid view"
-            }
-        )
     }
 }

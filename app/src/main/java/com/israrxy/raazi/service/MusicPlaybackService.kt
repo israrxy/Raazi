@@ -475,6 +475,7 @@ class MusicPlaybackService : Service() {
 
         const val NOTIFICATION_LIKE_CHANNEL = "com.israrxy.raazi.LIKE_EVENT"
         const val EXTRA_TRACK_ID = "track_id"
+        const val EXTRA_OPEN_PLAYER = "com.israrxy.raazi.extra.OPEN_PLAYER"
 
         val SPEED_CYCLE_PRESETS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
         const val MIN_PLAYBACK_SPEED = 0.25f

@@ -58,8 +58,12 @@ fun SearchScreen(
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedTracks by remember { mutableStateOf(setOf<MusicItem>()) }
 
+    LaunchedEffect(isSelectionMode) { playerViewModel.setSelectionModeActive(isSelectionMode) }
     DisposableEffect(Unit) {
-        onDispose { searchViewModel.clearSearchResults() }
+        onDispose {
+            searchViewModel.clearSearchResults()
+            playerViewModel.setSelectionModeActive(false)
+        }
     }
 
     val normalizedSearchQuery = searchQuery.trim()
@@ -470,6 +474,7 @@ fun SearchScreen(
     if (targetForPlaylist != null) {
         com.israrxy.raazi.ui.components.AddToPlaylistDialog(
             viewModel = playerViewModel,
+            tracksToAdd = targetForPlaylist,
             onDismiss = { showAddToPlaylistItem = null; tracksToAddToPlaylist = null },
             onPlaylistSelected = { playlist ->
                 playerViewModel.addToPlaylist(targetForPlaylist, playlist)

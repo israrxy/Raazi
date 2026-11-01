@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,10 +20,13 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +45,7 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.SavedCollectionItem
 
 // ---------------------------------------------------------------------------------------
-// Playlists, albums and artists - one presentation model, two layouts.
+// Playlists, albums and artists in the compact library list.
 // ---------------------------------------------------------------------------------------
 
 /** Everything a card/row needs, built once so grid and list stay visually consistent. */
@@ -103,67 +105,6 @@ internal fun SavedCollectionItem.toCollectionUi(
     onLongClick = onRemove
 )
 
-/** Landscape-free grid card: artwork on top, two lines of text underneath. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun LibraryCollectionCard(
-    item: LibraryCollectionUi,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .combinedClickable(onClick = item.onClick, onLongClick = item.onLongClick)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            if (item.thumbnailUrl != null) {
-                AsyncImage(
-                    model = item.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Icon(
-                    imageVector = item.fallbackIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(46.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-            OverflowMenuButton(
-                items = item.menu,
-                contentDescription = "Options for ${item.title}",
-                modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
-                scrim = item.thumbnailUrl != null
-            )
-        }
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 9.dp, bottom = 12.dp)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = item.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
 /** Compact one-line variant used by the list layout. */
 @Composable
 internal fun LibraryCollectionRow(
@@ -192,7 +133,12 @@ internal fun LibraryCollectionRow(
 internal data class LibrarySongUi(
     val key: String,
     val track: MusicItem,
-    val onClick: () -> Unit
+    val isSelected: Boolean = false,
+    val isSelectionMode: Boolean = false,
+    val onClick: () -> Unit,
+    val onLongClick: (() -> Unit)? = null,
+    val onAddToPlaylist: (() -> Unit)? = null,
+    val onRemove: (() -> Unit)? = null
 )
 
 /**
@@ -204,16 +150,34 @@ internal fun buildSongUi(
     preview: List<MusicItem>,
     queue: List<MusicItem>,
     keyPrefix: String,
-    onPlay: (List<MusicItem>, Int) -> Unit
+    isSelected: (MusicItem) -> Boolean = { false },
+    isSelectionMode: Boolean = false,
+    onPlay: (List<MusicItem>, Int) -> Unit,
+    onLongClick: ((MusicItem) -> Unit)? = null,
+    onAddToPlaylist: ((MusicItem) -> Unit)? = null,
+    onRemove: ((MusicItem) -> Unit)? = null
 ): List<LibrarySongUi> = preview.map { track ->
+    val selected = isSelected(track)
     LibrarySongUi(
         key = "${keyPrefix}_${track.id}",
         track = track,
-        onClick = { onPlay(queue, queue.indexOf(track).coerceAtLeast(0)) }
+        isSelected = selected,
+        isSelectionMode = isSelectionMode,
+        onClick = {
+            if (isSelectionMode && onLongClick != null) {
+                onLongClick(track)
+            } else {
+                onPlay(queue, queue.indexOf(track).coerceAtLeast(0))
+            }
+        },
+        onLongClick = onLongClick?.let { longClick -> { longClick(track) } },
+        onAddToPlaylist = onAddToPlaylist?.let { add -> { add(track) } },
+        onRemove = onRemove?.let { remove -> { remove(track) } }
     )
 }
 
 /** Artwork + title + artist + duration. No chevron: tapping here plays. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun LibrarySongRow(
     item: LibrarySongUi,
@@ -223,10 +187,25 @@ internal fun LibrarySongRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = item.onClick)
+            .background(
+                if (item.isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                else Color.Transparent
+            )
+            .combinedClickable(
+                onClick = item.onClick,
+                onLongClick = item.onLongClick
+            )
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (item.isSelectionMode) {
+            Checkbox(
+                checked = item.isSelected,
+                onCheckedChange = { item.onClick() },
+                modifier = Modifier.padding(end = 6.dp)
+            )
+        }
+
         Box(
             modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -277,6 +256,23 @@ internal fun LibrarySongRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (!item.isSelectionMode) {
+            val menuItems = buildList {
+                item.onAddToPlaylist?.let { add ->
+                    add(LibraryMenuItem("Add to playlist", add))
+                }
+                item.onRemove?.let { remove ->
+                    add(LibraryMenuItem("Delete from history", remove, destructive = true))
+                }
+            }
+            if (menuItems.isNotEmpty()) {
+                OverflowMenuButton(
+                    items = menuItems,
+                    contentDescription = "Options for ${item.track.title}"
+                )
+            }
         }
     }
 }

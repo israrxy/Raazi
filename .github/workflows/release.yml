@@ -79,6 +79,13 @@ jobs:
              release/Raazi-v${{ steps.version.outputs.version }}.apk
           ls -la release/
 
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: raazi-release-apk
+          path: release/*.apk
+          if-no-files-found: error
+
       - name: Extract release notes
         run: |
           python3 - <<'EOF' > release/NOTES.md

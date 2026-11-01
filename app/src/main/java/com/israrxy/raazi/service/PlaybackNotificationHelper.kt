@@ -15,6 +15,7 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -63,6 +64,7 @@ internal fun MusicPlaybackService.createNotificationChannel() {
 internal fun MusicPlaybackService.startForegroundService() {
     try {
         val notification = createNotification(getPlaybackState())
+        ContextCompat.startForegroundService(this, Intent(this, MusicPlaybackService::class.java))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 notificationId,
@@ -80,6 +82,7 @@ internal fun MusicPlaybackService.startForegroundService() {
 internal fun MusicPlaybackService.createContentPendingIntent(): PendingIntent {
     val contentIntent = Intent(this, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER, true)
     }
     return PendingIntent.getActivity(
         this,
@@ -168,7 +171,7 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
         .setContentTitle(title)
         .setContentText(artist)
         .setSubText(subText.ifEmpty { null })
-        .setSmallIcon(R.drawable.ic_music_note)
+        .setSmallIcon(R.drawable.raazi)
         .setLargeIcon(largeIcon)
         .setContentIntent(contentPendingIntent)
         .setDeleteIntent(stopPending)

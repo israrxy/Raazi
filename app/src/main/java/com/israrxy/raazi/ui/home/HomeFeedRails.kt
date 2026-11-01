@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -111,6 +112,18 @@ fun HomeStatusHeader(
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary
                 )
+            } else {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh home feed",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -235,8 +248,21 @@ fun HomeSectionHeader(
             modifier = Modifier.weight(1f)
         )
         if (section.actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) {
-                Text(section.actionLabel)
+            val refreshLabel = section.actionLabel.contains("refresh", ignoreCase = true) ||
+                section.actionLabel.contains("reload", ignoreCase = true)
+            if (refreshLabel) {
+                IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = section.actionLabel,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                TextButton(onClick = onAction) {
+                    Text(section.actionLabel)
+                }
             }
         }
     }
@@ -256,225 +282,3 @@ internal fun HomeFeedItem.stableId(): String = when (this) {
         is com.zionhuang.innertube.models.PlaylistItem -> item.id
     }
 }
-
-@Composable
-fun HomeMusicRail(
-    section: HomeSection,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit,
-    isSelectionMode: Boolean = false,
-    selectedTracks: Set<MusicItem> = emptySet(),
-    onToggleSelection: (MusicItem) -> Unit = {},
-    onEnterSelection: (MusicItem) -> Unit = {}
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(section.musicItems()) { musicItem ->
-            MusicCard(
-                musicItem = musicItem,
-                viewModel = viewModel,
-                onNavigateToPlayer = onNavigateToPlayer,
-                isSelected = selectedTracks.contains(musicItem),
-                isSelectionMode = isSelectionMode,
-                onToggleSelection = onToggleSelection,
-                onEnterSelection = onEnterSelection,
-                onClick = {
-                    viewModel.recordHomeInteraction(
-                        itemId = musicItem.id,
-                        sectionId = section.id,
-                        action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
-                        sourceType = section.sourceType
-                    )
-                    viewModel.playMusic(musicItem)
-                }
-            )
-        }
-    }
-}
-
-@Composable
-fun HomeFeedRail(
-    section: HomeSection,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit,
-    onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToArtist: (String, String) -> Unit,
-    isSelectionMode: Boolean = false,
-    selectedTracks: Set<MusicItem> = emptySet(),
-    onToggleSelection: (MusicItem) -> Unit = {},
-    onEnterSelection: (MusicItem) -> Unit = {}
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(section.items) { item ->
-            HomeFeedItemCard(
-                item = item,
-                section = section,
-                viewModel = viewModel,
-                onNavigateToPlayer = onNavigateToPlayer,
-                onNavigateToPlaylist = onNavigateToPlaylist,
-                onNavigateToArtist = onNavigateToArtist,
-                isSelectionMode = isSelectionMode,
-                selectedTracks = selectedTracks,
-                onToggleSelection = onToggleSelection,
-                onEnterSelection = onEnterSelection
-            )
-        }
-    }
-}
-
-@Composable
-fun HomeFeedItemCard(
-    item: HomeFeedItem,
-    section: HomeSection,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit,
-    onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToArtist: (String, String) -> Unit,
-    isSelectionMode: Boolean = false,
-    selectedTracks: Set<MusicItem> = emptySet(),
-    onToggleSelection: (MusicItem) -> Unit = {},
-    onEnterSelection: (MusicItem) -> Unit = {}
-) {
-    when (item) {
-        is HomeFeedItem.Music -> MusicCard(
-            musicItem = item.item,
-            viewModel = viewModel,
-            onNavigateToPlayer = onNavigateToPlayer,
-            isSelected = selectedTracks.contains(item.item),
-            isSelectionMode = isSelectionMode,
-            onToggleSelection = onToggleSelection,
-            onEnterSelection = onEnterSelection,
-            onClick = {
-                viewModel.recordHomeInteraction(
-                    itemId = item.item.id,
-                    sectionId = section.id,
-                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
-                    sourceType = section.sourceType
-                )
-                viewModel.playMusic(item.item)
-            }
-        )
-        is HomeFeedItem.YouTube -> YouTubeFeedCard(
-            ytItem = item.item,
-            onClick = {
-                viewModel.recordHomeInteraction(
-                    itemId = item.stableId(),
-                    sectionId = section.id,
-                    action = if (item.item is com.zionhuang.innertube.models.SongItem) {
-                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY
-                    } else {
-                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN
-                    },
-                    sourceType = section.sourceType
-                )
-                when (val ytItem = item.item) {
-                    is com.zionhuang.innertube.models.SongItem -> {
-                        viewModel.playMusic(ytItem.toHomeMusicItem())
-                        onNavigateToPlayer()
-                    }
-                    is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.id)
-                    is com.zionhuang.innertube.models.PlaylistItem -> onNavigateToPlaylist(ytItem.id)
-                    is com.zionhuang.innertube.models.ArtistItem -> onNavigateToArtist(ytItem.id, ytItem.title)
-                }
-            }
-        )
-        is HomeFeedItem.PlaylistResult -> MoodPlaylistCard(
-            playlist = item.playlist,
-            onNavigateToPlaylist = {
-                viewModel.recordHomeInteraction(
-                    itemId = item.playlist.id,
-                    sectionId = section.id,
-                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN,
-                    sourceType = section.sourceType
-                )
-                onNavigateToPlaylist(it)
-            }
-        )
-        is HomeFeedItem.Mood -> Unit
-    }
-}
-
-@Composable
-fun YouTubeFeedCard(
-    ytItem: com.zionhuang.innertube.models.YTItem,
-    onClick: () -> Unit
-) {
-    val isArtist = ytItem is com.zionhuang.innertube.models.ArtistItem
-    val title = when (ytItem) {
-        is com.zionhuang.innertube.models.SongItem -> ytItem.title
-        is com.zionhuang.innertube.models.AlbumItem -> ytItem.title
-        is com.zionhuang.innertube.models.ArtistItem -> ytItem.title
-        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.title
-    }
-    val subtitle = when (ytItem) {
-        is com.zionhuang.innertube.models.SongItem -> ytItem.artists?.joinToString(", ") { it.name } ?: "Song"
-        is com.zionhuang.innertube.models.AlbumItem -> listOfNotNull(
-            ytItem.artists?.joinToString(", ") { it.name },
-            ytItem.year?.toString()
-        ).joinToString(" • ").ifBlank { "Album" }
-        is com.zionhuang.innertube.models.ArtistItem -> "Artist"
-        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.author?.name ?: "Playlist"
-    }
-    val thumbnail = when (ytItem) {
-        is com.zionhuang.innertube.models.SongItem -> ytItem.thumbnail
-        is com.zionhuang.innertube.models.AlbumItem -> ytItem.thumbnail
-        is com.zionhuang.innertube.models.ArtistItem -> ytItem.thumbnail
-        is com.zionhuang.innertube.models.PlaylistItem -> ytItem.thumbnail
-    }
-
-    Column(
-        modifier = Modifier
-            .width(160.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(4.dp),
-        horizontalAlignment = if (isArtist) Alignment.CenterHorizontally else Alignment.Start
-    ) {
-        AsyncImage(
-            model = ThumbnailUtils.getHighQualityThumbnail(thumbnail ?: ""),
-            contentDescription = title,
-            modifier = Modifier
-                .size(152.dp)
-                .clip(if (isArtist) CircleShape else RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = if (isArtist) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = if (isArtist) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
-        )
-    }
-}
-
-internal fun com.zionhuang.innertube.models.SongItem.toHomeMusicItem(): MusicItem {
-    return MusicItem(
-        id = id,
-        title = title,
-        artist = artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
-        duration = (duration ?: 0) * 1000L,
-        thumbnailUrl = ThumbnailUtils.getHighQualityThumbnail(thumbnail),
-        audioUrl = "",
-        videoUrl = id,
-        isLive = false
-    )
-}
-

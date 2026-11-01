@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -85,7 +86,7 @@ internal fun SpotifyYoutubeLyricItem(
     )
 
     val containerAlpha by animateFloatAsState(
-        targetValue = if (isCurrent) 0.06f else 0f,
+        targetValue = if (isCurrent) 0.10f else 0f,
         animationSpec = tween(240),
         label = "lyric_bg_alpha"
     )
@@ -264,6 +265,15 @@ internal fun LyricsBottomTransport(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.28f),
+                        Color.Black.copy(alpha = 0.52f)
+                    )
+                )
+            )
             .padding(horizontal = 20.dp, vertical = 10.dp)
     ) {
         Slider(

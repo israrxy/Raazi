@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
     private val incomingDeepLinkUri = kotlinx.coroutines.flow.MutableStateFlow<android.net.Uri?>(null)
+    private val openPlayerRequest = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     // Permission launcher for Android 13+ notifications
     private val requestPermissionLauncher = registerForActivityResult(
@@ -50,9 +51,7 @@ class MainActivity : FragmentActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         enableEdgeToEdge()
 
-        if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
-            incomingDeepLinkUri.value = intent?.data
-        }
+        handleLaunchIntent(intent)
 
         // Request permissions
         requestPermissions()
@@ -143,7 +142,18 @@ class MainActivity : FragmentActivity() {
                         )
 
                         val pendingUri by incomingDeepLinkUri.collectAsStateWithLifecycle()
-                        var showSplash by remember { mutableStateOf(incomingDeepLinkUri.value == null) }
+                        val shouldOpenPlayer by openPlayerRequest.collectAsStateWithLifecycle()
+                        var showSplash by remember {
+                            mutableStateOf(incomingDeepLinkUri.value == null && !openPlayerRequest.value)
+                        }
+
+                        LaunchedEffect(shouldOpenPlayer) {
+                            if (shouldOpenPlayer) {
+                                showSplash = false
+                                viewModel.requestExpandPlayer()
+                                openPlayerRequest.value = false
+                            }
+                        }
 
                         // Handle both cold-start and warm onNewIntent deep links
                         LaunchedEffect(pendingUri) {
@@ -199,8 +209,17 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    private fun handleLaunchIntent(intent: Intent?) {
+        if (intent == null) return
         if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
             incomingDeepLinkUri.value = intent.data
+        }
+        if (intent.getBooleanExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER, false)) {
+            openPlayerRequest.value = true
+            intent.removeExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER)
         }
     }
     

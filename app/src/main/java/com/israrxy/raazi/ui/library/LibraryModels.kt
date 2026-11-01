@@ -39,11 +39,6 @@ enum class LibrarySort(val label: String) {
     TITLE_DESC("Name Z-A");
 }
 
-enum class LibraryLayout(val label: String) {
-    GRID("Grid"),
-    LIST("List");
-}
-
 /** A single row of the overflow (three-dot) menu. */
 data class LibraryMenuItem(
     val label: String,
@@ -55,31 +50,40 @@ data class LibraryMenuItem(
 data class LibrarySyncState(
     val loggedIn: Boolean,
     val accountName: String?,
-    val syncing: Boolean
+    val syncing: Boolean,
+    val dismissed: Boolean = false
 )
 
-/** Callbacks the grid emits. Kept in one place so screens and grids stay in sync. */
+/** Callbacks the library list emits. Kept in one place so screens and lists stay in sync. */
 data class LibraryActions(
     val search: (String) -> Unit,
     val selectFilter: (LibraryFilter) -> Unit,
     val selectSort: (LibrarySort) -> Unit,
-    val selectLayout: (LibraryLayout) -> Unit,
     val openPlaylist: (String) -> Unit,
     val openArtist: (String, String) -> Unit,
-    val openDownloads: () -> Unit,
     val openSettings: () -> Unit,
     val openSpotifyImport: () -> Unit,
     val syncLibrary: () -> Unit,
+    val dismissSyncCard: () -> Unit,
+    val dismissSyncCardPermanently: (() -> Unit)? = null,
     val createPlaylist: () -> Unit,
     val renamePlaylist: (playlistId: String) -> Unit,
     val deletePlaylist: (playlistId: String) -> Unit,
     val removeSavedCollection: (SavedCollectionItem) -> Unit,
     val removeSavedArtist: (SavedCollectionItem) -> Unit,
-    val playTracks: (tracks: List<MusicItem>, startIndex: Int) -> Unit
+    val removeHistoryTrack: (MusicItem) -> Unit,
+    val playTracks: (tracks: List<MusicItem>, startIndex: Int) -> Unit,
+    val addToPlaylist: (MusicItem) -> Unit = {},
+    val onTrackLongClick: ((MusicItem) -> Unit)? = null,
+    val isTrackSelected: (MusicItem) -> Boolean = { false },
+    val isTrackSelectionMode: Boolean = false,
+    val isPlaylistSelected: (String) -> Boolean = { false },
+    val isPlaylistSelectionMode: Boolean = false,
+    val onPlaylistLongClick: ((String) -> Unit)? = null
 )
 
 /**
- * Immutable snapshot of everything the library grid draws.
+ * Immutable snapshot of everything the library list draws.
  *
  * All filtering and sorting happens once, here, when any input changes - the composition
  * only ever reads finished lists. That keeps recomposition cheap and makes the rules
@@ -89,14 +93,14 @@ internal data class LibraryUiState(
     val query: String,
     val filter: LibraryFilter,
     val sort: LibrarySort,
-    val layout: LibraryLayout,
     val likedSongs: List<MusicItem>,
     val history: List<MusicItem>,
     val userPlaylists: List<PlaylistWithTracks>,
     val savedPlaylists: List<SavedCollectionItem>,
     val albums: List<SavedCollectionItem>,
     val artists: List<SavedCollectionItem>,
-    val downloadCount: Int
+    val downloadCount: Int,
+    val playCounts: Map<String, Int> = emptyMap()
 ) {
     val visibleUserPlaylists: List<PlaylistWithTracks> =
         if (filter.showsUserPlaylists) userPlaylists.applyLibraryPlaylists(query, sort) else emptyList()
@@ -158,7 +162,7 @@ internal data class LibraryUiState(
 
     companion object {
         const val LIKED_PREVIEW_LIMIT = 10
-        const val HISTORY_PREVIEW_LIMIT = 6
+        const val HISTORY_PREVIEW_LIMIT = 10
     }
 }
 
@@ -205,18 +209,6 @@ internal fun List<MusicItem>.applyLibraryTracks(
 
 /** "1 playlist" / "12 playlists". */
 internal fun counted(size: Int, noun: String): String = "$size $noun" + if (size == 1) "" else "s"
-
-/** Compact numbers for the quick-access tiles: 999, 1.2k, 3.4M. */
-internal fun compactCount(size: Int): String = when {
-    size < 1_000 -> size.toString()
-    size < 1_000_000 -> trimZero(size / 1_000.0) + "k"
-    else -> trimZero(size / 1_000_000.0) + "M"
-}
-
-private fun trimZero(value: Double): String {
-    val rounded = "%.1f".format(value)
-    return if (rounded.endsWith(".0")) rounded.dropLast(2) else rounded
-}
 
 /** m:ss for track durations, blank when unknown. */
 internal fun formatDuration(millis: Long): String {

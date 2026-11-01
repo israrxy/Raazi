@@ -21,6 +21,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,6 +83,8 @@ internal fun SettingsCategoryDetailList(
     isCheckingForUpdate: Boolean,
     onCheckForUpdate: () -> Unit
 ) {
+    var showFeatureGuideDialog by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -286,129 +293,95 @@ internal fun SettingsCategoryDetailList(
                         }
                     }
                 }
+
+                item {
+                    val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsState(initial = true)
+                    SettingsSection(title = "Player Experience") {
+                        SettingsSwitchItem(
+                            icon = Icons.Filled.OpenInFull,
+                            title = "Floating Micro Player",
+                            subtitle = "Collapse MiniPlayer into a draggable corner tile with cover art and controls",
+                            checked = microPlayerEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) }
+                            }
+                        )
+                    }
+                }
             }
 
             SettingsCategory.PLAYBACK -> {
-                item {
-                    SettingsSection(title = "Audio") {
-                        SettingsSelectItem(
-                            icon = Icons.Filled.HighQuality,
-                            title = "Streaming Quality",
-                            value = audioQuality,
-                            onClick = onShowAudioQualityDialog
-                        )
-                        SettingsDivider()
-                        SettingsSelectItem(
-                            icon = Icons.Filled.GraphicEq,
-                            title = "Crossfade",
-                            value = crossfadeDuration,
-                            onClick = onShowCrossfadeDialog
-                        )
-                        SettingsDivider()
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.DataSaverOn,
-                            title = "Data Saver",
-                            subtitle = "Lower stream bitrate on mobile data",
-                            checked = dataSaver,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setDataSaver(enabled) }
-                            }
-                        )
-                        SettingsDivider()
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.Vibration,
-                            title = "Haptic Feedback",
-                            subtitle = "Subtle vibrations on controls",
-                            checked = hapticFeedback,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setHapticFeedback(enabled) }
-                            }
-                        )
-                    }
-                }
+                settingsPlaybackSection(
+                    audioQuality = audioQuality,
+                    onShowAudioQualityDialog = onShowAudioQualityDialog,
+                    crossfadeDuration = crossfadeDuration,
+                    onShowCrossfadeDialog = onShowCrossfadeDialog,
+                    dataSaver = dataSaver,
+                    hapticFeedback = hapticFeedback,
+                    settingsDataStore = settingsDataStore,
+                    scope = scope
+                )
             }
 
             SettingsCategory.LYRICS_AI -> {
-                item {
-                    SettingsSection(title = "Lyrics & Translation") {
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.Translate,
-                            title = "Translate Lyrics",
-                            subtitle = "Show Google Neural translated lines below lyrics",
-                            checked = translateLyrics,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setLyricsTranslateEnabled(enabled) }
-                            }
-                        )
-                        if (translateLyrics) {
-                            SettingsDivider()
-                            SettingsSelectItem(
-                                icon = Icons.Filled.Language,
-                                title = "Target Language",
-                                value = targetLanguage.uppercase(),
-                                onClick = onShowLanguageDialog
-                            )
-                        }
-                    }
-                }
+                settingsLyricsSection(
+                    settingsDataStore = settingsDataStore,
+                    scope = scope,
+                    translateLyrics = translateLyrics,
+                    targetLanguage = targetLanguage,
+                    onShowLanguageDialog = onShowLanguageDialog
+                )
             }
 
             SettingsCategory.DOWNLOADS -> {
-                item {
-                    SettingsSection(title = "Downloads & Cache") {
-                        SettingsSelectItem(
-                            icon = Icons.Filled.Download,
-                            title = "Download Quality",
-                            value = downloadQuality,
-                            onClick = onShowDownloadQualityDialog
-                        )
-                        SettingsDivider()
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.Wifi,
-                            title = "Wi-Fi Only",
-                            subtitle = "Pause downloads on cellular data",
-                            checked = wifiOnlyDownload,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setDownloadWifiOnly(enabled) }
-                            }
-                        )
-                        SettingsDivider()
-                        SettingsSelectItem(
-                            icon = Icons.Filled.Speed,
-                            title = "Concurrent Downloads",
-                            value = maxConcurrentDownloads,
-                            onClick = onShowConcurrentDownloadsDialog
-                        )
-                        SettingsDivider()
-                        SettingsActionItem(
-                            icon = Icons.Filled.CleaningServices,
-                            title = "Clear Cache",
-                            subtitle = "Remove temporary cached images and streams",
-                            onClick = onShowClearCacheDialog
-                        )
-                    }
-                }
+                settingsStorageSection(
+                    downloadQuality = downloadQuality,
+                    onShowDownloadQualityDialog = onShowDownloadQualityDialog,
+                    wifiOnlyDownload = wifiOnlyDownload,
+                    maxConcurrentDownloads = maxConcurrentDownloads,
+                    onShowConcurrentDownloadsDialog = onShowConcurrentDownloadsDialog,
+                    onShowClearCacheDialog = onShowClearCacheDialog,
+                    settingsDataStore = settingsDataStore,
+                    scope = scope,
+                    context = context
+                )
             }
 
             SettingsCategory.SECURITY -> {
+                settingsPrivacySection(
+                    biometricLock = biometricLock,
+                    onShowResetSettingsDialog = onShowResetSettingsDialog,
+                    settingsDataStore = settingsDataStore,
+                    viewModel = viewModel,
+                    scope = scope,
+                    context = context
+                )
+            }
+
+            SettingsCategory.FEEDBACK -> {
                 item {
-                    SettingsSection(title = "Security & Reset") {
-                        SettingsSwitchItem(
-                            icon = Icons.Filled.Fingerprint,
-                            title = "Biometric Lock",
-                            subtitle = "Require authentication on launch",
-                            checked = biometricLock,
-                            onCheckedChange = { enabled ->
-                                scope.launch { settingsDataStore.setBiometricLock(enabled) }
-                            }
-                        )
-                        SettingsDivider()
+                    SettingsSection(title = "Send Feedback") {
                         SettingsActionItem(
-                            icon = Icons.Filled.Restore,
-                            title = "Reset Settings",
-                            subtitle = "Restore default preferences",
-                            onClick = onShowResetSettingsDialog,
-                            isDestructive = true
+                            icon = Icons.Filled.Feedback,
+                            title = "Email the Developer",
+                            subtitle = "feedback@israrxy.qzz.io",
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_SENDTO,
+                                            Uri.parse("mailto:feedback@israrxy.qzz.io")
+                                        ).apply {
+                                            putExtra(
+                                                Intent.EXTRA_SUBJECT,
+                                                "Raazi feedback (v${BuildConfig.VERSION_NAME})"
+                                            )
+                                        }
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                     }
                 }
@@ -417,6 +390,13 @@ internal fun SettingsCategoryDetailList(
             SettingsCategory.ABOUT -> {
                 item {
                     SettingsSection(title = "Application") {
+                        SettingsActionItem(
+                            icon = Icons.Filled.AutoAwesome,
+                            title = "Feature Guide & Tips",
+                            subtitle = "Learn gestures, micro player, lyrics & batch selection",
+                            onClick = { showFeatureGuideDialog = true }
+                        )
+                        SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.SystemUpdate,
                             title = "Check for Updates",
@@ -428,30 +408,21 @@ internal fun SettingsCategoryDetailList(
                             icon = Icons.Filled.Code,
                             title = "Source Code",
                             subtitle = "github.com/israrxy/Raazi",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/israrxy/Raazi"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/israrxy/Raazi"))) }
                         )
                         SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.Person,
                             title = "Instagram",
                             subtitle = "@israrxy",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))) }
                         )
                         SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.Language,
                             title = "Website",
                             subtitle = "israrxy.qzz.io",
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://israrxy.qzz.io"))
-                                context.startActivity(intent)
-                            }
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://israrxy.qzz.io"))) }
                         )
                     }
                 }
@@ -466,5 +437,9 @@ internal fun SettingsCategoryDetailList(
                 }
             }
         }
+    }
+
+    if (showFeatureGuideDialog) {
+        FeatureGuideDialog(onDismiss = { showFeatureGuideDialog = false })
     }
 }

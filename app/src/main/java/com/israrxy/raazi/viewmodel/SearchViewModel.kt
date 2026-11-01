@@ -168,22 +168,12 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 val result = repository.searchMusic(normalizedQuery, _selectedService.value)
                 _searchError.value = null
                 _searchResults.value = result
-                val top = result.topResult ?: result.topTracks.firstOrNull() ?: result.items.firstOrNull { item ->
-                    item.contentType == com.israrxy.raazi.model.MusicContentType.SONG ||
-                        item.contentType == com.israrxy.raazi.model.MusicContentType.VIDEO ||
-                        (item.contentType == com.israrxy.raazi.model.MusicContentType.UNKNOWN && !item.isPlaylist)
-                }
-                saveSearchHistory(
-                    query = normalizedQuery,
-                    thumbnailUrl = top?.thumbnailUrl,
-                    resultTitle = top?.title,
-                    resultArtist = top?.artist
-                )
+                saveSearchHistory(query = normalizedQuery)
             } catch (e: Exception) {
                 android.util.Log.e("SearchViewModel", "Search error", e)
                 _searchError.value = e.message ?: "Search failed. Check your connection and try again."
                 _searchResults.value = com.israrxy.raazi.model.SearchResult(normalizedQuery, emptyList())
-                saveSearchHistory(normalizedQuery)
+                saveSearchHistory(query = normalizedQuery)
             } finally {
                 _isSearching.value = false
             }

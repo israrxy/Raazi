@@ -144,6 +144,16 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
             _forgottenFavorites.value = forgotten
 
             loadHomeInteractionSignals()
+
+            try {
+                val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                YouTube.home(params = chipParams).onSuccess { page ->
+                    _homePage.value = page
+                }
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error refreshing YouTube home", e)
+            }
+
             rebuildHomeFeedState(isRefreshing = false)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error refreshing home content", e)
@@ -365,7 +375,23 @@ internal fun MusicPlayerViewModel.refreshHomeSectionImpl(sectionId: String) {
             sourceType = HomeInteractionEntity.SOURCE_LOCAL
         )
     }
-    refreshHomeContentImpl()
+    if (sectionId == "quick_picks") {
+        viewModelScope.launch {
+            try {
+                val picks = repository.quickPicks.first()
+                if (picks.isNotEmpty()) {
+                    _quickPicks.value = picks.shuffled().take(50)
+                    rebuildHomeFeedState()
+                } else {
+                    refreshHomeContentImpl()
+                }
+            } catch (e: Exception) {
+                refreshHomeContentImpl()
+            }
+        }
+    } else {
+        refreshHomeContentImpl()
+    }
 }
 
 internal fun MusicPlayerViewModel.loadMoreSectionsImpl() {

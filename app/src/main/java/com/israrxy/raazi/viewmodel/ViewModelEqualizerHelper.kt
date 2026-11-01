@@ -13,6 +13,23 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 
+enum class EqualizerToneGroup { BASS, MID, TREBLE }
+
+private fun toneGroupForFrequency(freqHz: Int): EqualizerToneGroup = when {
+    freqHz < 250 -> EqualizerToneGroup.BASS
+    freqHz < 4_000 -> EqualizerToneGroup.MID
+    else -> EqualizerToneGroup.TREBLE
+}
+
+private fun toneGainFor(
+    state: MusicPlayerViewModel.EqualizerState,
+    group: EqualizerToneGroup
+): Int = when (group) {
+    EqualizerToneGroup.BASS -> state.toneBassDb
+    EqualizerToneGroup.MID -> state.toneMidDb
+    EqualizerToneGroup.TREBLE -> state.toneTrebleDb
+}
+
 internal val genrePresets = mapOf(
     "Rock" to listOf(300, 500, 800, 1200, 2000, 3000, 4000, 6000, 8000, 12000),
     "Pop" to listOf(200, 400, 600, 1000, 1500, 2500, 3500, 5000, 7000, 10000),
@@ -100,8 +117,44 @@ internal fun MusicPlayerViewModel.setBandLevelImpl(band: Short, level: Short) {
     val newLevels = current.currentLevels.toMutableList()
     if (band < newLevels.size) {
         newLevels[band.toInt()] = level
-        _equalizerState.value = current.copy(currentLevels = newLevels, currentPreset = "Custom")
+        val touchedGroup = current.centerFreqs.getOrNull(band.toInt())?.let(::toneGroupForFrequency)
+        _equalizerState.value = current.copy(
+            currentLevels = newLevels,
+            currentPreset = "Custom",
+            toneBassDb = if (touchedGroup == EqualizerToneGroup.BASS) 0 else current.toneBassDb,
+            toneMidDb = if (touchedGroup == EqualizerToneGroup.MID) 0 else current.toneMidDb,
+            toneTrebleDb = if (touchedGroup == EqualizerToneGroup.TREBLE) 0 else current.toneTrebleDb
+        )
     }
+}
+
+internal fun MusicPlayerViewModel.setToneLevelImpl(group: EqualizerToneGroup, gainDb: Int) {
+    val current = _equalizerState.value
+    if (current.bands <= 0 || current.currentLevels.isEmpty()) return
+    val newGain = gainDb.coerceIn(-12, 12)
+    val delta = (newGain - toneGainFor(current, group)) * 100
+    if (delta == 0) return
+
+    val newLevels = current.currentLevels.toMutableList()
+    var changed = false
+    current.centerFreqs.forEachIndexed { index, freq ->
+        if (toneGroupForFrequency(freq) != group || index >= newLevels.size) return@forEachIndexed
+        val target = (newLevels[index].toInt() + delta)
+            .coerceIn(current.minLevel.toInt(), current.maxLevel.toInt())
+            .toShort()
+        playbackService?.setBandLevel(index.toShort(), target)
+        newLevels[index] = target
+        changed = true
+    }
+    if (!changed) return
+
+    _equalizerState.value = current.copy(
+        currentLevels = newLevels,
+        currentPreset = "Custom",
+        toneBassDb = if (group == EqualizerToneGroup.BASS) newGain else current.toneBassDb,
+        toneMidDb = if (group == EqualizerToneGroup.MID) newGain else current.toneMidDb,
+        toneTrebleDb = if (group == EqualizerToneGroup.TREBLE) newGain else current.toneTrebleDb
+    )
 }
 
 internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
@@ -126,7 +179,10 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
 
             _equalizerState.value = _equalizerState.value.copy(
                 currentLevels = adjustedLevels,
-                currentPreset = presetName
+                currentPreset = presetName,
+                toneBassDb = 0,
+                toneMidDb = 0,
+                toneTrebleDb = 0
             )
         } else {
             val systemPresets = service.getPresetNames()
@@ -140,7 +196,10 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
                 }
                 _equalizerState.value = _equalizerState.value.copy(
                     currentLevels = levels,
-                    currentPreset = presetName
+                    currentPreset = presetName,
+                    toneBassDb = 0,
+                    toneMidDb = 0,
+                    toneTrebleDb = 0
                 )
             }
         }
@@ -243,7 +302,10 @@ internal fun MusicPlayerViewModel.loadCustomPresetImpl(preset: MusicPlayerViewMo
             bassBoostStrength = preset.bassBoost,
             virtualizerStrength = preset.virtualizer,
             reverbPreset = preset.reverb,
-            currentPreset = preset.name
+            currentPreset = preset.name,
+            toneBassDb = 0,
+            toneMidDb = 0,
+            toneTrebleDb = 0
         )
     }
 }

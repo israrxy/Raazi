@@ -71,6 +71,8 @@ fun PlaylistDetailScreen(
         searchQuery = ""
         currentSortOrder = PlaylistSortOrder.DEFAULT
     }
+    LaunchedEffect(isSelectionMode) { viewModel.setSelectionModeActive(isSelectionMode) }
+    DisposableEffect(Unit) { onDispose { viewModel.setSelectionModeActive(false) } }
 
     val playlist = currentPlaylist
     val items = playlist?.items ?: emptyList()
@@ -201,29 +203,10 @@ fun PlaylistDetailScreen(
         },
         bottomBar = {
             if (isSelectionMode && selectedTracks.isNotEmpty()) {
-                PlaylistSelectionBottomBar(
-                    selectedCount = selectedTracks.size,
-                    isEditablePlaylist = isEditablePlaylist && playlist != null,
-                    onDownloadSelected = {
-                        viewModel.downloadPlaylist(selectedTracks.toList())
-                        Toast.makeText(context, "Downloading ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
-                        isSelectionMode = false
-                        selectedTracks.clear()
-                    },
-                    onQueueSelected = {
-                        viewModel.addToQueue(selectedTracks.toList())
-                        Toast.makeText(context, "Added ${selectedTracks.size} tracks to queue", Toast.LENGTH_SHORT).show()
-                        isSelectionMode = false
-                        selectedTracks.clear()
-                    },
-                    onRemoveSelected = {
-                        if (playlist != null) {
-                            viewModel.removeTracksFromPlaylist(playlist.id, selectedTracks.toList())
-                            Toast.makeText(context, "Removed ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
-                            isSelectionMode = false
-                            selectedTracks.clear()
-                        }
-                    }
+                PlaylistSelectionActionBar(
+                    tracks = selectedTracks.toList(), playlistId = playlist?.id,
+                    isEditablePlaylist = isEditablePlaylist, viewModel = viewModel,
+                    onComplete = { isSelectionMode = false; selectedTracks.clear() }
                 )
             }
         }
@@ -357,7 +340,12 @@ fun PlaylistDetailScreen(
                                 canMoveDown = actualIndex < items.lastIndex,
                                 isDownloaded = isDownloaded,
                                 isDownloading = isDownloading,
-                                isEditablePlaylist = isEditablePlaylist,
+                                isEditablePlaylist = isEditablePlaylist || playlist.id == "history" || playlist.id == "favorites",
+                                removeActionLabel = when (playlist.id) {
+                                    "history" -> "Remove from history"
+                                    "favorites" -> "Unlike song"
+                                    else -> "Remove from playlist"
+                                },
                                 onClick = {
                                     if (isSelectionMode) {
                                         if (isSelected) selectedTracks.remove(item) else selectedTracks.add(item)
@@ -396,8 +384,12 @@ fun PlaylistDetailScreen(
                                     context.startActivity(Intent.createChooser(sendIntent, "Share Song"))
                                 },
                                 onRemoveFromPlaylist = {
-                                    viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
-                                    Toast.makeText(context, "Removed from playlist", Toast.LENGTH_SHORT).show()
+                                    when (playlist.id) {
+                                        "history" -> viewModel.removeTracksFromHistory(listOf(item))
+                                        "favorites" -> viewModel.toggleFavorite(item)
+                                        else -> viewModel.removeTrackFromPlaylist(playlist.id, item.id, item.setVideoId)
+                                    }
+                                    Toast.makeText(context, "Removed song", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
@@ -472,7 +464,11 @@ fun PlaylistDetailScreen(
         }
     }
     if (showAddToPlaylistDialog && selectedTrackForAdd != null) {
-        AddToPlaylistDialog(viewModel, { showAddToPlaylistDialog = false; selectedTrackForAdd = null }) { targetPlaylist ->
+        AddToPlaylistDialog(
+            viewModel = viewModel,
+            tracksToAdd = listOf(selectedTrackForAdd!!),
+            onDismiss = { showAddToPlaylistDialog = false; selectedTrackForAdd = null }
+        ) { targetPlaylist ->
             viewModel.addToPlaylist(selectedTrackForAdd!!, targetPlaylist)
             Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
             showAddToPlaylistDialog = false

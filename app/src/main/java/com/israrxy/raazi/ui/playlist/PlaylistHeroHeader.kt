@@ -21,9 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.ui.theme.Emerald500
+import coil.compose.AsyncImage
 
 /**
  * Spotify-style Hero Header for Playlists featuring dynamic atmospheric background,
@@ -84,6 +87,15 @@ internal fun PlaylistHeroHeader(
                 )
             )
     ) {
+        if (coverUrl.isNotBlank()) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(360.dp).blur(42.dp).align(Alignment.TopCenter),
+                alpha = 0.22f
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()

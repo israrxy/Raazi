@@ -78,6 +78,22 @@ private fun applyAccent(
 ): androidx.compose.material3.ColorScheme {
     // Each accent: primary, secondary, container, onContainer (tuned per light/dark for contrast).
     val a = when (accent) {
+        "Rose" -> if (dark)
+            AccentColors(Color(0xFFF48FB1), Color(0xFFF8BBD0), Color(0xFF5C1130), Color(0xFFFFD9E2))
+        else
+            AccentColors(Color(0xFFD81B60), Color(0xFFE91E63), Color(0xFFFFD9E2), Color(0xFF3B0014))
+        "Peach" -> if (dark)
+            AccentColors(Color(0xFFFFCC80), Color(0xFFFFE0B2), Color(0xFF7A4A12), Color(0xFFFFEACC))
+        else
+            AccentColors(Color(0xFFF57C00), Color(0xFFFFB74D), Color(0xFFFFEACC), Color(0xFF2C1600))
+        "Mint" -> if (dark)
+            AccentColors(Color(0xFFA7F3D0), Color(0xFFD1FAE5), Color(0xFF064E3B), Color(0xFFD1FAE5))
+        else
+            AccentColors(Color(0xFF059669), Color(0xFF10B981), Color(0xFFD1FAE5), Color(0xFF022C22))
+        "Sage" -> if (dark)
+            AccentColors(Color(0xFF86EFAC), Color(0xFFBBF7D0), Color(0xFF14532D), Color(0xFFDCFCE7))
+        else
+            AccentColors(Color(0xFF16A34A), Color(0xFF22C55E), Color(0xFFDCFCE7), Color(0xFF052E16))
         "Lavender" -> if (dark)
             AccentColors(Color(0xFFB39DDB), Color(0xFFD1C4E9), Color(0xFF4A398C), Color(0xFFE7DEFF))
         else
@@ -86,10 +102,34 @@ private fun applyAccent(
             AccentColors(Color(0xFF90CAF9), Color(0xFFBBDEFB), Color(0xFF0D47A1), Color(0xFFD6E9FF))
         else
             AccentColors(Color(0xFF2196F3), Color(0xFF64B5F6), Color(0xFFD6E9FF), Color(0xFF001C3B))
-        "Peach" -> if (dark)
-            AccentColors(Color(0xFFFFCC80), Color(0xFFFFE0B2), Color(0xFF7A4A12), Color(0xFFFFEACC))
+        "Lilac" -> if (dark)
+            AccentColors(Color(0xFFD8B4FE), Color(0xFFE9D5FF), Color(0xFF581C87), Color(0xFFF3E8FF))
         else
-            AccentColors(Color(0xFFF57C00), Color(0xFFFFB74D), Color(0xFFFFEACC), Color(0xFF2C1600))
+            AccentColors(Color(0xFF9333EA), Color(0xFFA855F7), Color(0xFFF3E8FF), Color(0xFF3B0764))
+        "Lemon" -> if (dark)
+            AccentColors(Color(0xFFFDE047), Color(0xFFFEF08A), Color(0xFF713F12), Color(0xFFFEF9C3))
+        else
+            AccentColors(Color(0xFFCA8A04), Color(0xFFEAB308), Color(0xFFFEF9C3), Color(0xFF422006))
+        "Coral" -> if (dark)
+            AccentColors(Color(0xFFFF8A65), Color(0xFFFFCCBC), Color(0xFF661F00), Color(0xFFFFCCBC))
+        else
+            AccentColors(Color(0xFFE64A19), Color(0xFFFF5722), Color(0xFFFFCCBC), Color(0xFF3E1100))
+        "Aqua" -> if (dark)
+            AccentColors(Color(0xFF80DEEA), Color(0xFFB2EBF2), Color(0xFF004D40), Color(0xFFE0F7FA))
+        else
+            AccentColors(Color(0xFF00ACC1), Color(0xFF00BCD4), Color(0xFFE0F7FA), Color(0xFF00272B))
+        "Periwinkle" -> if (dark)
+            AccentColors(Color(0xFF9FA8DA), Color(0xFFC5CAE9), Color(0xFF1A237E), Color(0xFFE8EAF6))
+        else
+            AccentColors(Color(0xFF3F51B5), Color(0xFF5C6BC0), Color(0xFFE8EAF6), Color(0xFF0D1242))
+        "Blush" -> if (dark)
+            AccentColors(Color(0xFFF06292), Color(0xFFF8BBD0), Color(0xFF4A0020), Color(0xFFFCE4EC))
+        else
+            AccentColors(Color(0xFFC2185B), Color(0xFFD81B60), Color(0xFFFCE4EC), Color(0xFF370017))
+        "Pistachio" -> if (dark)
+            AccentColors(Color(0xFFA3E635), Color(0xFFD9F99D), Color(0xFF365314), Color(0xFFECFCCB))
+        else
+            AccentColors(Color(0xFF65A30D), Color(0xFF84CC16), Color(0xFFECFCCB), Color(0xFF1A2E05))
         else -> return base // Emerald / Green — base scheme already carries the accent
     }
     return base.copy(

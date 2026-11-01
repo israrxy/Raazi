@@ -23,6 +23,7 @@ import coil.compose.AsyncImage
 import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.data.playlist.isYouTubeEditablePlaylist
 import com.israrxy.raazi.data.playlist.isYouTubeSyncedPlaylist
+import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import androidx.compose.runtime.collectAsState
@@ -30,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 @Composable
 fun AddToPlaylistDialog(
     viewModel: MusicPlayerViewModel,
+    tracksToAdd: List<MusicItem>,
     onDismiss: () -> Unit,
     onPlaylistSelected: (PlaylistEntity) -> Unit
 ) {
@@ -95,13 +97,15 @@ fun AddToPlaylistDialog(
                         Button(
                             onClick = {
                                 if (newPlaylistName.isNotBlank()) {
-                                    viewModel.createPlaylist(
-                                        newPlaylistName,
+                                    viewModel.createPlaylistWithTracks(
+                                        name = newPlaylistName,
+                                        tracks = tracksToAdd,
                                         syncedToYouTube = createSyncedPlaylist
                                     )
                                     showCreateInput = false
                                     newPlaylistName = ""
                                     createSyncedPlaylist = false
+                                    onDismiss()
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet),

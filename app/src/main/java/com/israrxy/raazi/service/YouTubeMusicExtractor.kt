@@ -277,9 +277,9 @@ class YouTubeMusicExtractor private constructor() {
                 }
                 return@withContext Playlist(
                     id = normalizedPlaylistId,
-                    title = items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album",
-                    description = "",
-                    thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
+                    title = album.album.title.ifBlank { items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album" },
+                    description = album.album.artists?.joinToString(", ") { it.name }.orEmpty(),
+                    thumbnailUrl = album.album.thumbnail.takeIf { it.isNotBlank() } ?: items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
                 )
             } else if (normalizedPlaylistId.startsWith("PL") || normalizedPlaylistId.startsWith("OLAK") ||
@@ -292,9 +292,9 @@ class YouTubeMusicExtractor private constructor() {
                 }
                 return@withContext Playlist(
                     id = normalizedPlaylistId,
-                    title = "Playlist",
-                    description = "",
-                    thumbnailUrl = items.firstOrNull()?.thumbnailUrl ?: "",
+                    title = playlist.playlist.title.ifBlank { "Playlist" },
+                    description = playlist.playlist.author?.name.orEmpty(),
+                    thumbnailUrl = playlist.playlist.thumbnail?.takeIf { it.isNotBlank() } ?: items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
                 )
             }

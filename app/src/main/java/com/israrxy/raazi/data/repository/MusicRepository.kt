@@ -42,14 +42,12 @@ class MusicRepository(
         item: MusicItem,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
     ): com.israrxy.raazi.data.remote.Lyrics? {
-        return savedLyricsStore.get(item.id)
-            ?: lyricsAggregator.getLyrics(
-                trackId = item.id,
-                trackName = item.title,
-                artistName = item.artist,
-                durationMs = item.duration,
-                preferredScript = preferredScript
-            )
+        savedLyricsStore.get(item.id)?.let { return it }
+        val fetched = lyricsAggregator.getLyrics(item.id, item.title, item.artist, item.duration, preferredScript)
+        if (fetched != null && (!fetched.syncedLyrics.isNullOrBlank() || !fetched.plainLyrics.isNullOrBlank())) {
+            savedLyricsStore.put(item.id, fetched)
+        }
+        return fetched
     }
 
     suspend fun searchLyricsOptions(
@@ -457,6 +455,12 @@ class MusicRepository(
 
     val playbackHistory: Flow<List<MusicItem>> = db.musicDao().getPlaybackHistory().map { entities ->
         entities.map { mapHistoryToDomain(it) }
+    }
+
+    suspend fun removeTracksFromPlaybackHistory(tracks: List<MusicItem>) = withContext(Dispatchers.IO) { tracks.forEach { db.musicDao().deletePlaybackHistoryByTrackId(it.id) } }
+
+    val trackPlayCounts: Flow<Map<String, Int>> = db.musicDao().getPlaybackCounts().map { counts ->
+        counts.associate { it.id to it.playCount }
     }
 
     val quickPicks: Flow<List<MusicItem>> = db.musicDao().getSmartRecommendations().map { entities ->

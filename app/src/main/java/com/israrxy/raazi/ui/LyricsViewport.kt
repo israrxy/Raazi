@@ -87,8 +87,8 @@ internal fun LyricsMainViewportContent(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = 72.dp,
-                        bottom = 180.dp,
+                        top = 56.dp,
+                        bottom = 160.dp,
                         start = 20.dp,
                         end = 20.dp
                     ),
@@ -190,11 +190,15 @@ internal fun LyricsMainViewportContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .height(72.dp)
                         .align(Alignment.TopCenter)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.62f),
+                                    Color.Black.copy(alpha = 0.20f),
+                                    Color.Transparent
+                                )
                             )
                         )
                 )
@@ -202,11 +206,15 @@ internal fun LyricsMainViewportContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .height(96.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.34f),
+                                    Color.Black.copy(alpha = 0.66f)
+                                )
                             )
                         )
                 )

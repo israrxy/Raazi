@@ -56,6 +56,15 @@ class SettingsDataStore(private val context: Context) {
         val FLAC_ENABLED_KEY = booleanPreferencesKey("flac_enabled")
         val HIFI_API_URL_KEY = stringPreferencesKey("hifi_api_url")
         val FLAC_QUALITY_KEY = stringPreferencesKey("flac_quality")
+        val MICRO_PLAYER_ENABLED_KEY = booleanPreferencesKey("micro_player_enabled")
+        val PREFERRED_LYRICS_TYPE_KEY = stringPreferencesKey("preferred_lyrics_type")
+        val LYRICS_AUTO_SCROLL_KEY = booleanPreferencesKey("lyrics_auto_scroll")
+        val DEFAULT_LYRICS_VIEW_KEY = stringPreferencesKey("default_lyrics_view")
+        val DOUBLE_TAP_SEEK_DURATION_KEY = stringPreferencesKey("double_tap_seek_duration")
+        val KEEP_SCREEN_AWAKE_KEY = booleanPreferencesKey("keep_screen_awake")
+        val PAUSE_ON_DISCONNECT_KEY = booleanPreferencesKey("pause_on_disconnect")
+        val SAVE_SEARCH_HISTORY_KEY = booleanPreferencesKey("save_search_history")
+        val DISMISS_YOUTUBE_CONNECT_PROMPT_KEY = booleanPreferencesKey("dismiss_youtube_connect_prompt")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -85,6 +94,33 @@ class SettingsDataStore(private val context: Context) {
 
     val lyricsTranslateLang: Flow<String> = prefFlow(LYRICS_TRANSLATE_LANG_KEY, "en")
     suspend fun setLyricsTranslateLang(lang: String) = setPref(LYRICS_TRANSLATE_LANG_KEY, lang)
+
+    val microPlayerEnabled: Flow<Boolean> = prefFlow(MICRO_PLAYER_ENABLED_KEY, true)
+    suspend fun setMicroPlayerEnabled(enabled: Boolean) = setPref(MICRO_PLAYER_ENABLED_KEY, enabled)
+
+    val preferredLyricsType: Flow<String> = prefFlow(PREFERRED_LYRICS_TYPE_KEY, "ROMANIZED")
+    suspend fun setPreferredLyricsType(type: String) = setPref(PREFERRED_LYRICS_TYPE_KEY, type)
+
+    val lyricsAutoScroll: Flow<Boolean> = prefFlow(LYRICS_AUTO_SCROLL_KEY, true)
+    suspend fun setLyricsAutoScroll(enabled: Boolean) = setPref(LYRICS_AUTO_SCROLL_KEY, enabled)
+
+    val defaultLyricsView: Flow<String> = prefFlow(DEFAULT_LYRICS_VIEW_KEY, "KARAOKE")
+    suspend fun setDefaultLyricsView(view: String) = setPref(DEFAULT_LYRICS_VIEW_KEY, view)
+
+    val doubleTapSeekDuration: Flow<String> = prefFlow(DOUBLE_TAP_SEEK_DURATION_KEY, "10")
+    suspend fun setDoubleTapSeekDuration(duration: String) = setPref(DOUBLE_TAP_SEEK_DURATION_KEY, duration)
+
+    val keepScreenAwake: Flow<Boolean> = prefFlow(KEEP_SCREEN_AWAKE_KEY, false)
+    suspend fun setKeepScreenAwake(enabled: Boolean) = setPref(KEEP_SCREEN_AWAKE_KEY, enabled)
+
+    val pauseOnDisconnect: Flow<Boolean> = prefFlow(PAUSE_ON_DISCONNECT_KEY, true)
+    suspend fun setPauseOnDisconnect(enabled: Boolean) = setPref(PAUSE_ON_DISCONNECT_KEY, enabled)
+
+    val saveSearchHistory: Flow<Boolean> = prefFlow(SAVE_SEARCH_HISTORY_KEY, true)
+    suspend fun setSaveSearchHistory(enabled: Boolean) = setPref(SAVE_SEARCH_HISTORY_KEY, enabled)
+
+    val dismissYoutubeConnectPrompt: Flow<Boolean> = prefFlow(DISMISS_YOUTUBE_CONNECT_PROMPT_KEY, false)
+    suspend fun setDismissYoutubeConnectPrompt(dismiss: Boolean) = setPref(DISMISS_YOUTUBE_CONNECT_PROMPT_KEY, dismiss)
 
     val lastfmScrobbleEnabled: Flow<Boolean> = prefFlow(LASTFM_SCROBBLE_ENABLED_KEY, false)
     suspend fun setLastfmScrobbleEnabled(enabled: Boolean) = setPref(LASTFM_SCROBBLE_ENABLED_KEY, enabled)

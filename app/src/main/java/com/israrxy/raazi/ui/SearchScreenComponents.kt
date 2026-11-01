@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.israrxy.raazi.ui.components.ShimmerMusicItemCard
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 
@@ -216,26 +217,20 @@ internal fun SearchSectionHeader(
 
 @Composable
 internal fun SearchLoadingState(query: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            CircularProgressIndicator()
+    Column(modifier = modifier.fillMaxSize().padding(top = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(
                 text = "Searching for \"$query\"",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Grouping music, videos, artists, albums, and playlists.",
-                style = MaterialTheme.typography.bodyMedium,
+                text = "Finding songs, artists, albums, and playlists",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        repeat(7) { ShimmerMusicItemCard() }
     }
 }
 
