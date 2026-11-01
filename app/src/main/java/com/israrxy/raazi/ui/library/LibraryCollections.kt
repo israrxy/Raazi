@@ -275,5 +275,4 @@ internal fun LibrarySongRow(
             }
         }
     }
-    }
 }
