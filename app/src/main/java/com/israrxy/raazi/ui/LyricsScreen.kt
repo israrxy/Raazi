@@ -50,8 +50,7 @@ import kotlin.math.abs
 @Composable
 fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
-    onOpenLyricsBrowser: () -> Unit = {},
-    topBar: @Composable () -> Unit = {}
+    onOpenLyricsBrowser: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -349,11 +348,8 @@ fun LyricsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            topBar()
-
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
                 lyricsSource = lyrics?.source,
