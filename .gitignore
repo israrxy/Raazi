@@ -18,6 +18,7 @@ Thumbs.db
 
 # IDE
 .idea/
+.vscode/
 *.iml
 *.iws
 *.ipr
@@ -32,6 +33,10 @@ local.properties
 **/build/
 /.build-outputs/
 .build-outputs/
+.output/
+/.output/
+output/
+/output/
 *.apk
 *.aab
 *.hprof
@@ -41,7 +46,15 @@ local.properties
 keystore.properties
 keystore/
 /keystore/
+signing/
+/signing/
 .env
 .kotlin/
 .kotlinc/
 
+# AI Studio / Assistant artifacts
+.aistudio/
+/.aistudio/
+metadata.json
+public/
+/public/
