@@ -278,8 +278,8 @@ class YouTubeMusicExtractor private constructor() {
                 return@withContext Playlist(
                     id = normalizedPlaylistId,
                     title = album.album.title.ifBlank { items.firstOrNull()?.artist?.let { "$it Album" } ?: "Album" },
-                    description = album.album.authors?.joinToString(", ") { it.name }.orEmpty(),
-                    thumbnailUrl = album.album.thumbnail?.takeIf { it.isNotBlank() } ?: items.firstOrNull()?.thumbnailUrl ?: "",
+                    description = album.album.artists?.joinToString(", ") { it.name }.orEmpty(),
+                    thumbnailUrl = album.album.thumbnail.takeIf { it.isNotBlank() } ?: items.firstOrNull()?.thumbnailUrl ?: "",
                     items = items
                 )
             } else if (normalizedPlaylistId.startsWith("PL") || normalizedPlaylistId.startsWith("OLAK") ||
