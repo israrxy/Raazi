@@ -17,7 +17,9 @@ class UpdateManager {
 
     suspend fun checkUpdate(): UpdateConfig? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(updateUrl)
+            .url("$updateUrl?t=${System.currentTimeMillis()}")
+            .header("Cache-Control", "no-cache, no-store, must-revalidate")
+            .header("Pragma", "no-cache")
             .build()
         
         try {
