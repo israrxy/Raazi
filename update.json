@@ -1,7 +1,7 @@
 {
     "latestVersionCode": 11,
     "latestVersionName": "6.6.0",
-    "downloadUrl": "https://github.com/israrxy/Raazi/releases/download/v6.6.0/Raazi-v6.6.0.apk",
+    "downloadUrl": "https://raazi.pages.dev",
     "forceUpdate": true,
     "releaseNotes": "v6.6.0 — Mandatory Performance & Stability Update\n\n• Equalizer Tuning & Reset Flat: Fixed EQ flat preset and slider scaling, added instant 1-tap 'Reset Flat' button.\n• In-App Privacy & Transparency: Added clear privacy policy with user acceptance in onboarding and settings.\n• Active Device Telemetry: Lightweight, privacy-respecting install counter with full opt-out control.\n• Notification & Playlist Fixes: Official Raazi branding in notifications and correct playlist names.\n• Instant Lyrics Caching: Instantaneous lyrics loading for cached tracks."
 }
