@@ -174,7 +174,10 @@ fun EnhancedEqualizerScreen(viewModel: MusicPlayerViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    FrequencyBands(equalizerState) { band, level ->
+                    FrequencyBands(
+                        state = equalizerState,
+                        onResetToFlat = { viewModel.usePreset("Flat") }
+                    ) { band, level ->
                         viewModel.setBandLevel(band, level)
                     }
                 }

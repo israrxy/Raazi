@@ -31,16 +31,17 @@ private fun toneGainFor(
 }
 
 internal val genrePresets = mapOf(
-    "Rock" to listOf(300, 500, 800, 1200, 2000, 3000, 4000, 6000, 8000, 12000),
-    "Pop" to listOf(200, 400, 600, 1000, 1500, 2500, 3500, 5000, 7000, 10000),
-    "Jazz" to listOf(100, 300, 500, 800, 1200, 2000, 3000, 4500, 6000, 8000),
-    "Classical" to listOf(0, 0, 100, 200, 300, 400, 500, 600, 700, 800),
-    "Electronic" to listOf(500, 600, 700, 800, 1000, 1500, 2500, 4000, 6000, 8000),
-    "Hip-Hop" to listOf(600, 700, 600, 300, 200, 300, 400, 500, 600, 700),
-    "Acoustic" to listOf(200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100),
-    "Blues" to listOf(300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200),
-    "Metal" to listOf(500, 600, 800, 1000, 1200, 2000, 3000, 4000, 6000, 8000),
-    "Podcast" to listOf(-300, -200, -100, 0, 100, 200, 300, 400, 500, 600)
+    "Flat" to listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    "Rock" to listOf(400, 300, 200, 0, -100, 100, 300, 400, 500, 500),
+    "Pop" to listOf(-100, 100, 300, 400, 400, 300, 100, -100, -100, -100),
+    "Jazz" to listOf(300, 200, 100, 200, -100, -100, 0, 100, 200, 300),
+    "Classical" to listOf(400, 300, 200, 100, -100, -100, 0, 200, 300, 300),
+    "Electronic" to listOf(400, 300, 100, 0, -200, 200, 100, 300, 400, 400),
+    "Hip-Hop" to listOf(500, 400, 200, 100, -100, 0, 100, 200, 300, 400),
+    "Acoustic" to listOf(300, 300, 200, 100, 200, 200, 300, 200, 200, 200),
+    "Blues" to listOf(200, 100, 0, 100, 200, 200, 100, 100, 200, 200),
+    "Metal" to listOf(400, 300, 100, 0, -100, 100, 300, 400, 400, 400),
+    "Podcast" to listOf(-200, -100, 0, 200, 400, 400, 300, 100, 0, -100)
 )
 
 internal fun MusicPlayerViewModel.loadEqualizerStateImpl() {
@@ -161,6 +162,34 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
     playbackService?.let { service ->
         val current = _equalizerState.value
 
+        if (presetName.equals("Flat", ignoreCase = true)) {
+            val range = service.getBandLevelRange()
+            val minLevel = range[0]
+            val maxLevel = range[1]
+            val flatLevel = 0.toShort().coerceIn(minLevel, maxLevel)
+            val levels = mutableListOf<Short>()
+            for (i in 0 until current.bands) {
+                service.setBandLevel(i.toShort(), flatLevel)
+                levels.add(flatLevel)
+            }
+            service.setBassBoostStrength(0)
+            service.setVirtualizerStrength(0)
+            service.setReverbPreset(0)
+
+            _equalizerState.value = _equalizerState.value.copy(
+                currentLevels = levels,
+                currentPreset = "Flat",
+                toneBassDb = 0,
+                toneMidDb = 0,
+                toneTrebleDb = 0,
+                bassBoostStrength = 0,
+                virtualizerStrength = 0,
+                reverbPreset = 0
+            )
+            saveEqualizerSettingsImpl()
+            return
+        }
+
         if (genrePresets.containsKey(presetName)) {
             val genreLevels = genrePresets[presetName]!!
             val adjustedLevels = mutableListOf<Short>()
@@ -170,9 +199,11 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
             val maxLevel = range[1]
 
             for (i in 0 until current.bands) {
-                val freqValue = if (i < genreLevels.size) genreLevels[i] else 0
-                val level = ((freqValue.toFloat() / 12000f) * (maxLevel - minLevel) + minLevel).toInt().toShort()
-                    .coerceIn(minLevel, maxLevel)
+                val indexInPreset = if (current.bands > 1) {
+                    ((i.toFloat() / (current.bands - 1)) * (genreLevels.size - 1)).toInt().coerceIn(0, genreLevels.size - 1)
+                } else 0
+                val freqValue = genreLevels.getOrElse(indexInPreset) { 0 }
+                val level = freqValue.toShort().coerceIn(minLevel, maxLevel)
                 service.setBandLevel(i.toShort(), level)
                 adjustedLevels.add(level)
             }
@@ -184,6 +215,7 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
                 toneMidDb = 0,
                 toneTrebleDb = 0
             )
+            saveEqualizerSettingsImpl()
         } else {
             val systemPresets = service.getPresetNames()
             val index = systemPresets.indexOf(presetName)
@@ -201,6 +233,7 @@ internal fun MusicPlayerViewModel.usePresetImpl(presetName: String) {
                     toneMidDb = 0,
                     toneTrebleDb = 0
                 )
+                saveEqualizerSettingsImpl()
             }
         }
     }

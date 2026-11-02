@@ -28,8 +28,29 @@ internal fun LazyListScope.settingsPrivacySection(
 ) {
     item {
         val saveSearchHistory by settingsDataStore.saveSearchHistory.collectAsState(initial = true)
+        val telemetryEnabled by settingsDataStore.telemetryEnabled.collectAsState(initial = true)
+        var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
         var showClearSearchDialog by remember { mutableStateOf(false) }
         var showClearHistoryDialog by remember { mutableStateOf(false) }
+
+        SettingsSection(title = "Privacy & Transparency") {
+            SettingsActionItem(
+                icon = Icons.Filled.Security,
+                title = "Privacy Policy",
+                subtitle = "Review what data Raazi collects and why",
+                onClick = { showPrivacyPolicyDialog = true }
+            )
+            SettingsDivider()
+            SettingsSwitchItem(
+                icon = Icons.Filled.QueryStats,
+                title = "Anonymous Active Device Counter",
+                subtitle = "Sends daily anonymous heartbeat for public install stats",
+                checked = telemetryEnabled,
+                onCheckedChange = { enabled ->
+                    scope.launch { settingsDataStore.setTelemetryEnabled(enabled) }
+                }
+            )
+        }
 
         SettingsSection(title = "Search & History") {
             SettingsSwitchItem(
@@ -125,6 +146,12 @@ internal fun LazyListScope.settingsPrivacySection(
                         Text("Cancel")
                     }
                 }
+            )
+        }
+
+        if (showPrivacyPolicyDialog) {
+            PrivacyPolicyDialog(
+                onDismiss = { showPrivacyPolicyDialog = false }
             )
         }
     }

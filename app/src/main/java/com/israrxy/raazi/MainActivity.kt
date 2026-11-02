@@ -75,6 +75,7 @@ class MainActivity : FragmentActivity() {
             
             // Update Check Logic
             val updateManager = remember { com.israrxy.raazi.data.UpdateManager() }
+            val telemetryManager = remember { com.israrxy.raazi.data.TelemetryManager() }
             var updateConfig by remember { mutableStateOf<com.israrxy.raazi.model.UpdateConfig?>(null) }
             var showUpdateDialog by remember { mutableStateOf(false) }
 
@@ -100,7 +101,14 @@ class MainActivity : FragmentActivity() {
             }
 
             val onboardingCompleted by settingsDataStore.isOnboardingCompleted.collectAsStateWithLifecycle(initialValue = null)
+            val privacyPolicyAccepted by settingsDataStore.privacyPolicyAccepted.collectAsStateWithLifecycle(initialValue = false)
             val scope = rememberCoroutineScope()
+
+            LaunchedEffect(privacyPolicyAccepted) {
+                if (privacyPolicyAccepted) {
+                    telemetryManager.sendDailyPingIfEligible(this@MainActivity, settingsDataStore)
+                }
+            }
 
             // --- Biometric App Lock ---
             val biometricLock by settingsDataStore.biometricLock.collectAsStateWithLifecycle(initialValue = false)
@@ -178,6 +186,16 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             } else {
+                                if (!privacyPolicyAccepted) {
+                                    com.israrxy.raazi.ui.PrivacyPolicyDialog(
+                                        onDismiss = {},
+                                        showAcceptButton = true,
+                                        onAccept = {
+                                            scope.launch { settingsDataStore.setPrivacyPolicyAccepted(true) }
+                                        }
+                                    )
+                                }
+
                                 // Daily "Follow me" prompt: once per calendar day
                                 // on first open. Also catches the first open right
                                 // after onboarding completes, since the date key

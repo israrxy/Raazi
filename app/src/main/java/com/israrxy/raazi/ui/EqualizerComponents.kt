@@ -232,6 +232,7 @@ internal fun PresetChips(
 @Composable
 internal fun FrequencyBands(
     state: MusicPlayerViewModel.EqualizerState,
+    onResetToFlat: (() -> Unit)? = null,
     onBandLevel: (Short, Short) -> Unit
 ) {
     val minLevel = state.minLevel.toFloat()
@@ -244,10 +245,40 @@ internal fun FrequencyBands(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("${(maxLevel / 100).toInt()}dB", "0dB", "${(minLevel / 100).toInt()}dB").forEach {
-                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                listOf("${(maxLevel / 100).toInt()}dB", "0dB", "${(minLevel / 100).toInt()}dB").forEach {
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            if (onResetToFlat != null) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.clickable { onResetToFlat() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.RestartAlt,
+                            contentDescription = "Reset Flat",
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Reset Flat",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
 
@@ -299,7 +330,8 @@ private fun BandSlider(
             color = gainColor,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.clickable { onValueChange(mid) }
         )
         Spacer(Modifier.height(6.dp))
 

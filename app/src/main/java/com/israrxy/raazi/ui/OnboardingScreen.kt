@@ -53,11 +53,14 @@ fun OnboardingScreen(
     viewModel: MusicPlayerViewModel,
     onFinish: () -> Unit
 ) {
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsDataStore = remember { SettingsDataStore(context) }
     
+    // Privacy policy acceptance
+    val privacyAccepted by settingsDataStore.privacyPolicyAccepted.collectAsState(initial = false)
+
     // Theme options from DataStore
     val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
     val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = true)
@@ -93,11 +96,17 @@ fun OnboardingScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = pagerState.currentPage != 3 // Disable swiping when WebView is active
+            userScrollEnabled = pagerState.currentPage != 4 && (pagerState.currentPage != 1 || privacyAccepted) // Disable swiping past privacy until accepted
         ) { page ->
             when (page) {
                 0 -> WelcomeIntroPage()
-                1 -> CustomizationPage(
+                1 -> OnboardingPrivacyPage(
+                    accepted = privacyAccepted,
+                    onAcceptToggle = { accepted ->
+                        scope.launch { settingsDataStore.setPrivacyPolicyAccepted(accepted) }
+                    }
+                )
+                2 -> CustomizationPage(
                     themeMode = themeMode,
                     useDynamicColor = useDynamicColor,
                     pastelAccent = pastelAccent,
@@ -105,7 +114,7 @@ fun OnboardingScreen(
                     onDynamicColorToggle = { enabled -> scope.launch { settingsDataStore.setDynamicColor(enabled) } },
                     onPastelAccentChange = { accent -> scope.launch { settingsDataStore.setPastelAccent(accent) } }
                 )
-                2 -> OnboardingPreferencesPage(
+                3 -> OnboardingPreferencesPage(
                     preferredLyricsType = preferredLyricsType,
                     microPlayerEnabled = microPlayerEnabled,
                     lyricsAutoScroll = lyricsAutoScroll,
@@ -113,13 +122,14 @@ fun OnboardingScreen(
                     onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } },
                     onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } }
                 )
-                3 -> YouTubeConnectPage(
+                4 -> YouTubeConnectPage(
                     viewModel = viewModel,
                     settingsDataStore = settingsDataStore,
                     onWebViewVisibilityChange = { isWebViewVisible = it },
                     onConnected = {
                         scope.launch {
                             delay(600)
+                            settingsDataStore.setPrivacyPolicyAccepted(true)
                             onFinish()
                         }
                     }
@@ -128,9 +138,17 @@ fun OnboardingScreen(
         }
 
         // Top Skip button
-        if (pagerState.currentPage < 3 && !isWebViewVisible) {
+        if (pagerState.currentPage < 4 && !isWebViewVisible && (pagerState.currentPage != 1 || privacyAccepted)) {
             TextButton(
-                onClick = { onFinish() },
+                onClick = {
+                    scope.launch {
+                        if (privacyAccepted) {
+                            onFinish()
+                        } else {
+                            pagerState.animateScrollToPage(1)
+                        }
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
@@ -178,7 +196,7 @@ fun OnboardingScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    repeat(4) { index ->
+                    repeat(5) { index ->
                         val isSelected = pagerState.currentPage == index
                         val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, label = "width")
                         val color by animateColorAsState(
@@ -200,25 +218,30 @@ fun OnboardingScreen(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.CenterEnd
                 ) {
+                    val canProceed = pagerState.currentPage != 1 || privacyAccepted
                     Button(
                         onClick = {
-                            if (pagerState.currentPage < 3) {
+                            if (pagerState.currentPage < 4) {
                                 scope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 }
                             } else {
-                                onFinish()
+                                scope.launch {
+                                    settingsDataStore.setPrivacyPolicyAccepted(true)
+                                    onFinish()
+                                }
                             }
                         },
+                        enabled = canProceed,
                         modifier = Modifier.height(50.dp),
                         shape = RoundedCornerShape(25.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp)
                     ) {
                         Text(
-                            text = if (pagerState.currentPage == 3) "Finish" else "Next",
+                            text = if (pagerState.currentPage == 4) "Finish" else "Next",
                             fontWeight = FontWeight.Bold
                         )
-                        if (pagerState.currentPage < 3) {
+                        if (pagerState.currentPage < 4) {
                             Spacer(Modifier.width(6.dp))
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
                         }

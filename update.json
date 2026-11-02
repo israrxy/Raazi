@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 10,
+    "latestVersionCode": 11,
     "latestVersionName": "6.6.0",
-    "downloadUrl": "https://raazi.pages.dev",
+    "downloadUrl": "https://github.com/israrxy/Raazi/releases/download/v6.6.0/Raazi-v6.6.0.apk",
     "forceUpdate": true,
-    "releaseNotes": "v6.6.0 — Mandatory Performance & Stability Update\n\n• Correct Playlist Titles: Fixed online playlists and albums showing generic title instead of their actual name.\n• App Notification Branding: Notification player now features official Raazi icon.\n• Instant Lyrics Caching: Lyrics load instantaneously for previously played songs without re-fetching.\n• Library Controls: Added 'Don't show again' option to dismiss YouTube Music sign-in prompt permanently.\n• Micro Player & UI Settings: Enhanced micro player gestures, animations, and controls."
+    "releaseNotes": "v6.6.0 — Mandatory Performance & Stability Update\n\n• Equalizer Tuning & Reset Flat: Fixed EQ flat preset and slider scaling, added instant 1-tap 'Reset Flat' button.\n• In-App Privacy & Transparency: Added clear privacy policy with user acceptance in onboarding and settings.\n• Active Device Telemetry: Lightweight, privacy-respecting install counter with full opt-out control.\n• Notification & Playlist Fixes: Official Raazi branding in notifications and correct playlist names.\n• Instant Lyrics Caching: Instantaneous lyrics loading for cached tracks."
 }

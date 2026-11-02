@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -67,6 +68,10 @@ class SettingsDataStore(private val context: Context) {
         val SAVE_SEARCH_HISTORY_KEY = booleanPreferencesKey("save_search_history")
         val DISMISS_YOUTUBE_CONNECT_PROMPT_KEY = booleanPreferencesKey("dismiss_youtube_connect_prompt")
         val CACHED_SONGS_LIMIT_KEY = intPreferencesKey("cached_songs_limit")
+        val ANONYMOUS_INSTALL_ID_KEY = stringPreferencesKey("anonymous_install_id")
+        val LAST_TELEMETRY_PING_KEY = longPreferencesKey("last_telemetry_ping")
+        val TELEMETRY_ENABLED_KEY = booleanPreferencesKey("telemetry_enabled")
+        val PRIVACY_POLICY_ACCEPTED_KEY = booleanPreferencesKey("privacy_policy_accepted")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -265,4 +270,23 @@ class SettingsDataStore(private val context: Context) {
             )
         }
     }
+
+    suspend fun getOrCreateAnonymousInstallId(): String {
+        val existing = context.dataStore.data.first()[ANONYMOUS_INSTALL_ID_KEY]
+        if (!existing.isNullOrBlank()) return existing
+        val newId = java.util.UUID.randomUUID().toString()
+        context.dataStore.edit { it[ANONYMOUS_INSTALL_ID_KEY] = newId }
+        return newId
+    }
+
+    val telemetryEnabled: Flow<Boolean> = prefFlow(TELEMETRY_ENABLED_KEY, true)
+    suspend fun setTelemetryEnabled(enabled: Boolean) = setPref(TELEMETRY_ENABLED_KEY, enabled)
+
+    val lastTelemetryPing: Flow<Long> = context.dataStore.data.map { it[LAST_TELEMETRY_PING_KEY] ?: 0L }
+    suspend fun setLastTelemetryPing(timestamp: Long) {
+        context.dataStore.edit { it[LAST_TELEMETRY_PING_KEY] = timestamp }
+    }
+
+    val privacyPolicyAccepted: Flow<Boolean> = prefFlow(PRIVACY_POLICY_ACCEPTED_KEY, false)
+    suspend fun setPrivacyPolicyAccepted(accepted: Boolean) = setPref(PRIVACY_POLICY_ACCEPTED_KEY, accepted)
 }
