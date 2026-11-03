@@ -65,15 +65,15 @@ class MultiSourceLyricsAggregator(
         )
 
         var best = ranked.firstOrNull()?.lyrics
-        if (best == null && !trackId.isNullOrBlank()) {
+        if (best == null) {
             best = newPipeCaptionExtractor.fetchCaptionsAsLyrics(
-                videoId = trackId,
+                videoId = trackId.orEmpty(),
                 trackName = trackName,
                 artistName = artistName,
                 durationSeconds = durationMs / 1000.0
             )
             if (best != null) {
-                Log.d(tag, "Selected NewPipe caption fallback lyrics (${best.source}) for $artistName - $trackName")
+                Log.d(tag, "Selected caption fallback lyrics (${best.source}) for $artistName - $trackName")
             }
         }
 
@@ -181,9 +181,9 @@ class MultiSourceLyricsAggregator(
             preferredScript = preferredScript
         )
 
-        if (rankedResults.isEmpty() && !trackId.isNullOrBlank()) {
+        if (rankedResults.isEmpty()) {
             newPipeCaptionExtractor.fetchCaptionsAsLyrics(
-                videoId = trackId,
+                videoId = trackId.orEmpty(),
                 trackName = trackName,
                 artistName = artistName,
                 durationSeconds = durationSeconds
@@ -191,7 +191,7 @@ class MultiSourceLyricsAggregator(
                 return@withContext listOf(
                     LyricsSearchResult(
                         lyrics = captionLyrics,
-                        matchScore = 72,
+                        matchScore = 75,
                         titleScore = 80,
                         artistScore = 80,
                         durationDelta = 0.0
