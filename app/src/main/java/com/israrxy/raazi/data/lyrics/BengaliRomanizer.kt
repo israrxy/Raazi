@@ -72,9 +72,9 @@ object BengaliRomanizer {
         'ল' -> "l"
         'শ', 'ষ', 'স' -> "sh"
         'হ' -> "h"
-        'ড়' -> "r"
-        'ঢ়' -> "rh"
-        'য়' -> "y"
+        '\u09DC' -> "r"   // ড়
+        '\u09DD' -> "rh"  // ঢ়
+        '\u09DF' -> "y"   // য়
         else -> null
     }
 
@@ -186,16 +186,22 @@ object BengaliRomanizer {
         else -> null
     }
 
+    private fun normalizeBengaliNukta(text: String): String = text
+        .replace("\u09A1\u09BC", "\u09DC")
+        .replace("\u09A2\u09BC", "\u09DD")
+        .replace("\u09AF\u09BC", "\u09DF")
+
     fun romanize(text: String): String {
         if (text.isBlank()) return text
-        val romanized = BENGALI_WORD_REGEX.replace(text) { match ->
+        val normalized = normalizeBengaliNukta(text)
+        val romanized = BENGALI_WORD_REGEX.replace(normalized) { match ->
             romanizeBengaliWord(match.value)
         }
         return sanitizeBengali(romanized)
     }
 
     fun romanizeBengaliWord(rawWord: String): String {
-        val clean = rawWord.replace("।", ".").replace("॥", ".")
+        val clean = normalizeBengaliNukta(rawWord.replace("।", ".").replace("॥", "."))
         if (clean.isEmpty()) return clean
         getWordOverride(clean)?.let { return it }
 
