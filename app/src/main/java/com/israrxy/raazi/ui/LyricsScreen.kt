@@ -92,6 +92,7 @@ fun LyricsScreen(
     val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
     val hideBracketsPref by settingsDataStore.lyricsHideBracketsEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val preferredLyricsTypePref by settingsDataStore.preferredLyricsType.collectAsStateWithLifecycle(initialValue = "ROMANIZED")
 
     var showTranslation by remember { mutableStateOf(false) }
     LaunchedEffect(translateEnabledPref) {
@@ -107,7 +108,7 @@ fun LyricsScreen(
 
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showTrackDetails by remember { mutableStateOf(false) }
-    var selectedVariant by remember(currentTrack?.id) { mutableStateOf(LyricsViewVariant.ORIGINAL) }
+    var selectedVariant by remember { mutableStateOf(LyricsViewVariant.ORIGINAL) }
     var neuralRomanVersion by remember { mutableIntStateOf(0) }
 
     val rawSourceText = remember(lyrics) {
@@ -116,9 +117,19 @@ fun LyricsScreen(
     val availableVariants = remember(rawSourceText) {
         LyricsTextVariants.availableVariants(rawSourceText)
     }
-    LaunchedEffect(availableVariants) {
-        if (selectedVariant !in availableVariants) {
-            selectedVariant = LyricsViewVariant.ORIGINAL
+    LaunchedEffect(preferredLyricsTypePref, availableVariants) {
+        val wantsRomanized = preferredLyricsTypePref == "ROMANIZED"
+        selectedVariant = if (wantsRomanized && LyricsViewVariant.ROMANIZED in availableVariants) {
+            LyricsViewVariant.ROMANIZED
+        } else {
+            LyricsViewVariant.ORIGINAL
+        }
+    }
+
+    val handleSelectVariant: (LyricsViewVariant) -> Unit = { variant ->
+        selectedVariant = variant
+        coroutineScope.launch {
+            settingsDataStore.setPreferredLyricsType(variant.name)
         }
     }
 
@@ -370,7 +381,7 @@ fun LyricsScreen(
                 showOptionsMenu = showOptionsMenu,
                 availableVariants = availableVariants,
                 selectedVariant = selectedVariant,
-                onSelectVariant = { selectedVariant = it },
+                onSelectVariant = handleSelectVariant,
                 showTranslation = showTranslation,
                 isTranslating = isTranslating,
                 translateLang = translateLang,
@@ -399,7 +410,7 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     availableVariants = availableVariants,
                     selectedVariant = selectedVariant,
-                    onSelectVariant = { selectedVariant = it },
+                    onSelectVariant = handleSelectVariant,
                     hasTranslationSupport = true,
                     showTranslation = showTranslation,
                     translateLang = translateLang,

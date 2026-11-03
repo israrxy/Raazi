@@ -39,25 +39,37 @@ object LyricsTextVariants {
         if (text.isBlank()) return text
 
         // 1. Check Google Neural Romanization cache first (single-line or multi-line)
-        LyricsTranslator.getCachedRomanization(text)
-            ?.let { return HinglishRomanizer.sanitizeHinglish(it) }
+        LyricsTranslator.getCachedRomanization(text)?.let { cached ->
+            return if (BengaliRomanizer.containsBengali(text)) {
+                BengaliRomanizer.sanitizeBengali(cached)
+            } else {
+                HinglishRomanizer.sanitizeHinglish(cached)
+            }
+        }
         if (text.contains('\n')) {
             val lines = text.lines()
             val allCached = lines.all { it.isBlank() || LyricsTranslator.getCachedRomanization(it) != null }
             if (allCached) {
                 return lines.joinToString("\n") { line ->
                     if (line.isBlank()) line
-                    else HinglishRomanizer.sanitizeHinglish(
-                        LyricsTranslator.getCachedRomanization(line) ?: line
-                    )
+                    else {
+                        val cached = LyricsTranslator.getCachedRomanization(line) ?: line
+                        if (BengaliRomanizer.containsBengali(line)) BengaliRomanizer.sanitizeBengali(cached)
+                        else HinglishRomanizer.sanitizeHinglish(cached)
+                    }
                 }
             }
         }
 
-        // 2. Convert Devanagari words using dedicated Modern Hinglish phonological engine
+        // 2. Handle Bengali separately without interfering with global logic
+        if (BengaliRomanizer.containsBengali(text)) {
+            return BengaliRomanizer.romanize(text)
+        }
+
+        // 3. Convert Devanagari words using dedicated Modern Hinglish phonological engine
         var step = HinglishRomanizer.romanize(text)
 
-        // 3. If non-ASCII characters remain (e.g. Gurmukhi, Bengali, Arabic, CJK), transliterate
+        // 4. If non-ASCII characters remain (e.g. Gurmukhi, Arabic, CJK), transliterate
         if (nonAsciiLetterRegex.containsMatchIn(step)) {
             val toLatin = anyToLatin
             if (toLatin != null) {

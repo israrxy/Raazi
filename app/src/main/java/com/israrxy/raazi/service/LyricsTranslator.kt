@@ -3,6 +3,7 @@ package com.israrxy.raazi.service
 import android.util.Log
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
+import com.israrxy.raazi.data.lyrics.BengaliRomanizer
 import com.israrxy.raazi.data.lyrics.HinglishRomanizer
 import com.israrxy.raazi.data.lyrics.LyricsTextVariants
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,8 @@ object LyricsTranslator {
             val line = cleanLines[index]
             if (HinglishRomanizer.containsDevanagari(line)) {
                 romanizationCache[line] = HinglishRomanizer.romanize(line)
+            } else if (BengaliRomanizer.containsBengali(line)) {
+                romanizationCache[line] = BengaliRomanizer.romanize(line)
             }
         }
 
@@ -126,7 +129,11 @@ object LyricsTranslator {
                 chunk.forEachIndexed { cIdx, originalIdx ->
                     val sourceLine = cleanLines[originalIdx]
                     val rawNeuralLine = neuralLines.getOrNull(cIdx)?.trim().orEmpty()
-                    val finalRoman = refineNeuralHinglishLine(sourceLine, rawNeuralLine)
+                    val finalRoman = if (BengaliRomanizer.containsBengali(sourceLine)) {
+                        BengaliRomanizer.refineNeuralBengaliLine(sourceLine, rawNeuralLine)
+                    } else {
+                        refineNeuralHinglishLine(sourceLine, rawNeuralLine)
+                    }
                     romanizationCache[sourceLine] = finalRoman
 
                     // Also cache word-by-word mappings when token counts align for karaoke word sync
@@ -143,7 +150,10 @@ object LyricsTranslator {
 
         cleanLines.map { line ->
             if (line.isBlank()) line
-            else romanizationCache[line] ?: HinglishRomanizer.romanize(line)
+            else romanizationCache[line] ?: when {
+                BengaliRomanizer.containsBengali(line) -> BengaliRomanizer.romanize(line)
+                else -> HinglishRomanizer.romanize(line)
+            }
         }
     }
 
