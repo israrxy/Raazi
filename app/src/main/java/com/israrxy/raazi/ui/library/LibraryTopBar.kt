@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun LibraryHeader(
     summary: String,
+    onOpenDownloads: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSpotifyImport: () -> Unit,
     modifier: Modifier = Modifier
@@ -73,6 +75,13 @@ internal fun LibraryHeader(
                     maxLines = 1
                 )
             }
+        }
+        IconButton(onClick = onOpenDownloads) {
+            Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = "Downloads",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         IconButton(onClick = onOpenSpotifyImport) {
             Icon(

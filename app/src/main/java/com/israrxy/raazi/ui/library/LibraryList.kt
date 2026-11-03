@@ -19,6 +19,7 @@ internal fun LazyListScope.LibraryListContent(
     item("header") {
         LibraryHeader(
             summary = state.summary,
+            onOpenDownloads = { actions.openPlaylist("downloads") },
             onOpenHistory = { actions.openPlaylist("history") },
             onOpenSpotifyImport = actions.openSpotifyImport
         )
@@ -104,12 +105,22 @@ private fun LazyListScope.renderPlaylists(
     if (state.filter != LibraryFilter.ALL && state.filter != LibraryFilter.PLAYLISTS) return
 
     val banners = buildList {
-        if (state.query.isBlank()) {
+        if (state.query.isBlank() || "liked songs".contains(state.query, ignoreCase = true)) {
             add(
                 likedPlaylistBanner(
                     likedSongs = state.likedSongs,
                     playCounts = state.playCounts,
                     onOpen = { actions.openPlaylist("favorites") }
+                )
+            )
+        }
+        if (state.query.isBlank() || "downloads".contains(state.query, ignoreCase = true)) {
+            add(
+                downloadedPlaylistBanner(
+                    downloadCount = state.downloadCount,
+                    downloadedSongs = state.downloadedSongs,
+                    playCounts = state.playCounts,
+                    onOpen = { actions.openPlaylist("downloads") }
                 )
             )
         }

@@ -131,12 +131,47 @@ fun DownloadsScreen(
                         icon = Icons.Default.CheckCircle
                     )
                 }
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val allTracks = completedDownloads.map { it.toMusicItem() }
+                                viewModel.playPlaylist(allTracks, startIndex = 0)
+                                onNavigateToPlayer()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Play All")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val allTracks = completedDownloads.map { it.toMusicItem() }.shuffled()
+                                viewModel.playPlaylist(allTracks, startIndex = 0)
+                                onNavigateToPlayer()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Shuffle, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Shuffle")
+                        }
+                    }
+                }
                 items(completedDownloads, key = { it.trackId }) { download ->
                     CompletedDownloadItem(
                         download = download,
                         onPlay = {
+                            val allTracks = completedDownloads.map { it.toMusicItem() }
                             val track = download.toMusicItem()
-                            viewModel.playMusic(track)
+                            val index = allTracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+                            viewModel.playPlaylist(allTracks, startIndex = index)
                             onNavigateToPlayer()
                         },
                         onDelete = { viewModel.deleteDownloadedFile(download.trackId) },

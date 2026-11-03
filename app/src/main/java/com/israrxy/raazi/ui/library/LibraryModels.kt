@@ -100,6 +100,7 @@ internal data class LibraryUiState(
     val albums: List<SavedCollectionItem>,
     val artists: List<SavedCollectionItem>,
     val downloadCount: Int,
+    val downloadedSongs: List<MusicItem> = emptyList(),
     val playCounts: Map<String, Int> = emptyMap()
 ) {
     val visibleUserPlaylists: List<PlaylistWithTracks> =
@@ -132,16 +133,26 @@ internal data class LibraryUiState(
     val likedPreviewCapped: Boolean = likedPreview.size < visibleLikedSongs.size
     val historyPreviewCapped: Boolean = historyPreview.size < visibleHistory.size
 
+    val matchesDownloads: Boolean =
+        (filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS) &&
+            (query.isBlank() || "downloads".contains(query, ignoreCase = true))
+
+    val matchesLiked: Boolean =
+        (filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS) &&
+            (query.isBlank() || "liked songs".contains(query, ignoreCase = true))
+
     /** The user has something stored, ignoring the current query and filter. */
     val hasLibraryContent: Boolean =
         likedSongs.isNotEmpty() || history.isNotEmpty() || userPlaylists.isNotEmpty() ||
-            savedPlaylists.isNotEmpty() || albums.isNotEmpty() || artists.isNotEmpty()
+            savedPlaylists.isNotEmpty() || albums.isNotEmpty() || artists.isNotEmpty() ||
+            downloadCount > 0
 
     /** The current query + filter matched at least one section. */
     val hasVisibleContent: Boolean =
         visibleUserPlaylists.isNotEmpty() || visibleSavedPlaylists.isNotEmpty() ||
             visibleAlbums.isNotEmpty() || visibleArtists.isNotEmpty() ||
-            visibleLikedSongs.isNotEmpty() || visibleHistory.isNotEmpty()
+            visibleLikedSongs.isNotEmpty() || visibleHistory.isNotEmpty() ||
+            matchesDownloads || matchesLiked
 
     /** Downloads live behind their own screen, so they count as content but not as sections. */
     val isEmptyLibrary: Boolean = !hasLibraryContent && downloadCount == 0

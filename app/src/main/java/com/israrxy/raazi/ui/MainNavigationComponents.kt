@@ -79,7 +79,9 @@ internal fun cleanPlaylistId(id: String): String {
 
 internal fun NavHostController.navigateToPlaylist(id: String) {
     val cleanId = cleanPlaylistId(id)
-    if (cleanId.isNotBlank()) {
+    if (cleanId.equals("downloads", ignoreCase = true)) {
+        navigate("downloads")
+    } else if (cleanId.isNotBlank()) {
         navigate("playlist/${Uri.encode(cleanId)}")
     }
 }

@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.ui.downloads.toMusicItem
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.launch
 
@@ -119,6 +120,7 @@ fun LibraryScreen(
             albums = saved.filter { it.contentType == MusicContentType.ALBUM },
             artists = saved.filter { it.contentType == MusicContentType.ARTIST },
             downloadCount = downloads.size,
+            downloadedSongs = downloads.map { it.toMusicItem() },
             playCounts = playCounts
         )
     }

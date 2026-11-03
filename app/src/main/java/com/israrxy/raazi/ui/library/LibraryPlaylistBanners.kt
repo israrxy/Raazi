@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material3.Checkbox
@@ -48,6 +49,7 @@ internal data class LibraryPlaylistBannerUi(
     val subtitle: String,
     val artworkUrls: List<String>,
     val isLiked: Boolean,
+    val isDownloads: Boolean = false,
     val isSelected: Boolean = false,
     val isSelectionMode: Boolean = false,
     val menu: List<LibraryMenuItem>,
@@ -72,6 +74,30 @@ internal fun likedPlaylistBanner(
         playCounts = playCounts
     ),
     isLiked = true,
+    isDownloads = false,
+    menu = emptyList(),
+    onClick = onOpen
+)
+
+internal fun downloadedPlaylistBanner(
+    downloadCount: Int,
+    downloadedSongs: List<MusicItem>,
+    playCounts: Map<String, Int>,
+    onOpen: () -> Unit
+): LibraryPlaylistBannerUi = LibraryPlaylistBannerUi(
+    key = "downloaded_playlist",
+    title = "Downloads",
+    subtitle = if (downloadCount == 0) {
+        "No downloaded songs \u2022 Offline"
+    } else {
+        "${counted(downloadCount, "song")} \u2022 Default playlist"
+    },
+    artworkUrls = topPlayedArtwork(
+        tracks = downloadedSongs.map { it.id to it.thumbnailUrl },
+        playCounts = playCounts
+    ),
+    isLiked = false,
+    isDownloads = true,
     menu = emptyList(),
     onClick = onOpen
 )
@@ -170,7 +196,7 @@ internal fun LibraryPlaylistBanner(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (item.isSelectionMode && !item.isLiked) {
+            if (item.isSelectionMode && !item.isLiked && !item.isDownloads) {
                 Checkbox(
                     checked = item.isSelected,
                     onCheckedChange = { item.onClick() },
@@ -181,6 +207,7 @@ internal fun LibraryPlaylistBanner(
             PlaylistArtworkMosaic(
                 artworkUrls = item.artworkUrls,
                 isLiked = item.isLiked,
+                isDownloads = item.isDownloads,
                 modifier = Modifier.size(88.dp)
             )
 
@@ -224,6 +251,7 @@ internal fun LibraryPlaylistBanner(
 private fun PlaylistArtworkMosaic(
     artworkUrls: List<String>,
     isLiked: Boolean,
+    isDownloads: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -235,6 +263,12 @@ private fun PlaylistArtworkMosaic(
         when {
             isLiked && artworkUrls.isEmpty() -> Icon(
                 imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp)
+            )
+            isDownloads && artworkUrls.isEmpty() -> Icon(
+                imageVector = Icons.Default.Download,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp)
@@ -271,7 +305,11 @@ private fun PlaylistArtworkMosaic(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = if (isLiked) Icons.Default.Favorite else Icons.Outlined.QueueMusic,
+                    imageVector = when {
+                        isLiked -> Icons.Default.Favorite
+                        isDownloads -> Icons.Default.Download
+                        else -> Icons.Outlined.QueueMusic
+                    },
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(12.dp)

@@ -6,6 +6,7 @@ import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
+import com.israrxy.raazi.ui.downloads.toMusicItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -256,6 +257,15 @@ internal fun MusicPlayerViewModel.loadPlaylistImpl(playlistId: String) {
                     description = "${historyItems.size} recently played",
                     thumbnailUrl = historyItems.firstOrNull()?.thumbnailUrl ?: "",
                     items = historyItems
+                )
+            } else if (playlistId == "downloads") {
+                val downloaded = dbCompletedDownloads.value.map { it.toMusicItem() }
+                _currentPlaylist.value = Playlist(
+                    id = "downloads",
+                    title = "Downloads",
+                    description = "${downloaded.size} songs",
+                    thumbnailUrl = downloaded.firstOrNull()?.thumbnailUrl ?: "",
+                    items = downloaded
                 )
             } else {
                 val playlist = repository.getPlaylist(playlistId)
