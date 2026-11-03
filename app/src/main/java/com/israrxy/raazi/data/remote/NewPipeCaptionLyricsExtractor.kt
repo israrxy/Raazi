@@ -1,6 +1,7 @@
 package com.israrxy.raazi.data.remote
 
 import android.util.Log
+import com.google.gson.JsonParser
 import com.israrxy.raazi.player.StreamResolver
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import kotlinx.coroutines.Dispatchers
@@ -212,10 +213,10 @@ class NewPipeCaptionLyricsExtractor(
             val rawText = match.groupValues[3]
             val clean = cleanCaptionText(rawText)
             if (clean.isNotBlank() && clean != prevText && !isNoiseCue(clean)) {
-                val totalSec = startSec.toInt()
-                val minutes = totalSec / 60
-                val seconds = totalSec % 60
-                val centis = ((startSec - totalSec) * 100).toInt().coerceIn(0, 99)
+                val timeMs = Math.round(startSec * 1000.0)
+                val minutes = timeMs / 60000
+                val seconds = (timeMs / 1000) % 60
+                val centis = (timeMs % 1000) / 10
                 result.append(String.format(Locale.US, "[%02d:%02d.%02d]%s\n", minutes, seconds, centis, clean))
                 prevText = clean
             }
@@ -227,17 +228,19 @@ class NewPipeCaptionLyricsExtractor(
         val result = StringBuilder()
         var prevText = ""
         runCatching {
-            val json = JSONObject(jsonText)
-            val events = json.optJSONArray("events") ?: return@runCatching
-            for (i in 0 until events.length()) {
-                val event = events.optJSONObject(i) ?: continue
-                val startMs = event.optLong("tStartMs", -1L)
+            val root = JsonParser.parseString(jsonText).asJsonObject
+            val events = root.getAsJsonArray("events") ?: return@runCatching
+            for (eventElement in events) {
+                val event = eventElement.asJsonObject
+                val startMs = if (event.has("tStartMs")) event.get("tStartMs").asLong else -1L
                 if (startMs < 0) continue
-                val segs = event.optJSONArray("segs") ?: continue
+                val segs = if (event.has("segs")) event.getAsJsonArray("segs") else continue
                 val segText = StringBuilder()
-                for (j in 0 until segs.length()) {
-                    val seg = segs.optJSONObject(j) ?: continue
-                    segText.append(seg.optString("utf8", ""))
+                for (segElement in segs) {
+                    val seg = segElement.asJsonObject
+                    if (seg.has("utf8")) {
+                        segText.append(seg.get("utf8").asString)
+                    }
                 }
                 val clean = cleanCaptionText(segText.toString())
                 if (clean.isNotBlank() && clean != prevText && !isNoiseCue(clean)) {
