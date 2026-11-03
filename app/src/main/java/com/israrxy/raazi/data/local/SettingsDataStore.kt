@@ -61,6 +61,8 @@ class SettingsDataStore(private val context: Context) {
         val FLAC_QUALITY_KEY = stringPreferencesKey("flac_quality")
         val MICRO_PLAYER_ENABLED_KEY = booleanPreferencesKey("micro_player_enabled")
         val PREFERRED_LYRICS_TYPE_KEY = stringPreferencesKey("preferred_lyrics_type")
+        val LAST_SWITCHED_LYRICS_TYPE_KEY = stringPreferencesKey("last_switched_lyrics_type")
+        val DEFAULT_PLAYER_SCREEN_KEY = stringPreferencesKey("default_player_screen")
         val LYRICS_AUTO_SCROLL_KEY = booleanPreferencesKey("lyrics_auto_scroll")
         val DEFAULT_LYRICS_VIEW_KEY = stringPreferencesKey("default_lyrics_view")
         val DOUBLE_TAP_SEEK_DURATION_KEY = stringPreferencesKey("double_tap_seek_duration")
@@ -109,8 +111,14 @@ class SettingsDataStore(private val context: Context) {
     val microPlayerEnabled: Flow<Boolean> = prefFlow(MICRO_PLAYER_ENABLED_KEY, true)
     suspend fun setMicroPlayerEnabled(enabled: Boolean) = setPref(MICRO_PLAYER_ENABLED_KEY, enabled)
 
-    val preferredLyricsType: Flow<String> = prefFlow(PREFERRED_LYRICS_TYPE_KEY, "ROMANIZED")
+    val preferredLyricsType: Flow<String> = prefFlow(PREFERRED_LYRICS_TYPE_KEY, "LAST_USED")
     suspend fun setPreferredLyricsType(type: String) = setPref(PREFERRED_LYRICS_TYPE_KEY, type)
+
+    val lastSwitchedLyricsType: Flow<String> = prefFlow(LAST_SWITCHED_LYRICS_TYPE_KEY, "ROMANIZED")
+    suspend fun setLastSwitchedLyricsType(type: String) = setPref(LAST_SWITCHED_LYRICS_TYPE_KEY, type)
+
+    val defaultPlayerScreen: Flow<String> = prefFlow(DEFAULT_PLAYER_SCREEN_KEY, "LAST_USED")
+    suspend fun setDefaultPlayerScreen(screen: String) = setPref(DEFAULT_PLAYER_SCREEN_KEY, screen)
 
     val lyricsAutoScroll: Flow<Boolean> = prefFlow(LYRICS_AUTO_SCROLL_KEY, true)
     suspend fun setLyricsAutoScroll(enabled: Boolean) = setPref(LYRICS_AUTO_SCROLL_KEY, enabled)

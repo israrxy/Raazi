@@ -92,16 +92,11 @@ fun LyricsScreen(
     val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
     val hideBracketsPref by settingsDataStore.lyricsHideBracketsEnabled.collectAsStateWithLifecycle(initialValue = true)
-    val preferredLyricsTypePref by settingsDataStore.preferredLyricsType.collectAsStateWithLifecycle(initialValue = "ROMANIZED")
+    val preferredLyricsTypePref by settingsDataStore.preferredLyricsType.collectAsStateWithLifecycle(initialValue = "LAST_USED")
+    val lastSwitchedLyricsTypePref by settingsDataStore.lastSwitchedLyricsType.collectAsStateWithLifecycle(initialValue = "ROMANIZED")
 
-    var showTranslation by remember { mutableStateOf(false) }
-    LaunchedEffect(translateEnabledPref) {
-        showTranslation = translateEnabledPref
-    }
-    var hideBrackets by remember { mutableStateOf(true) }
-    LaunchedEffect(hideBracketsPref) {
-        hideBrackets = hideBracketsPref
-    }
+    var showTranslation by remember(translateEnabledPref) { mutableStateOf(translateEnabledPref) }
+    var hideBrackets by remember(hideBracketsPref) { mutableStateOf(hideBracketsPref) }
     var isTranslating by remember { mutableStateOf(false) }
     val translatedLines = remember { mutableStateListOf<String>() }
     var translatedPlain by remember { mutableStateOf<String?>(null) }
@@ -117,8 +112,13 @@ fun LyricsScreen(
     val availableVariants = remember(rawSourceText) {
         LyricsTextVariants.availableVariants(rawSourceText)
     }
-    LaunchedEffect(preferredLyricsTypePref, availableVariants) {
-        val wantsRomanized = preferredLyricsTypePref == "ROMANIZED"
+    LaunchedEffect(preferredLyricsTypePref, lastSwitchedLyricsTypePref, availableVariants) {
+        val effectiveType = if (preferredLyricsTypePref == "LAST_USED") {
+            lastSwitchedLyricsTypePref
+        } else {
+            preferredLyricsTypePref
+        }
+        val wantsRomanized = effectiveType == "ROMANIZED"
         selectedVariant = if (wantsRomanized && LyricsViewVariant.ROMANIZED in availableVariants) {
             LyricsViewVariant.ROMANIZED
         } else {
@@ -129,7 +129,10 @@ fun LyricsScreen(
     val handleSelectVariant: (LyricsViewVariant) -> Unit = { variant ->
         selectedVariant = variant
         coroutineScope.launch {
-            settingsDataStore.setPreferredLyricsType(variant.name)
+            settingsDataStore.setLastSwitchedLyricsType(variant.name)
+            if (preferredLyricsTypePref != "LAST_USED") {
+                settingsDataStore.setPreferredLyricsType(variant.name)
+            }
         }
     }
 

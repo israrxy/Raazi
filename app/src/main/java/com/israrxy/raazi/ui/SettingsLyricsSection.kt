@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
@@ -37,7 +38,8 @@ internal fun LazyListScope.settingsLyricsSection(
     onShowLanguageDialog: () -> Unit
 ) {
     item {
-        val preferredLyricsType by settingsDataStore.preferredLyricsType.collectAsState(initial = "ROMANIZED")
+        val preferredLyricsType by settingsDataStore.preferredLyricsType.collectAsState(initial = "LAST_USED")
+        val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsState(initial = "LAST_USED")
         val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
         val defaultLyricsView by settingsDataStore.defaultLyricsView.collectAsState(initial = "KARAOKE")
 
@@ -51,7 +53,7 @@ internal fun LazyListScope.settingsLyricsSection(
 
             SettingsDivider()
 
-            // Script Selection: Romanized vs Original
+            // Script Selection: As Last Song vs Romanized vs Original
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Text(
                     text = "Preferred Script",
@@ -69,7 +71,11 @@ internal fun LazyListScope.settingsLyricsSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val scriptOptions = listOf("ROMANIZED" to "Romanized (ABC)", "ORIGINAL" to "Original Script")
+                    val scriptOptions = listOf(
+                        "LAST_USED" to "As Last Song",
+                        "ROMANIZED" to "Romanized",
+                        "ORIGINAL" to "Original"
+                    )
                     scriptOptions.forEach { (type, label) ->
                         val selected = preferredLyricsType == type
                         Box(
@@ -103,6 +109,27 @@ internal fun LazyListScope.settingsLyricsSection(
                     }
                 }
             }
+
+            SettingsDivider()
+
+            // Default Player Screen on Open
+            SettingsSelectItem(
+                icon = Icons.Filled.OpenInFull,
+                title = "Player Screen on Open",
+                value = when (defaultPlayerScreen) {
+                    "LYRICS" -> "Lyrics Screen"
+                    "PLAYER" -> "Album Cover"
+                    else -> "As Last Left"
+                },
+                onClick = {
+                    val next = when (defaultPlayerScreen) {
+                        "LAST_USED" -> "LYRICS"
+                        "LYRICS" -> "PLAYER"
+                        else -> "LAST_USED"
+                    }
+                    scope.launch { settingsDataStore.setDefaultPlayerScreen(next) }
+                }
+            )
 
             SettingsDivider()
 

@@ -122,6 +122,17 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val scope = rememberCoroutineScope()
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
+    val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
+    val openPlayerSheet: () -> Unit = {
+        scope.launch {
+            if (defaultPlayerScreen == "LYRICS") {
+                isLyricsModeOpen = true
+            } else if (defaultPlayerScreen == "PLAYER") {
+                isLyricsModeOpen = false
+            }
+            sheetState.expand()
+        }
+    }
     val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsStateWithLifecycle()
     LaunchedEffect(isYouTubeLoggedIn) {
         if (isYouTubeLoggedIn) viewModel.syncYouTubeLibrary()
@@ -174,11 +185,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
     }
 
-    LaunchedEffect(sheetState.currentValue) {
-        if (sheetState.currentValue != SheetValue.Expanded && isLyricsModeOpen) {
-            isLyricsModeOpen = false
-        }
-    }
+
 
     LaunchedEffect(lastTopLevelRoute, currentDestination) {
         if (restoredTopLevelRoute || currentDestination == null) return@LaunchedEffect
@@ -314,7 +321,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     composable("home") {
                         HomeScreen(
                             viewModel = viewModel,
-                            onNavigateToPlayer = { scope.launch { sheetState.expand() } },
+                            onNavigateToPlayer = openPlayerSheet,
                             onNavigateToPlaylist = { id ->
                                 navController.navigateToPlaylist(id)
                             },
@@ -335,7 +342,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     composable("search") {
                         SearchScreen(
                             playerViewModel = viewModel,
-                            onNavigateToPlayer = { scope.launch { sheetState.expand() } },
+                            onNavigateToPlayer = openPlayerSheet,
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
@@ -347,7 +354,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     composable("library") {
                         LibraryScreen(
                             viewModel = viewModel,
-                            onNavigateToPlayer = { scope.launch { sheetState.expand() } },
+                            onNavigateToPlayer = openPlayerSheet,
                             onNavigateToPlaylist = { id ->
                                 navController.navigateToPlaylist(id)
                             },
@@ -378,7 +385,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             playlistId = playlistId,
                             viewModel = viewModel,
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToPlayer = { scope.launch { sheetState.expand() } }
+                            onNavigateToPlayer = openPlayerSheet
                         )
                     }
                     composable("artist/{artistId}?name={artistName}") { backStackEntry ->
@@ -395,7 +402,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         DownloadsScreen(
                             viewModel = viewModel,
                             onBack = { navController.popBackStack() },
-                            onNavigateToPlayer = { scope.launch { sheetState.expand() } }
+                            onNavigateToPlayer = openPlayerSheet
                         )
                     }
                     composable("ringtone_trimmer") {
@@ -438,7 +445,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         ) {
             MiniPlayer(
                 viewModel = viewModel,
-                onNavigateToPlayer = { scope.launch { sheetState.expand() } },
+                onNavigateToPlayer = openPlayerSheet,
                 onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
                 modifier = Modifier.fillMaxWidth()
             )
