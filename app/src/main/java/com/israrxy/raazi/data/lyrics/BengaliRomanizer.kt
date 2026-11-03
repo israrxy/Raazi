@@ -14,61 +14,177 @@ object BengaliRomanizer {
     private val COMBINING_MARKS = Regex("""\p{M}+""")
     private val MULTIPLE_SPACES = Regex("""[ \t]+""")
 
-    private val BENGALI_VOWELS: Map<Char, String> = mapOf<Char, String>(
-        'অ' to "o", 'আ' to "a", 'ই' to "i", 'ঈ' to "i",
-        'উ' to "u", 'ঊ' to "u", 'ঋ' to "ri", 'এ' to "e",
-        'ঐ' to "oi", 'ও' to "o", 'ঔ' to "ou"
-    )
-
-    private val BENGALI_MATRAS: Map<Char, String> = mapOf<Char, String>(
-        'া' to "a", 'ি' to "i", 'ী' to "i", 'ু' to "u",
-        'ূ' to "u", 'ৃ' to "ri", 'ে' to "e", 'ৈ' to "oi",
-        'ো' to "o", 'ৌ' to "ou"
-    )
-
-    private val BENGALI_CONSONANTS: Map<Char, String> = mapOf<Char, String>(
-        'ক' to "k", 'খ' to "kh", 'গ' to "g", 'ঘ' to "gh", 'ঙ' to "ng",
-        'চ' to "ch", 'ছ' to "chh", 'জ' to "j", 'ঝ' to "jh", 'ঞ' to "n",
-        'ট' to "t", 'ঠ' to "th", 'ড' to "d", 'ঢ' to "dh", 'ণ' to "n",
-        'ত' to "t", 'থ' to "th", 'দ' to "d", 'ধ' to "dh", 'ন' to "n",
-        'প' to "p", 'ফ' to "f", 'ব' to "b", 'ভ' to "bh", 'ম' to "m",
-        'য' to "j", 'র' to "r", 'ল' to "l", 'শ' to "sh", 'ষ' to "sh",
-        'স' to "sh", 'হ' to "h", 'ড়' to "r", 'ঢ়' to "rh", 'য়' to "y"
-    )
-
-    private val S_CLUSTER_FOLLOWERS: Set<Char> = setOf<Char>('ত', 'থ', 'প', 'ফ', 'ন', 'র', 'ল', 'ট')
-
-    private val BENGALI_WORD_OVERRIDES: Map<String, String> = mapOf<String, String>(
-        "আমি" to "ami", "তুমি" to "tumi", "আমরা" to "amra", "তোমরা" to "tomra",
-        "আমার" to "amar", "তোমার" to "tomar", "আমায়" to "amay", "তোমায়" to "tomay",
-        "আমাকে" to "amake", "তোমাকে" to "tomake", "তাকে" to "take", "তার" to "tar",
-        "ভালোবাসি" to "bhalobashi", "ভালোবাসা" to "bhalobasha", "ভালোবাসো" to "bhalobaso",
-        "ভালোবেসে" to "bhalobese", "সোনার" to "sonar", "সোনা" to "sona",
-        "বাংলা" to "bangla", "বাংলাদেশ" to "bangladesh", "চিরদিন" to "chirodin",
-        "আকাশ" to "akash", "বাতাস" to "batas", "হৃদয়" to "hridoy", "হৃদয়ে" to "hridoye",
-        "নীরবে" to "nirobe", "রবে" to "robe", "মম" to "momo", "যেতে" to "jete",
-        "একলা" to "ekla", "পথে" to "pothe", "যদি" to "jodi", "তোর" to "tor",
-        "ডাক" to "dak", "শুনে" to "shune", "কেউ" to "keu", "না" to "na",
-        "আসে" to "ase", "তবে" to "tobe", "চলো" to "cholo", "রে" to "re",
-        "চোখ" to "chokh", "চোখে" to "chokhe", "চোখের" to "chokher",
-        "মেলে" to "mele", "দেখো" to "dekho", "দেখি" to "dekhi", "দেখা" to "dekha",
-        "যাকে" to "jake", "যায়" to "jay", "যাই" to "jai", "হয়ে" to "hoye",
-        "হয়" to "hoy", "নয়" to "noy", "ছিল" to "chhilo", "আছে" to "achhe",
-        "নেই" to "nei", "হবে" to "hobe", "করব" to "korbo", "করবো" to "korbo",
-        "করে" to "kore", "করো" to "koro", "করতে" to "korte", "বলব" to "bolbo",
-        "বলবো" to "bolbo", "বলে" to "bole", "বলো" to "bolo", "বলতে" to "bolte",
-        "গান" to "gaan", "জীবন" to "jibon", "বন্ধু" to "bondhu", "বৃষ্টি" to "brishti",
-        "মন" to "mon", "মনের" to "moner", "মনে" to "mone", "রাত" to "raat",
-        "দিন" to "din", "আজ" to "aaj", "কাল" to "kaal", "স্বপ্ন" to "shopno",
-        "স্বপ্নে" to "shopne", "স্বপ্নের" to "shopner", "স্নান" to "snan",
-        "স্নানের" to "snaner", "বাষ্প" to "bashpo", "ভাসো" to "bhasho",
-        "কেন" to "keno", "কেমন" to "kemon", "এখন" to "ekhon", "তখন" to "tokhon",
-        "কখন" to "kokhon", "যেমন" to "jemon", "কিছু" to "kichhu", "একটু" to "ektu",
-        "অনেক" to "onek", "কোন" to "kono", "কোনো" to "kono", "ভালো" to "bhalo",
-        "সব" to "sob", "সবাই" to "sobai", "সবাইকে" to "sobaike", "সুন্দর" to "sundor"
-    )
-
     fun containsBengali(text: String): Boolean = BENGALI_CHAR_REGEX.containsMatchIn(text)
+
+    private fun mapVowel(c: Char): String? = when (c) {
+        'অ' -> "o"
+        'আ' -> "a"
+        'ই', 'ঈ' -> "i"
+        'উ', 'ঊ' -> "u"
+        'ঋ' -> "ri"
+        'এ' -> "e"
+        'ঐ' -> "oi"
+        'ও' -> "o"
+        'ঔ' -> "ou"
+        else -> null
+    }
+
+    private fun mapMatra(c: Char): String? = when (c) {
+        '\u09BE' -> "a"   // া
+        '\u09BF', '\u09C0' -> "i"  // ি, ী
+        '\u09C1', '\u09C2' -> "u"  // ু, ূ
+        '\u09C3' -> "ri"  // ৃ
+        '\u09C7' -> "e"   // ে
+        '\u09C8' -> "oi"  // ৈ
+        '\u09CB' -> "o"   // ো
+        '\u09CC' -> "ou"  // ৌ
+        else -> null
+    }
+
+    private fun mapConsonant(c: Char): String? = when (c) {
+        'ক' -> "k"
+        'খ' -> "kh"
+        'গ' -> "g"
+        'ঘ' -> "gh"
+        'ঙ' -> "ng"
+        'চ' -> "ch"
+        'ছ' -> "chh"
+        'জ' -> "j"
+        'ঝ' -> "jh"
+        'ঞ' -> "n"
+        'ট' -> "t"
+        'ঠ' -> "th"
+        'ড' -> "d"
+        'ঢ' -> "dh"
+        'ণ' -> "n"
+        'ত' -> "t"
+        'থ' -> "th"
+        'দ' -> "d"
+        'ধ' -> "dh"
+        'ন' -> "n"
+        'প' -> "p"
+        'ফ' -> "f"
+        'ব' -> "b"
+        'ভ' -> "bh"
+        'ম' -> "m"
+        'য' -> "j"
+        'র' -> "r"
+        'ল' -> "l"
+        'শ', 'ষ', 'স' -> "sh"
+        'হ' -> "h"
+        'ড়' -> "r"
+        'ঢ়' -> "rh"
+        'য়' -> "y"
+        else -> null
+    }
+
+    private fun isSClusterFollower(c: Char?): Boolean = when (c) {
+        'ত', 'থ', 'প', 'ফ', 'ন', 'র', 'ল', 'ট' -> true
+        else -> false
+    }
+
+    private fun getWordOverride(word: String): String? = when (word) {
+        "আমি" -> "ami"
+        "তুমি" -> "tumi"
+        "আমরা" -> "amra"
+        "তোমরা" -> "tomra"
+        "আমার" -> "amar"
+        "তোমার" -> "tomar"
+        "আমায়" -> "amay"
+        "তোমায়" -> "tomay"
+        "আমাকে" -> "amake"
+        "তোমাকে" -> "tomake"
+        "তাকে" -> "take"
+        "তার" -> "tar"
+        "ভালোবাসি" -> "bhalobashi"
+        "ভালোবাসা" -> "bhalobasha"
+        "ভালোবাসো" -> "bhalobaso"
+        "ভালোবেসে" -> "bhalobese"
+        "সোনার" -> "sonar"
+        "সোনা" -> "sona"
+        "বাংলা" -> "bangla"
+        "বাংলাদেশ" -> "bangladesh"
+        "চিরদিন" -> "chirodin"
+        "আকাশ" -> "akash"
+        "বাতাস" -> "batas"
+        "হৃদয়" -> "hridoy"
+        "হৃদয়ে" -> "hridoye"
+        "নীরবে" -> "nirobe"
+        "রবে" -> "robe"
+        "মম" -> "momo"
+        "যেতে" -> "jete"
+        "একলা" -> "ekla"
+        "পথে" -> "pothe"
+        "যদি" -> "jodi"
+        "তোর" -> "tor"
+        "ডাক" -> "dak"
+        "শুনে" -> "shune"
+        "কেউ" -> "keu"
+        "না" -> "na"
+        "আসে" -> "ase"
+        "তবে" -> "tobe"
+        "চলো" -> "cholo"
+        "রে" -> "re"
+        "চোখ" -> "chokh"
+        "চোখে" -> "chokhe"
+        "চোখের" -> "chokher"
+        "মেলে" -> "mele"
+        "দেখো" -> "dekho"
+        "দেখি" -> "dekhi"
+        "দেখা" -> "dekha"
+        "যাকে" -> "jake"
+        "যায়" -> "jay"
+        "যাই" -> "jai"
+        "হয়ে" -> "hoye"
+        "হয়" -> "hoy"
+        "নয়" -> "noy"
+        "ছিল" -> "chhilo"
+        "আছে" -> "achhe"
+        "নেই" -> "nei"
+        "হবে" -> "hobe"
+        "করব", "করবো" -> "korbo"
+        "করে" -> "kore"
+        "করো" -> "koro"
+        "করতে" -> "korte"
+        "বলব", "বলবো" -> "bolbo"
+        "বলে" -> "bole"
+        "বলো" -> "bolo"
+        "বলতে" -> "bolte"
+        "গান" -> "gaan"
+        "জীবন" -> "jibon"
+        "বন্ধু" -> "bondhu"
+        "বৃষ্টি" -> "brishti"
+        "মন" -> "mon"
+        "মনের" -> "moner"
+        "মনে" -> "mone"
+        "রাত" -> "raat"
+        "দিন" -> "din"
+        "আজ" -> "aaj"
+        "কাল" -> "kaal"
+        "স্বপ্ন" -> "shopno"
+        "স্বপ্নে" -> "shopne"
+        "স্বপ্নের" -> "shopner"
+        "স্নান" -> "snan"
+        "স্নানের" -> "snaner"
+        "বাষ্প" -> "bashpo"
+        "ভাসো" -> "bhasho"
+        "কেন" -> "keno"
+        "কেমন" -> "kemon"
+        "এখন" -> "ekhon"
+        "তখন" -> "tokhon"
+        "কখন" -> "kokhon"
+        "যেমন" -> "jemon"
+        "কিছু" -> "kichhu"
+        "একটু" -> "ektu"
+        "অনেক" -> "onek"
+        "কোন", "কোনো" -> "kono"
+        "ভালো" -> "bhalo"
+        "সব" -> "sob"
+        "সবাই" -> "sobai"
+        "সবাইকে" -> "sobaike"
+        "সুন্দর" -> "sundor"
+        else -> null
+    }
 
     fun romanize(text: String): String {
         if (text.isBlank()) return text
@@ -81,7 +197,7 @@ object BengaliRomanizer {
     fun romanizeBengaliWord(rawWord: String): String {
         val clean = rawWord.replace("।", ".").replace("॥", ".")
         if (clean.isEmpty()) return clean
-        BENGALI_WORD_OVERRIDES[clean]?.let { return it }
+        getWordOverride(clean)?.let { return it }
 
         val sb = StringBuilder()
         var i = 0
@@ -95,10 +211,11 @@ object BengaliRomanizer {
             if (c == 'ক' && next == '\u09CD' && nextNext == 'ষ') {
                 sb.append(if (i == 0) "kh" else "kkh")
                 i += 3
-                if (i < n && clean[i] in BENGALI_MATRAS) {
-                    sb.append(BENGALI_MATRAS[clean[i]])
+                val matra = clean.getOrNull(i)?.let { mapMatra(it) }
+                if (matra != null) {
+                    sb.append(matra)
                     i++
-                } else if (i < n && clean[i] != '\u09CD') {
+                } else if (clean.getOrNull(i) != '\u09CD' && i < n) {
                     sb.append("o")
                 }
                 continue
@@ -108,17 +225,18 @@ object BengaliRomanizer {
             if (c == 'জ' && next == '\u09CD' && nextNext == 'ঞ') {
                 sb.append(if (i == 0) "gyan" else "ggo")
                 i += 3
-                if (i < n && clean[i] in BENGALI_MATRAS) {
-                    sb.append(BENGALI_MATRAS[clean[i]])
+                val matra = clean.getOrNull(i)?.let { mapMatra(it) }
+                if (matra != null) {
+                    sb.append(matra)
                     i++
-                } else if (i < n && clean[i] != '\u09CD') {
+                } else if (clean.getOrNull(i) != '\u09CD' && i < n) {
                     sb.append("o")
                 }
                 continue
             }
 
             // Independent vowels
-            val vowel = BENGALI_VOWELS[c]
+            val vowel = mapVowel(c)
             if (vowel != null) {
                 sb.append(vowel)
                 i++
@@ -126,7 +244,7 @@ object BengaliRomanizer {
             }
 
             // Explicit matras
-            val matra = BENGALI_MATRAS[c]
+            val matra = mapMatra(c)
             if (matra != null) {
                 sb.append(matra)
                 i++
@@ -134,9 +252,9 @@ object BengaliRomanizer {
             }
 
             // Consonants
-            var consonantStr = BENGALI_CONSONANTS[c]
+            var consonantStr = mapConsonant(c)
             if (consonantStr != null) {
-                if (c == 'স' && next == '\u09CD' && nextNext in S_CLUSTER_FOLLOWERS) {
+                if (c == 'স' && next == '\u09CD' && isSClusterFollower(nextNext)) {
                     consonantStr = "s"
                 }
 
@@ -149,35 +267,40 @@ object BengaliRomanizer {
                             sb.append(consonantStr).append(consonantStr.last())
                         }
                         i += 3
-                        if (i < n && clean[i] in BENGALI_MATRAS) {
-                            sb.append(BENGALI_MATRAS[clean[i]])
+                        val followMatra = clean.getOrNull(i)?.let { mapMatra(it) }
+                        if (followMatra != null) {
+                            sb.append(followMatra)
                             i++
                         }
                     } else if (nextNext == 'র') {
                         // Ra-phala
                         sb.append(consonantStr).append("r")
                         i += 3
-                        if (i < n && clean[i] in BENGALI_MATRAS) {
-                            sb.append(BENGALI_MATRAS[clean[i]])
+                        val followMatra = clean.getOrNull(i)?.let { mapMatra(it) }
+                        if (followMatra != null) {
+                            sb.append(followMatra)
                             i++
-                        } else if (i < n && clean[i] != '\u09CD') {
+                        } else if (clean.getOrNull(i) != '\u09CD' && i < n) {
                             sb.append("o")
                         }
                     } else {
                         sb.append(consonantStr)
                         i += 2
                     }
-                } else if (next in BENGALI_MATRAS) {
-                    sb.append(consonantStr).append(BENGALI_MATRAS[next])
-                    i += 2
                 } else {
-                    val isWordFinal = (i == n - 1)
-                    if (isWordFinal && n > 2) {
-                        sb.append(consonantStr)
+                    val explicitNextMatra = next?.let { mapMatra(it) }
+                    if (explicitNextMatra != null) {
+                        sb.append(consonantStr).append(explicitNextMatra)
+                        i += 2
                     } else {
-                        sb.append(consonantStr).append("o")
+                        val isWordFinal = (i == n - 1)
+                        if (isWordFinal && n > 2) {
+                            sb.append(consonantStr)
+                        } else {
+                            sb.append(consonantStr).append("o")
+                        }
+                        i++
                     }
-                    i++
                 }
                 continue
             }
@@ -205,7 +328,6 @@ object BengaliRomanizer {
             return romanize(sourceLine)
         }
         var s = neuralRomanLine
-        // Replace diacritics
         s = s.replace("ā", "a").replace("ī", "i").replace("ū", "u")
             .replace("ē", "e").replace("ō", "o")
             .replace("ṛ", "ri").replace("ṝ", "ri")
