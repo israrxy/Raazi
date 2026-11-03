@@ -1,8 +1,11 @@
 name: Debug APK
 
-# Builds an installable debug APK on demand and uploads it as a workflow artifact.
+# Builds an installable debug APK on demand or push, and uploads it as a workflow artifact.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -25,6 +28,9 @@ jobs:
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
 
       - name: Restore stable debug keystore
         env:
@@ -47,10 +53,10 @@ jobs:
           fi
 
       - name: Run targeted unit tests
-        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --tests "com.israrxy.raazi.data.remote.NewPipeCaptionLyricsExtractorTest" --build-cache --parallel --stacktrace
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleDebug --build-cache --parallel --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

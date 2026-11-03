@@ -19,7 +19,8 @@ enum class LyricsProviderFilter(val label: String, val sourceKey: String?) {
     LRCLIB("LRCLIB", "LRCLIB"),
     GENIUS("Genius", "Genius"),
     LYRICA("Lyrica", "Lyrica"),
-    YT_MUSIC("YT Music", "YT Music");
+    YT_MUSIC("YT Music", "YT Music"),
+    YT_CAPTIONS("YouTube Captions", "Captions");
 
     fun matches(source: String): Boolean {
         val target = sourceKey ?: return true
@@ -35,6 +36,7 @@ class MultiSourceLyricsAggregator(
     private val musixmatchExtractor = MusixmatchLyricsExtractor(context)
     private val geniusExtractor = GeniusLyricsExtractor()
     private val lyricaAndYtExtractor = LyricaAndYtLyricsExtractor()
+    private val newPipeCaptionExtractor = NewPipeCaptionLyricsExtractor()
     private val tag = "LyricsAggregator"
 
     suspend fun getLyrics(
@@ -62,7 +64,19 @@ class MultiSourceLyricsAggregator(
             preferredScript = preferredScript
         )
 
-        val best = ranked.firstOrNull()?.lyrics
+        var best = ranked.firstOrNull()?.lyrics
+        if (best == null && !trackId.isNullOrBlank()) {
+            best = newPipeCaptionExtractor.fetchCaptionsAsLyrics(
+                videoId = trackId,
+                trackName = trackName,
+                artistName = artistName,
+                durationSeconds = durationMs / 1000.0
+            )
+            if (best != null) {
+                Log.d(tag, "Selected NewPipe caption fallback lyrics (${best.source}) for $artistName - $trackName")
+            }
+        }
+
         if (best != null) {
             Log.d(tag, "Selected best lyrics from ${best.source} for $artistName - $trackName")
             cache.put(cacheKey, best)
@@ -159,13 +173,34 @@ class MultiSourceLyricsAggregator(
             deduped.putIfAbsent(key, candidate)
         }
 
-        rankCandidates(
+        val rankedResults = rankCandidates(
             candidates = deduped.values.toList(),
             titleComparisons = prepared.titleComparisons,
             artistComparisons = prepared.artistComparisons,
             durationSeconds = durationSeconds,
             preferredScript = preferredScript
         )
+
+        if (rankedResults.isEmpty() && !trackId.isNullOrBlank()) {
+            newPipeCaptionExtractor.fetchCaptionsAsLyrics(
+                videoId = trackId,
+                trackName = trackName,
+                artistName = artistName,
+                durationSeconds = durationSeconds
+            )?.let { captionLyrics ->
+                return@withContext listOf(
+                    LyricsSearchResult(
+                        lyrics = captionLyrics,
+                        matchScore = 72,
+                        titleScore = 80,
+                        artistScore = 80,
+                        durationDelta = 0.0
+                    )
+                )
+            }
+        }
+
+        rankedResults
     }
 
     private fun rankCandidates(
@@ -215,12 +250,13 @@ class MultiSourceLyricsAggregator(
                 else -> 0
             }
 
-            val providerReliabilityBonus = when (lyrics.source) {
-                "Musixmatch" -> 4
-                "LRCLIB" -> 3
-                "YT Music" -> 3
-                "Genius" -> 2
-                "Lyrica" -> 1
+            val providerReliabilityBonus = when {
+                lyrics.source == "Musixmatch" -> 4
+                lyrics.source == "LRCLIB" -> 3
+                lyrics.source == "YT Music" -> 3
+                lyrics.source == "Genius" -> 2
+                lyrics.source == "Lyrica" -> 1
+                lyrics.source.contains("Captions") -> 1
                 else -> 0
             }
 
