@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: Run targeted unit tests
-        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --tests "com.israrxy.raazi.data.remote.NewPipeCaptionLyricsExtractorTest" --build-cache --parallel --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --tests "com.israrxy.raazi.data.remote.NewPipeCaptionLyricsExtractorTest" --tests "com.israrxy.raazi.data.lyrics.BengaliRomanizerTest" --build-cache --parallel --stacktrace
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --build-cache --parallel --stacktrace

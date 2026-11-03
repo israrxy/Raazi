@@ -14,19 +14,19 @@ object BengaliRomanizer {
     private val COMBINING_MARKS = Regex("""\p{M}+""")
     private val MULTIPLE_SPACES = Regex("""[ \t]+""")
 
-    private val BENGALI_VOWELS = mapOf(
+    private val BENGALI_VOWELS: Map<Char, String> = mapOf<Char, String>(
         'অ' to "o", 'আ' to "a", 'ই' to "i", 'ঈ' to "i",
         'উ' to "u", 'ঊ' to "u", 'ঋ' to "ri", 'এ' to "e",
         'ঐ' to "oi", 'ও' to "o", 'ঔ' to "ou"
     )
 
-    private val BENGALI_MATRAS = mapOf(
+    private val BENGALI_MATRAS: Map<Char, String> = mapOf<Char, String>(
         'া' to "a", 'ি' to "i", 'ী' to "i", 'ু' to "u",
         'ূ' to "u", 'ৃ' to "ri", 'ে' to "e", 'ৈ' to "oi",
         'ো' to "o", 'ৌ' to "ou"
     )
 
-    private val BENGALI_CONSONANTS = mapOf(
+    private val BENGALI_CONSONANTS: Map<Char, String> = mapOf<Char, String>(
         'ক' to "k", 'খ' to "kh", 'গ' to "g", 'ঘ' to "gh", 'ঙ' to "ng",
         'চ' to "ch", 'ছ' to "chh", 'জ' to "j", 'ঝ' to "jh", 'ঞ' to "n",
         'ট' to "t", 'ঠ' to "th", 'ড' to "d", 'ঢ' to "dh", 'ণ' to "n",
@@ -36,9 +36,9 @@ object BengaliRomanizer {
         'স' to "sh", 'হ' to "h", 'ড়' to "r", 'ঢ়' to "rh", 'য়' to "y"
     )
 
-    private val S_CLUSTER_FOLLOWERS = setOf('ত', 'থ', 'প', 'ফ', 'ন', 'র', 'ল', 'ট')
+    private val S_CLUSTER_FOLLOWERS: Set<Char> = setOf<Char>('ত', 'থ', 'প', 'ফ', 'ন', 'র', 'ল', 'ট')
 
-    private val BENGALI_WORD_OVERRIDES = mapOf(
+    private val BENGALI_WORD_OVERRIDES: Map<String, String> = mapOf<String, String>(
         "আমি" to "ami", "তুমি" to "tumi", "আমরা" to "amra", "তোমরা" to "tomra",
         "আমার" to "amar", "তোমার" to "tomar", "আমায়" to "amay", "তোমায়" to "tomay",
         "আমাকে" to "amake", "তোমাকে" to "tomake", "তাকে" to "take", "তার" to "tar",
