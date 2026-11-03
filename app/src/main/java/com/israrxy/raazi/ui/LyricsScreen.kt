@@ -89,10 +89,15 @@ fun LyricsScreen(
     val settingsDataStore = remember { SettingsDataStore(context) }
     val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
+    val hideBracketsPref by settingsDataStore.lyricsHideBracketsEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     var showTranslation by remember { mutableStateOf(false) }
     LaunchedEffect(translateEnabledPref) {
         showTranslation = translateEnabledPref
+    }
+    var hideBrackets by remember { mutableStateOf(true) }
+    LaunchedEffect(hideBracketsPref) {
+        hideBrackets = hideBracketsPref
     }
     var isTranslating by remember { mutableStateOf(false) }
     val translatedLines = remember { mutableStateListOf<String>() }
@@ -115,8 +120,8 @@ fun LyricsScreen(
         }
     }
 
-    val parsedPairs = remember(lyrics?.syncedLyrics) {
-        parseLrcLines(lyrics?.syncedLyrics)
+    val parsedPairs = remember(lyrics?.syncedLyrics, hideBrackets) {
+        parseLrcLines(lyrics?.syncedLyrics, hideBrackets = hideBrackets)
     }
 
     // Prefetch Google Neural Romanization when non-Latin lyrics are present or Romanized view is selected
@@ -147,7 +152,7 @@ fun LyricsScreen(
     val isSynced = remember(syncedLines) { syncedLines.isNotEmpty() }
     val hasWordSync = remember(syncedLines) { syncedLines.any { it.hasExplicitWordSync } }
 
-    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang) {
+    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang, hideBrackets) {
         if (!showTranslation) {
             translatedLines.clear()
             translatedPlain = null
@@ -368,6 +373,11 @@ fun LyricsScreen(
                 isTranslating = isTranslating,
                 translateLang = translateLang,
                 onToggleTranslation = { showTranslation = !showTranslation },
+                hideBrackets = hideBrackets,
+                onToggleHideBrackets = {
+                    hideBrackets = !hideBrackets
+                    scope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
+                },
                 lyricsScriptFilter = lyricsScriptFilter,
                 onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
                 onOpenLyricsBrowser = onOpenLyricsBrowser,
@@ -392,6 +402,11 @@ fun LyricsScreen(
                     showTranslation = showTranslation,
                     translateLang = translateLang,
                     onToggleTranslation = { showTranslation = !showTranslation },
+                    hideBrackets = hideBrackets,
+                    onToggleHideBrackets = {
+                        hideBrackets = !hideBrackets
+                        scope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
+                    },
                     lyricsScriptFilter = lyricsScriptFilter,
                     onDismiss = { showOptionsMenu = false },
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
@@ -413,6 +428,7 @@ fun LyricsScreen(
                     onResetUserScrolling = { isUserScrolling = false },
                     selectedVariant = selectedVariant,
                     translatedPlain = translatedPlain,
+                    hideBrackets = hideBrackets,
                     currentTrack = currentTrack,
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
                     onRetryLyricsFetch = { viewModel.retryLyricsFetch() },
@@ -444,35 +460,11 @@ fun LyricsScreen(
             )
         }
 
-        if (showTrackDetails && currentTrack != null) {
-            val contentLabel = when (currentTrack.contentType) {
-                com.israrxy.raazi.model.MusicContentType.VIDEO -> "Music video"
-                com.israrxy.raazi.model.MusicContentType.ALBUM -> "Album"
-                com.israrxy.raazi.model.MusicContentType.PLAYLIST -> "Playlist"
-                com.israrxy.raazi.model.MusicContentType.ARTIST -> "Artist"
-                else -> "Song"
-            }
-            AlertDialog(
-                onDismissRequest = { showTrackDetails = false },
-                title = { Text("Song details") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(currentTrack.title)
-                        Text(currentTrack.artist, color = Color.White.copy(alpha = 0.72f))
-                        currentTrack.albumTitle?.takeIf { it.isNotBlank() }?.let { album ->
-                            Text("Album · $album", color = Color.White.copy(alpha = 0.72f))
-                        }
-                        Text("Type · $contentLabel", color = Color.White.copy(alpha = 0.72f))
-                        Text("Lyrics · ${lyrics?.source ?: "Not found"}", color = Color.White.copy(alpha = 0.72f))
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showTrackDetails = false }) { Text("Done") }
-                },
-                containerColor = Color(0xFF18181B),
-                titleContentColor = Color.White,
-                textContentColor = Color.White
-            )
-        }
+        SongDetailsDialog(
+            visible = showTrackDetails,
+            currentTrack = currentTrack,
+            lyricsSource = lyrics?.source,
+            onDismiss = { showTrackDetails = false }
+        )
     }
 }

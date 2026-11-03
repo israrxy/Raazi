@@ -49,6 +49,8 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
     showTranslation: Boolean,
     translateLang: String,
     onToggleTranslation: () -> Unit,
+    hideBrackets: Boolean = true,
+    onToggleHideBrackets: () -> Unit = {},
     lyricsScriptFilter: LyricsScriptFilter,
     onDismiss: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
@@ -229,6 +231,24 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                                             color = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.8f)
                                         )
                                     }
+                                }
+
+                                Surface(
+                                    onClick = onToggleHideBrackets,
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (hideBrackets) "Hide [ ]" else "Show [ ]",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (hideBrackets) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (hideBrackets) Color(0xFF09090B) else Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                    )
                                 }
                             }
                         }

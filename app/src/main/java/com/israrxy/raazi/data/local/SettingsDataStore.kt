@@ -50,6 +50,7 @@ class SettingsDataStore(private val context: Context) {
         val ALLOW_LANDSCAPE_KEY = booleanPreferencesKey("allow_landscape")
         val LYRICS_TRANSLATE_ENABLED_KEY = booleanPreferencesKey("lyrics_translate_enabled")
         val LYRICS_TRANSLATE_LANG_KEY = stringPreferencesKey("lyrics_translate_lang")
+        val LYRICS_HIDE_BRACKETS_KEY = booleanPreferencesKey("lyrics_hide_brackets")
         val LASTFM_SCROBBLE_ENABLED_KEY = booleanPreferencesKey("lastfm_scrobble_enabled")
         val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
         val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
@@ -101,6 +102,9 @@ class SettingsDataStore(private val context: Context) {
 
     val lyricsTranslateLang: Flow<String> = prefFlow(LYRICS_TRANSLATE_LANG_KEY, "en")
     suspend fun setLyricsTranslateLang(lang: String) = setPref(LYRICS_TRANSLATE_LANG_KEY, lang)
+
+    val lyricsHideBracketsEnabled: Flow<Boolean> = prefFlow(LYRICS_HIDE_BRACKETS_KEY, true)
+    suspend fun setLyricsHideBracketsEnabled(enabled: Boolean) = setPref(LYRICS_HIDE_BRACKETS_KEY, enabled)
 
     val microPlayerEnabled: Flow<Boolean> = prefFlow(MICRO_PLAYER_ENABLED_KEY, true)
     suspend fun setMicroPlayerEnabled(enabled: Boolean) = setPref(MICRO_PLAYER_ENABLED_KEY, enabled)

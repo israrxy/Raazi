@@ -1,5 +1,6 @@
 package com.israrxy.raazi.data.remote
 
+import com.israrxy.raazi.ui.cleanBracketedText
 import com.israrxy.raazi.ui.parseLrcLines
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -160,5 +161,33 @@ class NewPipeCaptionLyricsExtractorTest {
         val bestSpanish = extractor.selectBestSubtitleTrack(tracks, preferredLanguage = "es")
         assertNotNull(bestSpanish)
         assertEquals("url2", bestSpanish!!.url)
+    }
+
+    @Test
+    fun cleanBracketedText_stripsSquareBracketsAndExtraWhitespace() {
+        assertEquals("Never gonna give you up", cleanBracketedText("Never gonna give you up [Never gonna give]"))
+        assertEquals("", cleanBracketedText("[Chorus]"))
+        assertEquals("Some actual lyrics", cleanBracketedText("[Music] Some actual lyrics [applause]"))
+        assertEquals("Normal line", cleanBracketedText("Normal line"))
+    }
+
+    @Test
+    fun parseLrcLines_withHideBrackets_dropsPureBracketLinesAndCleansLyrics() {
+        val lrc = """
+            [00:01.00][Intro]
+            [00:05.00]Never gonna give you up [Never gonna give]
+            [00:10.00][Chorus]
+            [00:15.00]Never gonna let you down
+        """.trimIndent()
+
+        val pairs = parseLrcLines(lrc, hideBrackets = true)
+        assertEquals(2, pairs.size)
+        assertEquals(5_000L, pairs[0].first)
+        assertEquals("Never gonna give you up", pairs[0].second)
+        assertEquals(15_000L, pairs[1].first)
+        assertEquals("Never gonna let you down", pairs[1].second)
+
+        val pairsAll = parseLrcLines(lrc, hideBrackets = false)
+        assertEquals(4, pairsAll.size)
     }
 }

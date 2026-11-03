@@ -44,6 +44,8 @@ internal fun LyricsNowPlayingStrip(
     isTranslating: Boolean,
     translateLang: String,
     onToggleTranslation: () -> Unit,
+    hideBrackets: Boolean,
+    onToggleHideBrackets: () -> Unit,
     lyricsScriptFilter: LyricsScriptFilter,
     onToggleOptionsMenu: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
@@ -220,6 +222,20 @@ internal fun LyricsNowPlayingStrip(
                         }
                     }
 
+                    Surface(
+                        onClick = onToggleHideBrackets,
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f)
+                    ) {
+                        Text(
+                            text = if (hideBrackets) "Hide [ ]" else "Show [ ]",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (hideBrackets) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (hideBrackets) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+
                     if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
                         Surface(
                             onClick = onToggleOptionsMenu,
@@ -237,3 +253,45 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun SongDetailsDialog(
+    visible: Boolean,
+    currentTrack: MusicItem?,
+    lyricsSource: String?,
+    onDismiss: () -> Unit
+) {
+    if (!visible || currentTrack == null) return
+
+    val contentLabel = when (currentTrack.contentType) {
+        com.israrxy.raazi.model.MusicContentType.VIDEO -> "Music video"
+        com.israrxy.raazi.model.MusicContentType.ALBUM -> "Album"
+        com.israrxy.raazi.model.MusicContentType.PLAYLIST -> "Playlist"
+        com.israrxy.raazi.model.MusicContentType.ARTIST -> "Artist"
+        else -> "Song"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Song details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(currentTrack.title)
+                Text(currentTrack.artist, color = Color.White.copy(alpha = 0.72f))
+                currentTrack.albumTitle?.takeIf { it.isNotBlank() }?.let { album ->
+                    Text("Album · $album", color = Color.White.copy(alpha = 0.72f))
+                }
+                Text("Type · $contentLabel", color = Color.White.copy(alpha = 0.72f))
+                Text("Lyrics · ${lyricsSource ?: "Not found"}", color = Color.White.copy(alpha = 0.72f))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+        containerColor = Color(0xFF18181B),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}

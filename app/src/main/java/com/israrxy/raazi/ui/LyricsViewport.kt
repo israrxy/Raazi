@@ -58,6 +58,7 @@ internal fun LyricsMainViewportContent(
     onResetUserScrolling: () -> Unit,
     selectedVariant: LyricsViewVariant,
     translatedPlain: String?,
+    hideBrackets: Boolean = true,
     currentTrack: MusicItem?,
     onOpenLyricsBrowser: () -> Unit,
     onRetryLyricsFetch: () -> Unit,
@@ -260,8 +261,19 @@ internal fun LyricsMainViewportContent(
         }
 
         else -> {
-            val displayedPlain = remember(lyrics.plainLyrics, selectedVariant) {
-                LyricsTextVariants.transform(lyrics.plainLyrics.orEmpty(), selectedVariant)
+            val basePlain = remember(lyrics.plainLyrics, hideBrackets) {
+                val raw = lyrics.plainLyrics.orEmpty()
+                if (hideBrackets && raw.isNotBlank()) {
+                    raw.lines()
+                        .map { cleanBracketedText(it) }
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n")
+                } else {
+                    raw
+                }
+            }
+            val displayedPlain = remember(basePlain, selectedVariant) {
+                LyricsTextVariants.transform(basePlain, selectedVariant)
             }
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(

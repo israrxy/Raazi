@@ -45,12 +45,19 @@ data class LyricLine(
 internal val LINE_TIMESTAMP_REGEX = Regex("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\]")
 internal val WORD_TIMESTAMP_REGEX = Regex("<(\\d+):(\\d+(?:\\.\\d+)?)>([^<]+)")
 internal val STRIP_WORD_TAGS_REGEX = Regex("<\\d+:\\d+(?:\\.\\d+)?>")
+val BRACKETED_ANNOTATION_REGEX = Regex("""\[[^\]]*\]""")
+
+fun cleanBracketedText(text: String): String {
+    return text.replace(BRACKETED_ANNOTATION_REGEX, "")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
 
 /**
  * Robust LRC & Enhanced LRC parser supporting [mm:ss], [mm:ss.xx], [mm:ss.xxx]
  * and inline word timestamps <mm:ss.xx>word (Musixmatch RichSync / Enhanced LRC).
  */
-fun parseLrcLines(syncedLyrics: String?): List<Pair<Long, String>> {
+fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pair<Long, String>> {
     if (syncedLyrics.isNullOrBlank()) return emptyList()
     val result = mutableListOf<Pair<Long, String>>()
 
@@ -58,13 +65,14 @@ fun parseLrcLines(syncedLyrics: String?): List<Pair<Long, String>> {
         val matches = LINE_TIMESTAMP_REGEX.findAll(rawLine).toList()
         if (matches.isNotEmpty()) {
             val rawBody = rawLine.substring(matches.last().range.last + 1).trim()
-            val cleanText = rawBody.replace(STRIP_WORD_TAGS_REGEX, "").trim()
+            val processedBody = if (hideBrackets) cleanBracketedText(rawBody) else rawBody
+            val cleanText = processedBody.replace(STRIP_WORD_TAGS_REGEX, "").trim()
             if (cleanText.isNotEmpty()) {
                 matches.forEach { match ->
                     val min = match.groupValues[1].toLongOrNull() ?: 0L
                     val sec = match.groupValues[2].toDoubleOrNull() ?: 0.0
                     val timeMs = (min * 60 * 1000 + sec * 1000).toLong()
-                    result.add(timeMs to rawBody)
+                    result.add(timeMs to processedBody)
                 }
             }
         }
