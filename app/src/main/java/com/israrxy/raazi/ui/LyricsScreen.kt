@@ -38,6 +38,7 @@ import com.israrxy.raazi.utils.BlurTransformation
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
@@ -87,6 +88,7 @@ fun LyricsScreen(
     }
 
     val settingsDataStore = remember { SettingsDataStore(context) }
+    val coroutineScope = rememberCoroutineScope()
     val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
     val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
     val hideBracketsPref by settingsDataStore.lyricsHideBracketsEnabled.collectAsStateWithLifecycle(initialValue = true)
@@ -376,7 +378,7 @@ fun LyricsScreen(
                 hideBrackets = hideBrackets,
                 onToggleHideBrackets = {
                     hideBrackets = !hideBrackets
-                    scope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
+                    coroutineScope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
                 },
                 lyricsScriptFilter = lyricsScriptFilter,
                 onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
@@ -405,7 +407,7 @@ fun LyricsScreen(
                     hideBrackets = hideBrackets,
                     onToggleHideBrackets = {
                         hideBrackets = !hideBrackets
-                        scope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
+                        coroutineScope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
                     },
                     lyricsScriptFilter = lyricsScriptFilter,
                     onDismiss = { showOptionsMenu = false },

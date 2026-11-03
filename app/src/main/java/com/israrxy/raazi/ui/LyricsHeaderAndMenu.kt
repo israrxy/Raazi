@@ -253,8 +253,6 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
         }
-    }
-}
 
 @Composable
 internal fun SongDetailsDialog(
