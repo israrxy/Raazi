@@ -23,55 +23,50 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
         _homeFeedState.value = _homeFeedState.value.copy(isLoading = true, errorMessage = null)
         try {
             loadHomeInteractionSignals()
-            launch {
+            val historyJob = launch {
                 try {
-                    val quickPicks = repository.quickPicks.first().shuffled().take(50)
-                    _quickPicks.value = quickPicks
-                    rebuildHomeFeedState()
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error loading quick picks", e)
-                }
-            }
-
-            launch {
-                try {
-                    val history = repository.playbackHistory.first().take(30)
-                    _keepListening.value = history
-                    rebuildHomeFeedState()
+                    _keepListening.value = repository.playbackHistory.first().take(30)
                 } catch (e: Exception) {
                     Log.e("MusicVM", "Error loading keep listening", e)
                 }
             }
 
-            launch {
+            val forgottenJob = launch {
                 try {
-                    val forgotten = repository.getForgottenFavorites().first()
-                    _forgottenFavorites.value = forgotten
-                    rebuildHomeFeedState()
+                    _forgottenFavorites.value = repository.getForgottenFavorites().first()
                 } catch (e: Exception) {
                     Log.e("MusicVM", "Error loading forgotten favorites", e)
                 }
             }
 
-            launch {
+            val similarJob = launch {
                 try {
                     loadSimilarRecommendations()
-                    rebuildHomeFeedState()
                 } catch (e: Exception) {
                     Log.e("MusicVM", "Error loading similar recommendations", e)
                 }
             }
 
-            launch {
+            val exploreJob = launch {
                 try {
                     YouTube.explore().onSuccess { page ->
                         _explorePage.value = page
-                        rebuildHomeFeedState()
                     }.onFailure {
                         Log.e("MusicVM", "Explore page failed", it)
                     }
                 } catch (e: Exception) {
                     Log.e("MusicVM", "Error loading explore page", e)
+                }
+            }
+
+            val quickPicksJob = launch {
+                try {
+                    val localPicks = repository.quickPicks.first().shuffled().take(50)
+                    if (_quickPicks.value.isEmpty()) {
+                        _quickPicks.value = localPicks
+                    }
+                } catch (e: Exception) {
+                    Log.e("MusicVM", "Error loading quick picks", e)
                 }
             }
 
@@ -103,7 +98,6 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                     }
                     _homePage.value = finalPage
                     _error.value = null
-                    rebuildHomeFeedState()
                 }.onFailure {
                     Log.e("MusicVM", "InnerTube home failed", it)
                     if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
@@ -113,6 +107,12 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error loading InnerTube home", e)
             }
+
+            historyJob.join()
+            forgottenJob.join()
+            similarJob.join()
+            exploreJob.join()
+            quickPicksJob.join()
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading home", e)
             if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
@@ -373,7 +373,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
     }
 
     _homeFeedState.value = HomeFeedUiState(
-        isLoading = _isLoading.value && sections.size <= 1,
+        isLoading = _isLoading.value && !isRefreshing,
         isRefreshing = isRefreshing,
         sections = sections,
         errorMessage = _error.value

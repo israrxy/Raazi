@@ -76,7 +76,12 @@ fun PlaylistDetailScreen(
     DisposableEffect(Unit) { onDispose { viewModel.setSelectionModeActive(false) } }
 
     val playlist = currentPlaylist
-    val items = playlist?.items ?: emptyList()
+    val isMatchingPlaylist = playlist != null && (
+        playlist.id == playlistId ||
+        playlist.id.removePrefix("VL") == playlistId.removePrefix("VL")
+    )
+    val isPlaylistLoading = isLoading || !isMatchingPlaylist
+    val items = if (isMatchingPlaylist) playlist?.items ?: emptyList() else emptyList()
 
     val filteredItems = remember(items, searchQuery, currentSortOrder) {
         val queried = if (searchQuery.isBlank()) {
@@ -217,11 +222,9 @@ fun PlaylistDetailScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading && playlist == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-            } else if (playlist == null) {
+            if (isPlaylistLoading) {
+                PlaylistSkeletonLoader(onNavigateBack = onNavigateBack)
+            } else if (playlist == null || playlist.title == "Error Playlist") {
                 PlaylistNotFoundView(onNavigateBack = onNavigateBack)
             } else {
                 LazyColumn(

@@ -136,10 +136,16 @@ fun HomeScreen(
                             onSelectChip = { viewModel.selectFilterChip(it) }
                         )
                     }
-                    item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
-                    items(4) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
-                    item { com.israrxy.raazi.ui.components.ShimmerSectionHeader() }
-                    items(3) { com.israrxy.raazi.ui.components.ShimmerMusicItemCard() }
+                    item {
+                        com.israrxy.raazi.ui.components.ShimmerSectionHeader()
+                        Spacer(modifier = Modifier.height(10.dp))
+                        com.israrxy.raazi.ui.components.ShimmerQuickPicksPanel()
+                    }
+                    item {
+                        com.israrxy.raazi.ui.components.ShimmerSectionHeader()
+                        Spacer(modifier = Modifier.height(10.dp))
+                        com.israrxy.raazi.ui.components.ShimmerFeedRail()
+                    }
                 }
             } else if (homeFeedState.errorMessage != null && homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
                 // Error state — failed to load home content

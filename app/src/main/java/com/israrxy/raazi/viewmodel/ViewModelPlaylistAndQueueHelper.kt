@@ -231,10 +231,13 @@ internal fun MusicPlayerViewModel.logoutFromYouTubeImpl() {
 }
 
 internal fun MusicPlayerViewModel.loadPlaylistImpl(playlistId: String) {
+    if (_currentPlaylist.value?.id?.removePrefix("VL") != playlistId.removePrefix("VL")) {
+        _currentPlaylist.value = null
+    }
+    _isLoading.value = true
+    _error.value = null
     viewModelScope.launch {
         try {
-            _isLoading.value = true
-            _error.value = null
             Log.d("MusicVM", "Loading playlist: $playlistId")
 
             if (playlistId == "favorites") {
@@ -283,6 +286,9 @@ internal fun MusicPlayerViewModel.loadPlaylistImpl(playlistId: String) {
                 )
             } else {
                 val playlist = repository.getPlaylist(playlistId)
+                if (playlist.title == "Error Playlist" && playlist.items.isEmpty()) {
+                    throw IllegalStateException("Failed to load playlist: $playlistId")
+                }
                 _currentPlaylist.value = playlist
             }
         } catch (e: Exception) {

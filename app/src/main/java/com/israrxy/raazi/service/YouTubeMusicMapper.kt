@@ -216,13 +216,7 @@ internal fun fetchNewPipePlaylistFallback(normalizedPlaylistId: String): Playlis
             items = items
         )
     } catch (e: Exception) {
-        Playlist(
-            id = normalizedPlaylistId,
-            title = "Error Playlist",
-            description = "Could not load playlist: ${e.message}",
-            thumbnailUrl = "",
-            items = emptyList()
-        )
+        throw e
     }
 }
 

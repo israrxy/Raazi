@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -120,6 +122,111 @@ fun ShimmerHomeSection(
         ShimmerSectionHeader()
         repeat(itemCount) {
             ShimmerMusicItemCard()
+        }
+    }
+}
+
+@Composable
+fun ShimmerQuickPicksPanel(modifier: Modifier = Modifier) {
+    ShimmerEffect { brush ->
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            repeat(2) {
+                Column(
+                    modifier = Modifier.width(320.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    repeat(4) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(70.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(brush)
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.75f)
+                                            .height(16.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(brush)
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.45f)
+                                            .height(12.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(brush)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ShimmerFeedRail(modifier: Modifier = Modifier) {
+    ShimmerEffect { brush ->
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            repeat(3) {
+                Column(
+                    modifier = Modifier.width(140.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(brush)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(brush)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.5f)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(brush)
+                    )
+                }
+            }
         }
     }
 }
