@@ -20,6 +20,10 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestGet(context) {
+  const url = new URL(context.request.url);
+  if (url.searchParams.get("ping") === "1") {
+    return jsonResponse({ status: "ok", service: "Raazi Cloud Sync", db: DB_ID });
+  }
   return handleSync(context, "GET");
 }
 
@@ -208,10 +212,11 @@ async function upsertCosmosDoc(endpoint, masterKey, doc) {
       "Content-Type": "application/json",
       "x-ms-date": dateStr,
       "x-ms-version": "2018-12-31",
-      "x-ms-documentdb-is-upsert": "true",
+      "x-ms-documentdb-is-upsert": "True",
       "x-ms-documentdb-partitionkey": JSON.stringify([doc.id]),
       "Authorization": auth,
     },
+    body: JSON.stringify(doc),
   });
 
   if (!res.ok) {
