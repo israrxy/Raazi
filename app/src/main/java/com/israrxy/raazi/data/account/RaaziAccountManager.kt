@@ -58,7 +58,7 @@ object RaaziAccountManager {
                 email = email,
                 name = displayName,
                 picture = photoUrl,
-                idToken = idToken
+                idToken = idToken ?: ""
             )
 
             // Trigger initial sync to pull down existing cloud backup

@@ -42,6 +42,8 @@ fun SettingsDualLoginSection(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var isRaaziSyncing by remember { mutableStateOf(false) }
+
     // Google Sign-In Activity Result Launcher
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -68,7 +70,6 @@ fun SettingsDualLoginSection(
     val raaziName by settingsDataStore.raaziUserName.collectAsStateWithLifecycle(initialValue = null)
     val raaziPicture by settingsDataStore.raaziUserPicture.collectAsStateWithLifecycle(initialValue = null)
     val raaziLastSync by settingsDataStore.raaziLastSync.collectAsStateWithLifecycle(initialValue = 0L)
-    var isRaaziSyncing by remember { mutableStateOf(false) }
 
     // Last.fm State
     val lastFmSessionKey by settingsDataStore.lastfmSessionKey.collectAsStateWithLifecycle(initialValue = null)

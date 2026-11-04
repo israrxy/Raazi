@@ -75,7 +75,7 @@ object GoogleDriveSyncManager {
         database: AppDatabase
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val email = settingsDataStore.raaziAccountEmail.first()
+            val email = settingsDataStore.raaziUserEmail.first()
             if (email.isNullOrBlank()) {
                 return@withContext Result.failure(Exception("Not signed into Raazi Google Account"))
             }
@@ -88,7 +88,7 @@ object GoogleDriveSyncManager {
 
             // 1. Find existing file in appDataFolder
             var fileInfo = findSyncFile(token)
-            if (fileInfo == null && fileInfo == null) {
+            if (fileInfo == null) {
                 // Retry once if token might be stale
                 invalidateToken(context, token)
                 token = getAccessToken(context, email)
@@ -108,7 +108,7 @@ object GoogleDriveSyncManager {
             }
 
             // 3. Serialize unified local state to compressed GZIP
-            val localFavorites = database.musicDao().getFavoriteTracks().first()
+            val localFavorites = database.musicDao().getAllTracks().first()
             val favoritesJson = JSONArray()
             for (f in localFavorites) {
                 favoritesJson.put(JSONObject().apply {

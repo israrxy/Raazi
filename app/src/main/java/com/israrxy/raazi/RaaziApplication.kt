@@ -93,7 +93,7 @@ class RaaziApplication : Application(), ImageLoaderFactory {
                 if (!hifiUrl.isNullOrBlank()) {
                     com.israrxy.raazi.player.flac.HifiApiClient.customInstanceUrl = hifiUrl
                 }
-                if (!settings.raaziAccountEmail.first().isNullOrBlank()) {
+                if (!settings.raaziUserEmail.first().isNullOrBlank()) {
                     com.israrxy.raazi.data.account.RaaziDriveSyncWorker.triggerImmediate(applicationContext)
                 }
             } catch (e: Exception) {
