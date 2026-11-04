@@ -186,18 +186,31 @@ internal fun MusicPlayerViewModel.saveCurrentQueueAsPlaylistImpl(name: String? =
     }
 }
 
-internal fun MusicPlayerViewModel.syncYouTubeLibraryImpl() {
+private var hasColdStartSynced = false
+@Volatile
+private var showNextSyncResult = false
+
+internal fun MusicPlayerViewModel.syncYouTubeLibraryImpl(isManual: Boolean = false) {
+    if (isManual || !hasColdStartSynced) {
+        showNextSyncResult = true
+    }
     if (_isSyncingYouTubeLibrary.value) return
 
     viewModelScope.launch {
         _isSyncingYouTubeLibrary.value = true
         try {
             val result = repository.syncYouTubeLibrary()
-            _youTubeSyncStatus.value = "Synced ${result.likedSongs} liked songs and ${result.playlists} playlists."
+            if (showNextSyncResult || isManual) {
+                _youTubeSyncStatus.value = "Synced ${result.likedSongs} liked songs and ${result.playlists} playlists."
+            }
+            hasColdStartSynced = true
         } catch (e: Exception) {
             Log.e("MusicVM", "Error syncing YouTube library", e)
-            _error.value = "Failed to sync YouTube Music: ${e.message}"
+            if (showNextSyncResult || isManual) {
+                _error.value = "Failed to sync YouTube Music: ${e.message}"
+            }
         } finally {
+            showNextSyncResult = false
             _isSyncingYouTubeLibrary.value = false
         }
     }
@@ -208,6 +221,7 @@ internal fun MusicPlayerViewModel.logoutFromYouTubeImpl() {
         try {
             YouTubeAccountSession.clear(settingsDataStore)
             repository.clearYouTubePlaylistsCache()
+            hasColdStartSynced = false
             _youTubeSyncStatus.value = "Signed out of YouTube Music."
         } catch (e: Exception) {
             Log.e("MusicVM", "Error signing out of YouTube", e)

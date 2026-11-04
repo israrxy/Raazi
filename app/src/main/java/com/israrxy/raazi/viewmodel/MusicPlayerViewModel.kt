@@ -429,7 +429,7 @@ class MusicPlayerViewModel(
     fun clearError() { _error.value = null }
     fun clearSearchHistory() = searchHistoryManager.clearHistory()
     fun clearYouTubeSyncStatus() { _youTubeSyncStatus.value = null }
-    fun syncYouTubeLibrary() = syncYouTubeLibraryImpl()
+    fun syncYouTubeLibrary(isManual: Boolean = false) = syncYouTubeLibraryImpl(isManual)
     fun logoutFromYouTube() = logoutFromYouTubeImpl()
     fun setUseLoginForBrowse(enabled: Boolean) { viewModelScope.launch { YouTubeAccountSession.setUseLoginForBrowse(settingsDataStore, enabled) } }
     suspend fun connectLastFm(username: String, password: String): Boolean = connectLastFmImpl(username, password)

@@ -82,7 +82,7 @@ internal fun YouTubeConnectPage(
                 accountInfo = accountInfo
             )
 
-            viewModel.syncYouTubeLibrary()
+            viewModel.syncYouTubeLibrary(isManual = true)
             onConnected()
         } catch (error: Exception) {
             hasCapturedSession = false

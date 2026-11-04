@@ -116,7 +116,7 @@ internal fun SettingsCategoryDetailList(
                                 subtitle = youTubeSyncStatus ?: "Pull liked songs and saved playlists",
                                 onClick = {
                                     if (!isSyncingYouTubeLibrary) {
-                                        viewModel.syncYouTubeLibrary()
+                                        viewModel.syncYouTubeLibrary(isManual = true)
                                     }
                                 }
                             )

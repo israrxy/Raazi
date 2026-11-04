@@ -135,7 +135,7 @@ fun LibraryScreen(
         openSettings = onNavigateToSettings,
         openSpotifyImport = onNavigateToSpotifyImport,
         openYouTubeLogin = onNavigateToYouTubeLogin,
-        syncLibrary = { viewModel.syncYouTubeLibrary() },
+        syncLibrary = { viewModel.syncYouTubeLibrary(isManual = true) },
         dismissSyncCard = { syncCardDismissed = true },
         dismissSyncCardPermanently = {
             syncCardDismissed = true
