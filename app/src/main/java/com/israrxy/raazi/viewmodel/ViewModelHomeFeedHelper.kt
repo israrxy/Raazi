@@ -15,6 +15,7 @@ import com.zionhuang.innertube.models.YTItem
 import com.zionhuang.innertube.pages.HomePage
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal fun MusicPlayerViewModel.loadHomeContentImpl() {
     viewModelScope.launch {
@@ -23,7 +24,8 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
         _homeFeedState.value = _homeFeedState.value.copy(isLoading = true, errorMessage = null)
         try {
             loadHomeInteractionSignals()
-            val historyJob = launch {
+
+            launch {
                 try {
                     _keepListening.value = repository.playbackHistory.first().take(30)
                 } catch (e: Exception) {
@@ -31,7 +33,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                 }
             }
 
-            val forgottenJob = launch {
+            launch {
                 try {
                     _forgottenFavorites.value = repository.getForgottenFavorites().first()
                 } catch (e: Exception) {
@@ -39,46 +41,18 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                 }
             }
 
-            val similarJob = launch {
-                try {
-                    loadSimilarRecommendations()
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error loading similar recommendations", e)
-                }
-            }
-
-            val exploreJob = launch {
-                try {
-                    YouTube.explore().onSuccess { page ->
-                        _explorePage.value = page
-                    }.onFailure {
-                        Log.e("MusicVM", "Explore page failed", it)
-                    }
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error loading explore page", e)
-                }
-            }
-
-            val quickPicksJob = launch {
-                try {
-                    val localPicks = repository.quickPicks.first().shuffled().take(50)
-                    if (_quickPicks.value.isEmpty()) {
-                        _quickPicks.value = localPicks
-                    }
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error loading quick picks", e)
-                }
-            }
-
             try {
                 val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
-                YouTube.home(params = chipParams).onSuccess { page ->
-                    var finalPage = page
-                    val firstContinuation = page.continuation
-                    if (page.sections.size < 6 && firstContinuation != null) {
+                val homeResult = withTimeoutOrNull(5000L) {
+                    YouTube.home(params = chipParams)
+                }
+                if (homeResult != null && homeResult.isSuccess) {
+                    var finalPage = homeResult.getOrThrow()
+                    val firstContinuation = finalPage.continuation
+                    if (finalPage.sections.size < 6 && firstContinuation != null) {
                         YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
-                            finalPage = page.copy(
-                                sections = page.sections + nextPage.sections,
+                            finalPage = finalPage.copy(
+                                sections = finalPage.sections + nextPage.sections,
                                 continuation = nextPage.continuation
                             )
                         }
@@ -98,21 +72,25 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                     }
                     _homePage.value = finalPage
                     _error.value = null
-                }.onFailure {
-                    Log.e("MusicVM", "InnerTube home failed", it)
-                    if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
-                        _error.value = "Failed to load home feed"
-                    }
+                } else if (_quickPicks.value.isEmpty()) {
+                    try {
+                        _quickPicks.value = repository.quickPicks.first().shuffled().take(50)
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error loading InnerTube home", e)
+                if (_quickPicks.value.isEmpty()) {
+                    try {
+                        _quickPicks.value = repository.quickPicks.first().shuffled().take(50)
+                    } catch (_: Exception) {}
+                }
             }
 
-            historyJob.join()
-            forgottenJob.join()
-            similarJob.join()
-            exploreJob.join()
-            quickPicksJob.join()
+            if (_quickPicks.value.isEmpty()) {
+                try {
+                    _quickPicks.value = repository.quickPicks.first().shuffled().take(50)
+                } catch (_: Exception) {}
+            }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading home", e)
             if (isOnline.value && _keepListening.value.isEmpty() && _quickPicks.value.isEmpty()) {
@@ -121,6 +99,26 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
         } finally {
             _isLoading.value = false
             rebuildHomeFeedState()
+        }
+
+        launch {
+            try {
+                YouTube.explore().onSuccess { page ->
+                    _explorePage.value = page
+                    rebuildHomeFeedState()
+                }
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error loading explore page", e)
+            }
+        }
+
+        launch {
+            try {
+                loadSimilarRecommendations()
+                rebuildHomeFeedState()
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error loading similar recommendations", e)
+            }
         }
     }
 }
