@@ -159,7 +159,12 @@ object RaaziAccountManager {
 
                         if (pId.isNotBlank() && pTitle.isNotBlank() && pId !in existingIds) {
                             database.musicDao().insertPlaylist(
-                                PlaylistEntity(id = pId, title = pTitle, syncedToYouTube = false)
+                                PlaylistEntity(
+                                    id = pId,
+                                    title = pTitle,
+                                    description = "Cloud playlist",
+                                    thumbnailUrl = ""
+                                )
                             )
                             if (trackIds != null) {
                                 for (j in 0 until trackIds.length()) {

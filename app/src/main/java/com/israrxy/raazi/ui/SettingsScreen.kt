@@ -332,7 +332,7 @@ fun SettingsScreen(
                         lastFmSessionKey = lastFmSessionKey,
                         lastFmUsername = lastFmUsername,
                         isScrobblingEnabled = isScrobblingEnabled,
-                        onShowLastFmLoginDialog = { showLastFmLoginDialog = true },
+                        onShowLastFmLoginDialog = {},
                         appTheme = appTheme,
                         onShowThemeDialog = { showThemeDialog = true },
                         dynamicColors = dynamicColors,

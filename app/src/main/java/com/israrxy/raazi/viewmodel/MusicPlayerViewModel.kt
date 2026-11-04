@@ -39,6 +39,7 @@ import com.israrxy.raazi.model.toSavedCollectionItem
 import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.player.StreamResolver
 import com.israrxy.raazi.service.AdvancedDownloadManager
+import com.israrxy.raazi.service.LastFmScrobbler
 import com.israrxy.raazi.service.MusicPlaybackService
 import com.israrxy.raazi.service.RingtoneType
 import com.israrxy.raazi.service.SpotifyTrack
