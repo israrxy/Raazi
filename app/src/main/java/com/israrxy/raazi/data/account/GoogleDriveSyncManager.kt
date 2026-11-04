@@ -11,7 +11,7 @@ import com.israrxy.raazi.data.local.SettingsDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -178,7 +178,11 @@ object GoogleDriveSyncManager {
     }
 
     private fun findSyncFile(token: String): Pair<String, String>? {
-        val url = "$DRIVE_FILES_ENDPOINT?spaces=appDataFolder&q=name='$SYNC_FILE_NAME'+and+trashed=false&fields=files(id,name,modifiedTime)"
+        val url = DRIVE_FILES_ENDPOINT.toHttpUrl().newBuilder()
+            .addQueryParameter("spaces", "appDataFolder")
+            .addQueryParameter("q", "name='$SYNC_FILE_NAME' and trashed=false")
+            .addQueryParameter("fields", "files(id,name,modifiedTime)")
+            .build()
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $token")
@@ -222,14 +226,8 @@ object GoogleDriveSyncManager {
 
         val requestBody = MultipartBody.Builder()
             .setType(mediaTypeRelated)
-            .addPart(
-                Headers.headersOf("Content-Type", "application/json; charset=UTF-8"),
-                jsonMeta.toRequestBody("application/json; charset=UTF-8".toMediaType())
-            )
-            .addPart(
-                Headers.headersOf("Content-Type", "application/gzip"),
-                gzippedBytes.toRequestBody("application/gzip".toMediaType())
-            )
+            .addPart(jsonMeta.toRequestBody("application/json; charset=UTF-8".toMediaType()))
+            .addPart(gzippedBytes.toRequestBody("application/gzip".toMediaType()))
             .build()
 
         val request = Request.Builder()
