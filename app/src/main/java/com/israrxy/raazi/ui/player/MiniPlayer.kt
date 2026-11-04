@@ -145,7 +145,7 @@ fun MiniPlayer(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
                 )
             },
-            tonalElevation = 6.dp,
+            tonalElevation = 0.dp,
             shadowElevation = if (isDocked) 0.dp else 8.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {

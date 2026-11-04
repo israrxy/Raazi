@@ -151,32 +151,15 @@ fun PlayerScreen(
                             .statusBarsPadding()
                             .padding(horizontal = 24.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .pointerInput(Unit) {
-                                    var totalDrag = 0f
-                                    detectVerticalDragGestures(
-                                        onDragStart = { totalDrag = 0f },
-                                        onVerticalDrag = { _, dragAmount ->
-                                            totalDrag += dragAmount
-                                            if (totalDrag > 30f) {
-                                                onCollapse()
-                                            }
-                                        }
-                                    )
-                                }
-                        ) {
-                            PlayerTopModeHeader(
-                                playbackState = playbackState,
-                                isLyricsVisible = isLyricsVisible,
-                                sleepTimerActive = sleepTimerActive,
-                                onCollapse = onCollapse,
-                                onLyricsVisibilityChange = onLyricsVisibilityChange,
-                                onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                                onShowOptionsSheet = { showOptionsSheet = true }
-                            )
-                        }
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = isLyricsVisible,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true }
+                        )
 
                         Spacer(modifier = Modifier.height(24.dp))
 
@@ -277,18 +260,6 @@ fun PlayerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
-                            .pointerInput(Unit) {
-                                var totalDrag = 0f
-                                detectVerticalDragGestures(
-                                    onDragStart = { totalDrag = 0f },
-                                    onVerticalDrag = { _, dragAmount ->
-                                        totalDrag += dragAmount
-                                        if (totalDrag > 30f) {
-                                            onCollapse()
-                                        }
-                                    }
-                                )
-                            }
                     ) {
                         PlayerTopModeHeader(
                             playbackState = playbackState,

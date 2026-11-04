@@ -16,11 +16,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
@@ -45,7 +49,7 @@ fun ExpandingPlayer(
     val progress by animateFloatAsState(
         targetValue = if (isExpanded) 1f else 0f,
         animationSpec = spring(
-            dampingRatio = 0.86f,
+            dampingRatio = 0.88f,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "expanding_player_progress"
@@ -83,60 +87,87 @@ fun ExpandingPlayer(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeight = maxHeight
-        val currentHeight = lerp(64.dp, screenHeight, progress)
-        val currentBottomPadding = lerp(collapsedBottomPadding, 0.dp, progress)
-        val currentHorizontalPadding = lerp(if (isDocked) 0.dp else 12.dp, 0.dp, progress)
-        val currentCornerRadius = lerp(if (isDocked) 0.dp else 16.dp, 0.dp, progress)
-        val currentShape = RoundedCornerShape(currentCornerRadius)
+        val density = LocalDensity.current
+        val screenHeightPx = with(density) { screenHeight.toPx() }
+        val collapsedBottomPaddingPx = with(density) { collapsedBottomPadding.toPx() }
+        val miniPlayerHeightPx = with(density) { 64.dp.toPx() }
 
+        val miniPlayerTopY = screenHeightPx - collapsedBottomPaddingPx - miniPlayerHeightPx
+
+        var manualDragOffset by remember(isExpanded) { mutableFloatStateOf(0f) }
+        val baseTranslationY = (miniPlayerTopY * (1f - progress)).coerceAtLeast(0f)
+        val currentTranslationY = (baseTranslationY + manualDragOffset).coerceIn(0f, screenHeightPx)
+
+        val cornerRadius = lerp(if (isDocked) 0.dp else 16.dp, 0.dp, progress)
+        val sheetShape = RoundedCornerShape(cornerRadius)
+
+        // MiniPlayer crossfade during early transition
+        if (progress < 0.5f) {
+            val miniAlpha = (1f - progress * 2.2f).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = if (isDocked) 0.dp else 12.dp)
+                    .padding(bottom = collapsedBottomPadding)
+                    .graphicsLayer { alpha = miniAlpha }
+            ) {
+                MiniPlayer(
+                    viewModel = viewModel,
+                    onNavigateToPlayer = onExpand,
+                    onCollapseToFloating = onCollapseToFloating,
+                    isDocked = isDocked,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        // Full player sheet: Always fillMaxSize(), translated via graphicsLayer (YouTube Music architecture)
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(currentHeight)
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = currentHorizontalPadding)
-                .padding(bottom = currentBottomPadding)
-                .clip(currentShape),
-            shape = currentShape,
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = currentTranslationY
+                }
+                .clip(sheetShape),
+            shape = sheetShape,
             color = MaterialTheme.colorScheme.background,
-            tonalElevation = if (progress < 0.5f) 6.dp else 0.dp,
-            shadowElevation = if (progress < 0.5f) (if (isDocked) 0.dp else 8.dp) else 0.dp
+            tonalElevation = 0.dp,
+            shadowElevation = if (progress < 1f) 12.dp else 0.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                if (progress < 0.65f) {
-                    val miniAlpha = (1f - progress * 2.0f).coerceIn(0f, 1f)
+                PlayerScreen(
+                    viewModel = viewModel,
+                    navController = navController,
+                    onCollapse = onCollapse,
+                    isLyricsVisible = isLyricsVisible,
+                    onLyricsVisibilityChange = onLyricsVisibilityChange
+                )
+
+                if (isExpanded) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp)
+                            .height(100.dp)
                             .align(Alignment.TopCenter)
-                            .graphicsLayer { alpha = miniAlpha }
-                    ) {
-                        MiniPlayer(
-                            viewModel = viewModel,
-                            onNavigateToPlayer = onExpand,
-                            onCollapseToFloating = onCollapseToFloating,
-                            isDocked = isDocked,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                if (progress > 0.12f) {
-                    val playerAlpha = ((progress - 0.12f) / 0.88f).coerceIn(0f, 1f)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = playerAlpha }
-                    ) {
-                        PlayerScreen(
-                            viewModel = viewModel,
-                            navController = navController,
-                            onCollapse = onCollapse,
-                            isLyricsVisible = isLyricsVisible,
-                            onLyricsVisibilityChange = onLyricsVisibilityChange
-                        )
-                    }
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { manualDragOffset = 0f },
+                                    onDragEnd = {
+                                        if (manualDragOffset > 80f) {
+                                            onCollapse()
+                                        }
+                                        manualDragOffset = 0f
+                                    },
+                                    onDragCancel = { manualDragOffset = 0f },
+                                    onVerticalDrag = { _, dragAmount ->
+                                        if (dragAmount > 0f || manualDragOffset > 0f) {
+                                            manualDragOffset = (manualDragOffset + dragAmount).coerceAtLeast(0f)
+                                        }
+                                    }
+                                )
+                            }
+                    )
                 }
             }
         }

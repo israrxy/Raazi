@@ -174,18 +174,18 @@ internal fun SimpleBottomNavBar(
         RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars),
-        contentAlignment = Alignment.BottomCenter
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = navShape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = if (hasMiniPlayerAbove) 0.dp else 12.dp
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = navShape,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 10.dp,
-            shadowElevation = if (hasMiniPlayerAbove) 0.dp else 18.dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+            contentAlignment = Alignment.BottomCenter
         ) {
             Row(
                 modifier = Modifier
