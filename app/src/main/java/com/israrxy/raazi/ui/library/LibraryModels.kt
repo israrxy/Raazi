@@ -63,6 +63,7 @@ data class LibraryActions(
     val openArtist: (String, String) -> Unit,
     val openSettings: () -> Unit,
     val openSpotifyImport: () -> Unit,
+    val openYouTubeLogin: () -> Unit = openSettings,
     val syncLibrary: () -> Unit,
     val dismissSyncCard: () -> Unit,
     val dismissSyncCardPermanently: (() -> Unit)? = null,

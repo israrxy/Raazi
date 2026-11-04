@@ -222,7 +222,11 @@ internal fun LibraryRow(
 
 /** First run / wiped library. */
 @Composable
-internal fun LibraryEmptyState(actions: LibraryActions, modifier: Modifier = Modifier) {
+internal fun LibraryEmptyState(
+    actions: LibraryActions,
+    isLoggedIn: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -252,8 +256,8 @@ internal fun LibraryEmptyState(actions: LibraryActions, modifier: Modifier = Mod
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(4.dp))
-        TextButton(onClick = actions.openSettings) {
-            Text("Connect YouTube Music")
+        TextButton(onClick = if (isLoggedIn) actions.syncLibrary else actions.openYouTubeLogin) {
+            Text(if (isLoggedIn) "Sync Library" else "Connect YouTube Music")
         }
     }
 }

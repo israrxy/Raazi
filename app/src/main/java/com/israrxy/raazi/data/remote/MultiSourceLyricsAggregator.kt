@@ -44,15 +44,18 @@ class MultiSourceLyricsAggregator(
         trackName: String,
         artistName: String,
         durationMs: Long,
-        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
+        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL,
+        forceRefresh: Boolean = false
     ): Lyrics? = withContext(Dispatchers.IO) {
         val prepared = LyricsMetadataSanitizer.prepare(trackName, artistName)
         val cacheKey = "${prepared.cacheKey}|${durationMs / 1000L}|v3"
 
-        cache.get(cacheKey)?.let { cached ->
-            if (LyricsScriptDetector.matches(preferredScript, cached)) {
-                Log.d(tag, "Multi-source cache hit (${cached.source}) for ${prepared.cacheKey}")
-                return@withContext cached
+        if (!forceRefresh) {
+            cache.get(cacheKey)?.let { cached ->
+                if (LyricsScriptDetector.matches(preferredScript, cached)) {
+                    Log.d(tag, "Multi-source cache hit (${cached.source}) for ${prepared.cacheKey}")
+                    return@withContext cached
+                }
             }
         }
 
@@ -107,8 +110,11 @@ class MultiSourceLyricsAggregator(
                 withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
                     runCatching {
                         val list = mutableListOf<Lyrics>()
-                        lrcLibApi.getLyrics(trackName, artistName, durationMs, preferredScript)?.let(list::add)
-                        lrcLibApi.searchLyricsOptions(trackName, artistName, durationMs, preferredScript)
+                        val primaryCandidate = prepared.candidates.firstOrNull()
+                        val qTitle = primaryCandidate?.trackName ?: trackName
+                        val qArtist = primaryCandidate?.artistName ?: artistName
+                        lrcLibApi.getLyrics(qTitle, qArtist, durationMs, preferredScript)?.let(list::add)
+                        lrcLibApi.searchLyricsOptions(qTitle, qArtist, durationMs, preferredScript)
                             .map { it.lyrics }
                             .forEach(list::add)
                         list

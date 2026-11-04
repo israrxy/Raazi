@@ -63,17 +63,19 @@ class LrcLibApi(context: Context) {
         Log.d(tag, "Lyrics lookup candidates: ${request.candidates.joinToString { "${it.artistName} - ${it.trackName}" }}")
         var fallbackExactMatch: Lyrics? = null
 
-        request.candidates.forEach { candidate ->
-            if (candidate.artistName.isBlank()) {
-                return@forEach
-            }
-            fetchExact(candidate, durationSeconds)?.let { lyrics ->
-                if (LyricsScriptDetector.matches(preferredScript, lyrics)) {
-                    cache.put(cacheKey, lyrics)
-                    return@withContext lyrics
+        if (durationSeconds > 0) {
+            request.candidates.forEach { candidate ->
+                if (candidate.artistName.isBlank()) {
+                    return@forEach
                 }
-                if (fallbackExactMatch == null) {
-                    fallbackExactMatch = lyrics
+                fetchExact(candidate, durationSeconds)?.let { lyrics ->
+                    if (LyricsScriptDetector.matches(preferredScript, lyrics)) {
+                        cache.put(cacheKey, lyrics)
+                        return@withContext lyrics
+                    }
+                    if (fallbackExactMatch == null) {
+                        fallbackExactMatch = lyrics
+                    }
                 }
             }
         }

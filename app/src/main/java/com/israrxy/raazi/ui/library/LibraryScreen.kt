@@ -58,7 +58,8 @@ fun LibraryScreen(
     onNavigateToPlaylist: (String) -> Unit,
     onNavigateToSettings: () -> Unit = {},
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
-    onNavigateToSpotifyImport: () -> Unit = {}
+    onNavigateToSpotifyImport: () -> Unit = {},
+    onNavigateToYouTubeLogin: () -> Unit = onNavigateToSettings
 ) {
     val liked by viewModel.favoriteTracks.collectAsStateWithLifecycle()
     val history by viewModel.playbackHistory.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -133,6 +134,7 @@ fun LibraryScreen(
         openArtist = onNavigateToArtist,
         openSettings = onNavigateToSettings,
         openSpotifyImport = onNavigateToSpotifyImport,
+        openYouTubeLogin = onNavigateToYouTubeLogin,
         syncLibrary = { viewModel.syncYouTubeLibrary() },
         dismissSyncCard = { syncCardDismissed = true },
         dismissSyncCardPermanently = {
@@ -229,11 +231,11 @@ fun LibraryScreen(
         dismissed = syncCardDismissed || (!loggedIn && dismissYoutubePrompt)
     )
 
-    // First open on an empty library: pull the YouTube Music library down once.
-    var hasAutoSynced by remember { mutableStateOf(false) }
+    // Auto-sync library when logged in
+    var hasAutoSyncedThisVisit by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(loggedIn) {
-        if (loggedIn && !hasAutoSynced && liked.isEmpty() && playlists.isEmpty() && !syncing) {
-            hasAutoSynced = true
+        if (loggedIn && !hasAutoSyncedThisVisit && !syncing) {
+            hasAutoSyncedThisVisit = true
             viewModel.syncYouTubeLibrary()
         }
     }

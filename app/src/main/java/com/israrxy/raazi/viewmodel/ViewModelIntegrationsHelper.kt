@@ -36,9 +36,19 @@ internal fun MusicPlayerViewModel.createServiceConnection(): ServiceConnection =
                 _playbackState.value = state
                 if (state.currentTrack?.id != oldState.currentTrack?.id) {
                     state.currentTrack?.let { track ->
-                        addToHistoryInternal(track)
-                        fetchLyricsImpl(track)
-                        fetchAutoPlayQueue(track)
+                        val effectiveDuration = if (track.duration > 0L) track.duration else state.duration
+                        val resolvedTrack = if (effectiveDuration > 0L && track.duration != effectiveDuration) {
+                            track.copy(duration = effectiveDuration)
+                        } else {
+                            track
+                        }
+                        addToHistoryInternal(resolvedTrack)
+                        fetchLyricsImpl(resolvedTrack)
+                        fetchAutoPlayQueue(resolvedTrack)
+                    }
+                } else if (oldState.duration <= 0L && state.duration > 0L && _lyrics.value == null && !_isLyricsLoading.value) {
+                    state.currentTrack?.let { track ->
+                        fetchLyricsImpl(track.copy(duration = state.duration))
                     }
                 }
             }

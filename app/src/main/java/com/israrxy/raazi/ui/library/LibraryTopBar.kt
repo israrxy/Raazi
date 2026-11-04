@@ -1,5 +1,11 @@
 package com.israrxy.raazi.ui.library
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +34,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -36,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,8 +63,26 @@ internal fun LibraryHeader(
     onOpenDownloads: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSpotifyImport: () -> Unit,
+    isLoggedIn: Boolean = false,
+    isSyncing: Boolean = false,
+    onSync: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val rotation by if (isSyncing) {
+        val infiniteTransition = rememberInfiniteTransition(label = "sync_spin")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(900, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "sync_angle"
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
+
     Row(
         modifier = modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -75,6 +102,14 @@ internal fun LibraryHeader(
                     maxLines = 1
                 )
             }
+        }
+        IconButton(onClick = onSync, enabled = !isSyncing) {
+            Icon(
+                imageVector = Icons.Default.Sync,
+                contentDescription = if (isLoggedIn) "Sync library" else "Connect YouTube Music",
+                tint = if (isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.rotate(rotation)
+            )
         }
         IconButton(onClick = onOpenDownloads) {
             Icon(

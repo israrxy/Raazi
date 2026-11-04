@@ -222,12 +222,11 @@ internal fun SimpleBottomNavBar(
                                 indication = LocalIndication.current
                             ) {
                                 haptic.lightTap()
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                                if (!isSelected) {
+                                    navController.navigate(item.route) {
+                                        popUpTo(navController.graph.findStartDestination().id)
+                                        launchSingleTop = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
                             }
                             .animateContentSize()

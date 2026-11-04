@@ -48,7 +48,7 @@ internal fun LibrarySyncCard(
             .fillMaxWidth()
             .clickable(
                 enabled = !sync.syncing,
-                onClick = if (sync.loggedIn) actions.syncLibrary else actions.openSettings
+                onClick = if (sync.loggedIn) actions.syncLibrary else actions.openYouTubeLogin
             )
     ) {
         Row(
@@ -111,7 +111,7 @@ internal fun LibrarySyncCard(
             if (sync.syncing) {
                 LinearProgressIndicator(modifier = Modifier.width(64.dp))
             } else {
-                TextButton(onClick = if (sync.loggedIn) actions.syncLibrary else actions.openSettings) {
+                TextButton(onClick = if (sync.loggedIn) actions.syncLibrary else actions.openYouTubeLogin) {
                     Text(if (sync.loggedIn) "Sync" else "Connect")
                 }
             }

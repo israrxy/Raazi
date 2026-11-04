@@ -68,6 +68,12 @@ fun LyricsScreen(
     val duration = playbackState.duration
     val isPlaying = playbackState.isPlaying
 
+    LaunchedEffect(currentTrack?.id) {
+        if (currentTrack != null && lyrics == null && !isLoading) {
+            viewModel.retryLyricsFetch()
+        }
+    }
+
     var smoothPositionMs by remember { mutableLongStateOf(currentPosition) }
     LaunchedEffect(currentPosition, isPlaying, duration) {
         smoothPositionMs = currentPosition

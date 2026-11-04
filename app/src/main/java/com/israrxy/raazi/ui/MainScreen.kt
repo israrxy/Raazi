@@ -192,11 +192,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         restoredTopLevelRoute = true
         if (lastTopLevelRoute != "home" && currentDestination.matchesRoute("home")) {
             navController.navigate(lastTopLevelRoute) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
+                popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
-                restoreState = true
             }
         }
     }
@@ -330,11 +327,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             },
                             onNavigateToSearch = {
                                 navController.navigate("search") {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
+                                    popUpTo(navController.graph.findStartDestination().id)
                                     launchSingleTop = true
-                                    restoreState = true
                                 }
                             }
                         )
@@ -361,8 +355,14 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             onNavigateToArtist = { artistId, artistName ->
                                 navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                             },
-                            onNavigateToSettings = { navController.navigate("settings") },
-                            onNavigateToSpotifyImport = { navController.navigate("spotify_import") }
+                            onNavigateToSettings = {
+                                navController.navigate("settings") {
+                                    popUpTo(navController.graph.findStartDestination().id)
+                                    launchSingleTop = true
+                                }
+                            },
+                            onNavigateToSpotifyImport = { navController.navigate("spotify_import") },
+                            onNavigateToYouTubeLogin = { navController.navigate("youtube_login") }
                         )
                     }
                     composable("settings") {

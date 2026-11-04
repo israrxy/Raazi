@@ -12,14 +12,25 @@ import com.zionhuang.innertube.models.WatchEndpoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-internal fun MusicPlayerViewModel.fetchLyricsImpl(track: MusicItem) {
-    lastLyricsTrack = track
+internal fun MusicPlayerViewModel.fetchLyricsImpl(track: MusicItem, forceRefresh: Boolean = false) {
+    val state = playbackState.value
+    val effectiveDuration = if (track.duration > 0L) track.duration else state.duration
+    val resolvedTrack = if (effectiveDuration > 0L && track.duration != effectiveDuration) {
+        track.copy(duration = effectiveDuration)
+    } else {
+        track
+    }
+    lastLyricsTrack = resolvedTrack
     lyricsFetchJob?.cancel()
     _isLyricsLoading.value = true
     _lyrics.value = null
     lyricsFetchJob = viewModelScope.launch {
         try {
-            val result = repository.getLyrics(track, preferredScript = _lyricsScriptFilter.value)
+            val result = repository.getLyrics(
+                item = resolvedTrack,
+                preferredScript = _lyricsScriptFilter.value,
+                forceRefresh = forceRefresh
+            )
             _lyrics.value = result
         } catch (e: Exception) {
             e.printStackTrace()
@@ -50,7 +61,15 @@ internal fun MusicPlayerViewModel.fetchSongCreditsImpl(track: MusicItem) {
 }
 
 internal fun MusicPlayerViewModel.retryLyricsFetchImpl() {
-    lastLyricsTrack?.let(::fetchLyricsImpl)
+    val state = playbackState.value
+    val track = state.currentTrack ?: lastLyricsTrack ?: return
+    val effectiveDuration = if (track.duration > 0L) track.duration else state.duration
+    val resolvedTrack = if (effectiveDuration > 0L && track.duration != effectiveDuration) {
+        track.copy(duration = effectiveDuration)
+    } else {
+        track
+    }
+    fetchLyricsImpl(resolvedTrack, forceRefresh = true)
 }
 
 internal fun MusicPlayerViewModel.searchLyricsOptionsImpl(
