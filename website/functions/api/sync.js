@@ -140,7 +140,8 @@ async function verifyGoogleIdToken(token) {
 }
 
 function parseCosmosConnectionString(conn) {
-  const parts = conn.split(";").reduce((acc, part) => {
+  const cleaned = (conn || "").trim().replace(/^"+|"+$/g, "").replace(/^'+|'+$/g, "");
+  const parts = cleaned.split(";").reduce((acc, part) => {
     const idx = part.indexOf("=");
     if (idx > 0) {
       acc[part.substring(0, idx).trim()] = part.substring(idx + 1).trim();
@@ -148,9 +149,9 @@ function parseCosmosConnectionString(conn) {
     return acc;
   }, {});
 
-  const endpoint = parts["AccountEndpoint"] || "";
-  const masterKey = parts["AccountKey"] || "";
-  return { endpoint: endpoint.replace(/\/+$/, ""), masterKey };
+  const endpoint = (parts["AccountEndpoint"] || "").replace(/\/+$/, "").replace(/^"+|"+$/g, "");
+  const masterKey = (parts["AccountKey"] || "").replace(/^"+|"+$/g, "");
+  return { endpoint, masterKey };
 }
 
 async function generateCosmosAuth(verb, resourceType, resourceId, dateStr, masterKey) {
@@ -169,7 +170,8 @@ async function generateCosmosAuth(verb, resourceType, resourceId, dateStr, maste
     new TextEncoder().encode(payload)
   );
   const base64Sig = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
-  return `type=master&ver=1.0&sig=${encodeURIComponent(base64Sig)}`;
+  const token = `type=master&ver=1.0&sig=${base64Sig}`;
+  return encodeURIComponent(token);
 }
 
 async function getCosmosDoc(endpoint, masterKey, docId) {
@@ -188,7 +190,10 @@ async function getCosmosDoc(endpoint, masterKey, docId) {
   });
 
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Cosmos read error: ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Cosmos read error: ${res.status} - ${errText}`);
+  }
   return await res.json();
 }
 

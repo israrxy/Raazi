@@ -136,7 +136,14 @@ object RaaziAccountManager {
 
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("Cloud sync failed (${response.code})"))
+                val errBody = response.body?.string().orEmpty()
+                val serverMsg = try {
+                    JSONObject(errBody).optString("error", errBody)
+                } catch (_: Exception) {
+                    errBody
+                }
+                val detail = if (serverMsg.isNotBlank()) serverMsg else "HTTP ${response.code}"
+                return@withContext Result.failure(Exception("Cloud sync failed: $detail"))
             }
 
             val responseBody = response.body?.string().orEmpty()
