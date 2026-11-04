@@ -81,6 +81,7 @@ fun MiniPlayer(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onCollapseToFloating: (() -> Unit)? = null,
+    isDocked: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val miniPlayerUiStateFlow = remember(viewModel) {
@@ -116,7 +117,11 @@ fun MiniPlayer(
         val supportingText = track.artist.ifBlank { statusText }.ifBlank { "Playing now" }
 
         val cardInteractionSource = remember { MutableInteractionSource() }
-        val miniPlayerShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
+        val miniPlayerShape = if (isDocked) {
+            RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+        } else {
+            RoundedCornerShape(16.dp)
+        }
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,13 +133,13 @@ fun MiniPlayer(
                 ) { onNavigateToPlayer() }
                 .animateContentSize(),
             shape = miniPlayerShape,
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
             border = BorderStroke(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
             ),
-            tonalElevation = 4.dp,
-            shadowElevation = 8.dp
+            tonalElevation = 6.dp,
+            shadowElevation = if (isDocked) 0.dp else 8.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Row(

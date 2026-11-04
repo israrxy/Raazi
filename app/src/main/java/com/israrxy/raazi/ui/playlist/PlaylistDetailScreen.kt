@@ -35,7 +35,8 @@ fun PlaylistDetailScreen(
     playlistId: String,
     viewModel: MusicPlayerViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToPlayer: () -> Unit
+    onNavigateToPlayer: () -> Unit,
+    onNavigateToPlaylist: (String) -> Unit = {}
 ) {
     val currentPlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
     val savedPlaylists by viewModel.userPlaylists.collectAsStateWithLifecycle()
@@ -391,6 +392,16 @@ fun PlaylistDetailScreen(
                                     }
                                     Toast.makeText(context, "Removed song", Toast.LENGTH_SHORT).show()
                                 }
+                            )
+                        }
+                    }
+
+                    if (filteredItems.isNotEmpty() && playlist != null && searchQuery.isBlank()) {
+                        item("related_playlists") {
+                            PlaylistRelatedSection(
+                                playlist = playlist,
+                                tracks = items,
+                                onNavigateToPlaylist = onNavigateToPlaylist
                             )
                         }
                     }

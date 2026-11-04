@@ -165,8 +165,15 @@ internal fun ConnectivityStatusBanner(
 internal fun SimpleBottomNavBar(
     navController: NavHostController,
     currentDestination: NavDestination?,
-    haptic: com.israrxy.raazi.utils.HapticController = com.israrxy.raazi.utils.rememberHapticController()
+    haptic: com.israrxy.raazi.utils.HapticController = com.israrxy.raazi.utils.rememberHapticController(),
+    hasMiniPlayerAbove: Boolean = false
 ) {
+    val navShape = if (hasMiniPlayerAbove) {
+        RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp)
+    } else {
+        RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -175,7 +182,7 @@ internal fun SimpleBottomNavBar(
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shape = navShape,
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
             tonalElevation = 10.dp,
             shadowElevation = 18.dp

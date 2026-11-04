@@ -385,7 +385,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             playlistId = playlistId,
                             viewModel = viewModel,
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToPlayer = openPlayerSheet
+                            onNavigateToPlayer = openPlayerSheet,
+                            onNavigateToPlaylist = { id -> navController.navigateToPlaylist(id) }
                         )
                     }
                     composable("artist/{artistId}?name={artistName}") { backStackEntry ->
@@ -440,13 +441,14 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = if (showBottomBar) 6.dp else 12.dp)
+                .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
                 .padding(bottom = collapsedMiniPlayerBottomPadding)
         ) {
             MiniPlayer(
                 viewModel = viewModel,
                 onNavigateToPlayer = openPlayerSheet,
                 onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
+                isDocked = showBottomBar,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -466,7 +468,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             ) {
                 SimpleBottomNavBar(
                     navController = navController,
-                    currentDestination = currentDestination
+                    currentDestination = currentDestination,
+                    hasMiniPlayerAbove = showMiniPlayerBar
                 )
             }
         }
