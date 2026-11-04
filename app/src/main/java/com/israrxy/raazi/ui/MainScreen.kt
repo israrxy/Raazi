@@ -3,6 +3,13 @@ package com.israrxy.raazi.ui
 import android.net.Uri
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -32,8 +40,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.israrxy.raazi.data.local.SettingsDataStore
-import com.israrxy.raazi.ui.player.ExpandingPlayer
 import com.israrxy.raazi.ui.player.FloatingMiniPlayer
+import com.israrxy.raazi.ui.player.MiniPlayer
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -220,19 +228,52 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
 
         if (showMiniPlayerBar) {
-            ExpandingPlayer(
-                viewModel = viewModel,
-                navController = navController,
-                isExpanded = isPlayerExpanded,
-                onExpand = openPlayerSheet,
-                onCollapse = { isPlayerExpanded = false },
-                onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
-                isDocked = showBottomBar,
-                collapsedBottomPadding = collapsedMiniPlayerBottomPadding,
-                isLyricsVisible = isLyricsModeOpen,
-                onLyricsVisibilityChange = { isLyricsModeOpen = it },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
+                    .padding(bottom = collapsedMiniPlayerBottomPadding)
+            ) {
+                MiniPlayer(
+                    viewModel = viewModel,
+                    onNavigateToPlayer = openPlayerSheet,
+                    onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
+                    isDocked = showBottomBar,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isPlayerExpanded && currentTrack != null,
+            enter = slideInVertically(
+                initialOffsetY = { fullHeight -> fullHeight },
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(durationMillis = 200)),
+            exit = slideOutVertically(
+                targetOffsetY = { fullHeight -> fullHeight },
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 180)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                PlayerScreen(
+                    viewModel = viewModel,
+                    navController = navController,
+                    onCollapse = {
+                        if (isLyricsModeOpen) {
+                            isLyricsModeOpen = false
+                        }
+                        isPlayerExpanded = false
+                    },
+                    isLyricsVisible = isLyricsModeOpen,
+                    onLyricsVisibilityChange = { isLyricsModeOpen = it }
+                )
+            }
         }
 
         if (showFloatingBubble) {
