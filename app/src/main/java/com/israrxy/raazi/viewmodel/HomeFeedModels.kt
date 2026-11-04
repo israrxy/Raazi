@@ -8,6 +8,7 @@ import com.israrxy.raazi.model.Playlist
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.YTItem
 import com.zionhuang.innertube.pages.HomePage
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 data class HomeFeedUiState(
@@ -133,123 +134,46 @@ internal fun MusicPlayerViewModel.selectFilterChipImpl(chip: HomePage.Chip?) {
                 }
             }
 
-            when {
-                lowerTitle.contains("podcast") -> {
-                    runCatching {
-                        val topEpisodes = repository.searchMusic("popular podcast episode").items.take(14)
-                        if (topEpisodes.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_podcast_top",
-                                title = "Top Podcast Episodes",
-                                type = HomeSectionType.QUICK_PICKS,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = topEpisodes.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val podcastShows = repository.getMoodPlaylists("Podcasts").take(12)
-                        if (podcastShows.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_podcast_shows",
-                                title = "Featured Podcast Shows",
-                                type = HomeSectionType.MOOD_PLAYLISTS,
-                                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
-                                items = podcastShows.map(HomeFeedItem::PlaylistResult)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val talkEpisodes = repository.searchMusic("tech culture stories podcast").items.take(12)
-                        if (talkEpisodes.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_podcast_stories",
-                                title = "Stories, Tech & Conversations",
-                                type = HomeSectionType.RECOMMENDATION,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = talkEpisodes.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                }
+            val (trackQuery, moodQuery, mixQuery) = when {
+                lowerTitle.contains("podcast") -> Triple("popular podcast episode", "Podcasts", "tech culture stories podcast")
+                lowerTitle.contains("party") -> Triple("party hits dance club anthems", "Party", "upbeat party remix club")
+                else -> Triple("$categoryTitle music hits", categoryTitle, "$categoryTitle vibes mix")
+            }
 
-                lowerTitle.contains("party") -> {
-                    runCatching {
-                        val partyHits = repository.searchMusic("party hits dance club anthems").items.take(14)
-                        if (partyHits.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_party_hits",
-                                title = "Party Anthems",
-                                type = HomeSectionType.QUICK_PICKS,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = partyHits.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val partyPlaylists = repository.getMoodPlaylists("Party").take(12)
-                        if (partyPlaylists.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_party_playlists",
-                                title = "Party Mixes & Playlists",
-                                type = HomeSectionType.MOOD_PLAYLISTS,
-                                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
-                                items = partyPlaylists.map(HomeFeedItem::PlaylistResult)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val clubRemixes = repository.searchMusic("upbeat party remix club").items.take(12)
-                        if (clubRemixes.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_party_remixes",
-                                title = "Club & Remix Energy",
-                                type = HomeSectionType.RECOMMENDATION,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = clubRemixes.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                }
+            val tracksDeferred = async { runCatching { repository.searchMusic(trackQuery).items.take(14) }.getOrDefault(emptyList()) }
+            val playlistsDeferred = async { runCatching { repository.getMoodPlaylists(moodQuery).take(12) }.getOrDefault(emptyList()) }
+            val mixDeferred = async { runCatching { repository.searchMusic(mixQuery).items.take(12) }.getOrDefault(emptyList()) }
 
-                else -> {
-                    runCatching {
-                        val moodTracks = repository.searchMusic("$categoryTitle music hits").items.take(14)
-                        if (moodTracks.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_${lowerTitle}_tracks",
-                                title = "Top $categoryTitle Picks",
-                                type = HomeSectionType.QUICK_PICKS,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = moodTracks.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val moodPlaylists = repository.getMoodPlaylists(categoryTitle).take(12)
-                        if (moodPlaylists.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_${lowerTitle}_playlists",
-                                title = "$categoryTitle Playlists",
-                                type = HomeSectionType.MOOD_PLAYLISTS,
-                                sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
-                                items = moodPlaylists.map(HomeFeedItem::PlaylistResult)
-                            )
-                        }
-                    }
-                    runCatching {
-                        val moodMix = repository.searchMusic("$categoryTitle vibes mix").items.take(12)
-                        if (moodMix.isNotEmpty()) {
-                            builtSections += HomeSection(
-                                id = "cat_${lowerTitle}_mix",
-                                title = "$categoryTitle Essentials",
-                                type = HomeSectionType.RECOMMENDATION,
-                                sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
-                                items = moodMix.map(HomeFeedItem::Music)
-                            )
-                        }
-                    }
-                }
+            val foundTracks = tracksDeferred.await()
+            val foundPlaylists = playlistsDeferred.await()
+            val foundMix = mixDeferred.await()
+
+            if (foundTracks.isNotEmpty()) {
+                builtSections += HomeSection(
+                    id = "cat_${lowerTitle}_tracks",
+                    title = "Top $categoryTitle Picks",
+                    type = HomeSectionType.QUICK_PICKS,
+                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                    items = foundTracks.map(HomeFeedItem::Music)
+                )
+            }
+            if (foundPlaylists.isNotEmpty()) {
+                builtSections += HomeSection(
+                    id = "cat_${lowerTitle}_playlists",
+                    title = "$categoryTitle Playlists",
+                    type = HomeSectionType.MOOD_PLAYLISTS,
+                    sourceType = HomeInteractionEntity.SOURCE_EXPLORE,
+                    items = foundPlaylists.map(HomeFeedItem::PlaylistResult)
+                )
+            }
+            if (foundMix.isNotEmpty()) {
+                builtSections += HomeSection(
+                    id = "cat_${lowerTitle}_mix",
+                    title = "$categoryTitle Essentials",
+                    type = HomeSectionType.RECOMMENDATION,
+                    sourceType = HomeInteractionEntity.SOURCE_YOUTUBE,
+                    items = foundMix.map(HomeFeedItem::Music)
+                )
             }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading category feed for $categoryTitle", e)

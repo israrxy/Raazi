@@ -43,11 +43,12 @@ fun HomeMusicRail(
     onToggleSelection: (MusicItem) -> Unit = {},
     onEnterSelection: (MusicItem) -> Unit = {}
 ) {
+    val tracks = section.musicItems()
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(section.musicItems()) { musicItem ->
+        items(tracks, key = { it.id }) { musicItem ->
             MusicCard(
                 musicItem = musicItem,
                 viewModel = viewModel,
@@ -63,7 +64,12 @@ fun HomeMusicRail(
                         action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                         sourceType = section.sourceType
                     )
-                    viewModel.playMusic(musicItem)
+                    val idx = tracks.indexOfFirst { it.id == musicItem.id }.coerceAtLeast(0)
+                    if (tracks.size > 1) {
+                        viewModel.playPlaylist(tracks, idx)
+                    } else {
+                        viewModel.playMusic(musicItem)
+                    }
                 }
             )
         }
@@ -86,7 +92,7 @@ fun HomeFeedRail(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(section.items) { item ->
+        items(section.items, key = { it.stableId() }) { item ->
             HomeFeedItemCard(
                 item = item,
                 section = section,
@@ -135,30 +141,45 @@ fun HomeFeedItemCard(
                 viewModel.playMusic(item.item)
             }
         )
-        is HomeFeedItem.YouTube -> YouTubeFeedCard(
-            ytItem = item.item,
-            onClick = {
-                viewModel.recordHomeInteraction(
-                    itemId = item.stableId(),
-                    sectionId = section.id,
-                    action = if (item.item is com.zionhuang.innertube.models.SongItem) {
-                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY
-                    } else {
-                        com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN
-                    },
-                    sourceType = section.sourceType
-                )
-                when (val ytItem = item.item) {
-                    is com.zionhuang.innertube.models.SongItem -> {
-                        viewModel.playMusic(ytItem.toHomeMusicItem())
-                        onNavigateToPlayer()
+        is HomeFeedItem.YouTube -> {
+            val songTrack = (item.item as? com.zionhuang.innertube.models.SongItem)?.toHomeMusicItem()
+            YouTubeFeedCard(
+                ytItem = item.item,
+                isSelected = songTrack != null && selectedTracks.any { it.id == songTrack.id },
+                isSelectionMode = isSelectionMode,
+                onToggleSelection = { songTrack?.let(onToggleSelection) },
+                onEnterSelection = { songTrack?.let(onEnterSelection) },
+                onClick = {
+                    viewModel.recordHomeInteraction(
+                        itemId = item.stableId(),
+                        sectionId = section.id,
+                        action = if (item.item is com.zionhuang.innertube.models.SongItem) {
+                            com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY
+                        } else {
+                            com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN
+                        },
+                        sourceType = section.sourceType
+                    )
+                    when (val ytItem = item.item) {
+                        is com.zionhuang.innertube.models.SongItem -> {
+                            val railSongs = section.items
+                                .mapNotNull { ((it as? HomeFeedItem.YouTube)?.item as? com.zionhuang.innertube.models.SongItem)?.toHomeMusicItem() }
+                            val idx = railSongs.indexOfFirst { it.id == ytItem.id }.coerceAtLeast(0)
+                            if (railSongs.size > 1) {
+                                viewModel.playPlaylist(railSongs, idx)
+                            } else {
+                                viewModel.playMusic(ytItem.toHomeMusicItem())
+                            }
+                            viewModel.fetchAutoPlayQueue()
+                            onNavigateToPlayer()
+                        }
+                        is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.id)
+                        is com.zionhuang.innertube.models.PlaylistItem -> onNavigateToPlaylist(ytItem.id)
+                        is com.zionhuang.innertube.models.ArtistItem -> onNavigateToArtist(ytItem.id, ytItem.title)
                     }
-                    is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.id)
-                    is com.zionhuang.innertube.models.PlaylistItem -> onNavigateToPlaylist(ytItem.id)
-                    is com.zionhuang.innertube.models.ArtistItem -> onNavigateToArtist(ytItem.id, ytItem.title)
                 }
-            }
-        )
+            )
+        }
         is HomeFeedItem.PlaylistResult -> MoodPlaylistCard(
             playlist = item.playlist,
             onNavigateToPlaylist = {
@@ -175,12 +196,18 @@ fun HomeFeedItemCard(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun YouTubeFeedCard(
     ytItem: com.zionhuang.innertube.models.YTItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onToggleSelection: () -> Unit = {},
+    onEnterSelection: () -> Unit = {}
 ) {
     val isArtist = ytItem is com.zionhuang.innertube.models.ArtistItem
+    val isSong = ytItem is com.zionhuang.innertube.models.SongItem
     val title = when (ytItem) {
         is com.zionhuang.innertube.models.SongItem -> ytItem.title
         is com.zionhuang.innertube.models.AlbumItem -> ytItem.title
@@ -207,25 +234,57 @@ fun YouTubeFeedCard(
         modifier = Modifier
             .width(160.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .then(
+                if (isSong) {
+                    Modifier.combinedClickable(
+                        onClick = { if (isSelectionMode) onToggleSelection() else onClick() },
+                        onLongClick = onEnterSelection
+                    )
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            )
             .padding(4.dp),
         horizontalAlignment = if (isArtist) Alignment.CenterHorizontally else Alignment.Start
     ) {
-        AsyncImage(
-            model = ThumbnailUtils.getHighQualityThumbnail(thumbnail ?: ""),
-            contentDescription = title,
-            modifier = Modifier
-                .size(152.dp)
-                .clip(if (isArtist) CircleShape else RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
+        Box {
+            AsyncImage(
+                model = ThumbnailUtils.getHighQualityThumbnail(thumbnail ?: ""),
+                contentDescription = title,
+                modifier = Modifier
+                    .size(152.dp)
+                    .clip(if (isArtist) CircleShape else RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+            if (isSelectionMode && isSong) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(28.dp),
+                    shape = CircleShape,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.filled.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = if (isArtist) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start

@@ -67,10 +67,12 @@ fun KeepListeningPanel(
         )
 
         if (items.size > 1) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             LazyRow(
+                state = listState,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                itemsIndexed(items.drop(1)) { index, track ->
+                itemsIndexed(items.drop(1), key = { _, track -> track.id }) { index, track ->
                     KeepListeningRecentItem(
                         musicItem = track,
                         isSelected = selectedTracks.contains(track),

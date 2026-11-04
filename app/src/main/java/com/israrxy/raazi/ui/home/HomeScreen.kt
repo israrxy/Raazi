@@ -38,13 +38,17 @@ fun HomeScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
     onNavigateToArtist: (String, String) -> Unit,
-    onNavigateToSearch: () -> Unit = {}
+    onNavigateToSearch: () -> Unit = {},
+    contentBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val homeFeedState by viewModel.homeFeedState.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val selectedInnerTubeChip by viewModel.selectedInnerTubeChip.collectAsState()
     val playbackState by viewModel.playbackState.collectAsState()
+    val effectiveBottomPadding = remember(contentBottomPadding) {
+        if (contentBottomPadding > 0.dp) contentBottomPadding + 16.dp else 110.dp
+    }
 
     // Home batch-selection state
     var isHomeSelectionMode by remember { mutableStateOf(false) }
@@ -117,7 +121,7 @@ fun HomeScreen(
             if (homeFeedState.isLoading) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
+                    contentPadding = PaddingValues(bottom = effectiveBottomPadding, top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     item {
@@ -252,12 +256,12 @@ fun HomeScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp, top = 8.dp),
+                    contentPadding = PaddingValues(bottom = effectiveBottomPadding, top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     homeFeedState.sections.forEach { section ->
                         when (section.type) {
-                            HomeSectionType.STATUS -> item {
+                            HomeSectionType.STATUS -> item(key = section.id) {
                                 HomeStatusHeader(
                                     activeCategoryTitle = selectedInnerTubeChip?.title,
                                     isRefreshing = homeFeedState.isRefreshing,
@@ -275,7 +279,7 @@ fun HomeScreen(
                                 )
                             }
 
-                            HomeSectionType.KEEP_LISTENING -> item {
+                            HomeSectionType.KEEP_LISTENING -> item(key = section.id) {
                                 HomeSectionHeader(section = section, onAction = { viewModel.refreshHomeSection(section.id) })
                                 KeepListeningPanel(
                                     items = section.musicItems(),
@@ -290,7 +294,7 @@ fun HomeScreen(
                                 )
                             }
 
-                            HomeSectionType.QUICK_PICKS -> item {
+                            HomeSectionType.QUICK_PICKS -> item(key = section.id) {
                                 HomeSectionHeader(section = section, onAction = { viewModel.refreshHomeSection(section.id) })
                                 QuickPicksPanel(
                                     items = section.musicItems(),
@@ -305,7 +309,7 @@ fun HomeScreen(
                                 )
                             }
 
-                            HomeSectionType.FORGOTTEN_FAVORITES -> item {
+                            HomeSectionType.FORGOTTEN_FAVORITES -> item(key = section.id) {
                                 HomeSectionHeader(section = section)
                                 HomeMusicRail(
                                     section = section,
@@ -318,12 +322,12 @@ fun HomeScreen(
                                 )
                             }
 
-                            HomeSectionType.MOODS -> item {
+                            HomeSectionType.MOODS -> item(key = section.id) {
                                 HomeSectionHeader(section = section)
                                 MoodRail(section = section, viewModel = viewModel)
                             }
 
-                            HomeSectionType.MOOD_PLAYLISTS -> item {
+                            HomeSectionType.MOOD_PLAYLISTS -> item(key = section.id) {
                                 HomeSectionHeader(section = section)
                                 MoodPlaylistRail(
                                     section = section,
@@ -333,7 +337,7 @@ fun HomeScreen(
 
                             HomeSectionType.RECOMMENDATION,
                             HomeSectionType.NEW_RELEASES,
-                            HomeSectionType.YOUTUBE_RAIL -> item {
+                            HomeSectionType.YOUTUBE_RAIL -> item(key = section.id) {
                                 HomeSectionHeader(section = section)
                                 HomeFeedRail(
                                     section = section,
@@ -359,7 +363,7 @@ fun HomeScreen(
                     }
 
                     if (isLoadingMore) {
-                        item {
+                        item(key = "loading_more") {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 contentAlignment = Alignment.Center
@@ -372,14 +376,15 @@ fun HomeScreen(
             }
         }
 
+        val selectionBottomPadding = if (contentBottomPadding > 0.dp) contentBottomPadding + 8.dp else 16.dp
         AnimatedVisibility(
                 visible = isHomeSelectionMode,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(bottom = selectionBottomPadding)
+                    .padding(horizontal = 16.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),

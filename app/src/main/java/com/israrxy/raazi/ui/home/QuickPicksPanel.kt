@@ -68,13 +68,15 @@ fun QuickPicksPanel(
     val configuration = LocalConfiguration.current
     val columnWidth = (configuration.screenWidthDp.dp - 48.dp).coerceIn(280.dp, 360.dp)
     val columns = items.chunked(4)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     LazyRow(
+        state = listState,
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(columns) { columnTracks ->
+        items(columns, key = { col -> col.firstOrNull()?.id ?: col.hashCode() }) { columnTracks ->
             Column(
                 modifier = Modifier.width(columnWidth),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

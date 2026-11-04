@@ -58,7 +58,7 @@ fun MusicCard(
     ) {
         Box {
             AsyncImage(
-                model = musicItem.thumbnailUrl?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
+                model = ThumbnailUtils.getHighQualityThumbnail(musicItem.thumbnailUrl ?: ""),
                 contentDescription = null,
                 modifier = Modifier
                     .size(160.dp)
@@ -108,184 +108,6 @@ fun MusicCard(
 }
 
 @Composable
-fun YouTubeSongCard(
-    songItem: com.zionhuang.innertube.models.SongItem,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlayer: () -> Unit
-) {
-    val musicItem = remember(songItem) {
-        MusicItem(
-            id = songItem.id,
-            title = songItem.title,
-            artist = songItem.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
-            duration = (songItem.duration ?: 0) * 1000L,
-            thumbnailUrl = songItem.thumbnail,
-            audioUrl = "",
-            videoUrl = songItem.id,
-            isLive = false
-        )
-    }
-    Column(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable {
-                viewModel.playMusic(musicItem)
-                onNavigateToPlayer()
-            }
-    ) {
-        AsyncImage(
-            model = songItem.thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
-            modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = songItem.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = songItem.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun YouTubeAlbumCard(
-    albumItem: com.zionhuang.innertube.models.AlbumItem,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToPlayer: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable {
-                onNavigateToPlaylist(albumItem.id)
-            }
-    ) {
-        AsyncImage(
-            model = albumItem.thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
-            modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = albumItem.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = albumItem.artists?.joinToString(", ") { it.name } ?: "Unknown Artist",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun YouTubeArtistCard(
-    artistItem: com.zionhuang.innertube.models.ArtistItem,
-    onNavigateToArtist: (String, String) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable {
-                onNavigateToArtist(artistItem.id, artistItem.title)
-            }
-    ) {
-        AsyncImage(
-            model = artistItem.thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
-            modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = artistItem.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = "Artist",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun YouTubePlaylistCard(
-    playlistItem: com.zionhuang.innertube.models.PlaylistItem,
-    viewModel: MusicPlayerViewModel,
-    onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToPlayer: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable {
-                onNavigateToPlaylist(playlistItem.id)
-            }
-    ) {
-        AsyncImage(
-            model = playlistItem.thumbnail?.replace("w120-h120", "w544-h544")?.replace("=w60-h60", "=w544-h544"),
-            contentDescription = null,
-            modifier = Modifier
-                .size(160.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = playlistItem.title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = "Playlist",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
 fun MoodPlaylistCard(
     playlist: Playlist,
     onNavigateToPlaylist: (String) -> Unit
@@ -296,7 +118,7 @@ fun MoodPlaylistCard(
             .clickable { onNavigateToPlaylist(playlist.id) }
     ) {
         AsyncImage(
-            model = playlist.thumbnailUrl,
+            model = ThumbnailUtils.getHighQualityThumbnail(playlist.thumbnailUrl ?: ""),
             contentDescription = null,
             modifier = Modifier
                 .size(160.dp)
@@ -328,12 +150,15 @@ fun MoodRail(
     section: com.israrxy.raazi.viewmodel.HomeSection,
     viewModel: MusicPlayerViewModel
 ) {
+    val moods = remember(section.items) {
+        section.items.filterIsInstance<com.israrxy.raazi.viewmodel.HomeFeedItem.Mood>()
+    }
     androidx.compose.foundation.lazy.LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(section.items.filterIsInstance<com.israrxy.raazi.viewmodel.HomeFeedItem.Mood>().size) { index ->
-            val mood = section.items.filterIsInstance<com.israrxy.raazi.viewmodel.HomeFeedItem.Mood>()[index]
+        items(moods.size, key = { moods[it].title }) { index ->
+            val mood = moods[index]
             Box(
                 modifier = Modifier
                     .width(150.dp)

@@ -92,7 +92,8 @@ internal fun MainNavHost(
                         popUpTo(navController.graph.findStartDestination().id)
                         launchSingleTop = true
                     }
-                }
+                },
+                contentBottomPadding = contentBottomPadding
             )
         }
         composable("search") {

@@ -72,11 +72,13 @@ fun HomeStatusHeader(
                     .clip(RoundedCornerShape(50))
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable {
-                        val intent = android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse("https://israrxy.qzz.io")
-                        )
-                        context.startActivity(intent)
+                        try {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://israrxy.qzz.io")
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
                     }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
@@ -275,10 +277,5 @@ internal fun HomeFeedItem.stableId(): String = when (this) {
     is HomeFeedItem.Music -> item.id
     is HomeFeedItem.PlaylistResult -> playlist.id
     is HomeFeedItem.Mood -> title
-    is HomeFeedItem.YouTube -> when (item) {
-        is com.zionhuang.innertube.models.SongItem -> item.id
-        is com.zionhuang.innertube.models.AlbumItem -> item.id
-        is com.zionhuang.innertube.models.ArtistItem -> item.id
-        is com.zionhuang.innertube.models.PlaylistItem -> item.id
-    }
+    is HomeFeedItem.YouTube -> item.id
 }

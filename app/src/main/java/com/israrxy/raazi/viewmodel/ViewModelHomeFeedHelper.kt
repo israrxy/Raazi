@@ -158,6 +158,26 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
 
             loadHomeInteractionSignals()
 
+            launch {
+                try {
+                    loadSimilarRecommendations()
+                    rebuildHomeFeedState()
+                } catch (e: Exception) {
+                    Log.e("MusicVM", "Error refreshing similar recommendations", e)
+                }
+            }
+
+            launch {
+                try {
+                    YouTube.explore().onSuccess { page ->
+                        _explorePage.value = page
+                        rebuildHomeFeedState()
+                    }
+                } catch (e: Exception) {
+                    Log.e("MusicVM", "Error refreshing explore page", e)
+                }
+            }
+
             try {
                 val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
                 YouTube.home(params = chipParams).onSuccess { page ->
@@ -445,9 +465,11 @@ internal fun MusicPlayerViewModel.loadMoreSectionsImpl() {
                 rebuildHomeFeedState()
             }.onFailure {
                 Log.e("MusicVM", "Pagination failed", it)
+                _homePage.value = _homePage.value?.copy(continuation = null)
             }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading more sections", e)
+            _homePage.value = _homePage.value?.copy(continuation = null)
         } finally {
             _isLoadingMore.value = false
         }
