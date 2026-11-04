@@ -32,8 +32,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -105,14 +110,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
 
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-    DisposableEffect(isPlayerExpanded, isLyricsModeOpen, backDispatcher) {
+    DisposableEffect(isPlayerExpanded, backDispatcher) {
         val callback = object : OnBackPressedCallback(isPlayerExpanded) {
             override fun handleOnBackPressed() {
-                if (isLyricsModeOpen) {
-                    isLyricsModeOpen = false
-                } else {
-                    isPlayerExpanded = false
-                }
+                isPlayerExpanded = false
             }
         }
         backDispatcher?.addCallback(callback)
@@ -155,19 +156,21 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         when (val event = pendingDeepLinkEvent) {
             is MusicPlayerViewModel.DeepLinkEvent.ExpandPlayer -> {
                 if (currentTrack != null) {
-                    isLyricsModeOpen = false
+                    if (defaultPlayerScreen == "LYRICS") {
+                        isLyricsModeOpen = true
+                    } else if (defaultPlayerScreen == "PLAYER") {
+                        isLyricsModeOpen = false
+                    }
                     isPlayerExpanded = true
                     viewModel.consumeDeepLinkEvent()
                 }
             }
             is MusicPlayerViewModel.DeepLinkEvent.OpenPlaylist -> {
-                isLyricsModeOpen = false
                 isPlayerExpanded = false
                 navController.navigateToPlaylist(event.playlistId)
                 viewModel.consumeDeepLinkEvent()
             }
             is MusicPlayerViewModel.DeepLinkEvent.OpenArtist -> {
-                isLyricsModeOpen = false
                 isPlayerExpanded = false
                 val encodedId = Uri.encode(event.artistId)
                 val encodedName = Uri.encode(event.artistName ?: event.artistId)
@@ -257,19 +260,53 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             ) + fadeOut(animationSpec = tween(durationMillis = 180)),
             modifier = Modifier.fillMaxSize()
         ) {
+            val nestedScrollConnection = remember {
+                var accumulatedDragY = 0f
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        if (available.y < 0f) {
+                            accumulatedDragY = 0f
+                        }
+                        return Offset.Zero
+                    }
+
+                    override fun onPostScroll(
+                        consumed: Offset,
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset {
+                        if (available.y > 0f) {
+                            accumulatedDragY += available.y
+                            if (accumulatedDragY > 50f) {
+                                accumulatedDragY = 0f
+                                isPlayerExpanded = false
+                            }
+                            return Offset(0f, available.y)
+                        }
+                        return Offset.Zero
+                    }
+
+                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                        accumulatedDragY = 0f
+                        if (available.y > 450f) {
+                            isPlayerExpanded = false
+                            return available
+                        }
+                        return Velocity.Zero
+                    }
+                }
+            }
+
             Surface(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(nestedScrollConnection),
                 color = MaterialTheme.colorScheme.background
             ) {
                 PlayerScreen(
                     viewModel = viewModel,
                     navController = navController,
-                    onCollapse = {
-                        if (isLyricsModeOpen) {
-                            isLyricsModeOpen = false
-                        }
-                        isPlayerExpanded = false
-                    },
+                    onCollapse = { isPlayerExpanded = false },
                     isLyricsVisible = isLyricsModeOpen,
                     onLyricsVisibilityChange = { isLyricsModeOpen = it }
                 )
