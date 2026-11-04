@@ -254,3 +254,26 @@ internal suspend fun MusicPlayerViewModel.connectLastFmImpl(username: String, pa
         false
     }
 }
+
+internal suspend fun MusicPlayerViewModel.authenticateLastFmTokenImpl(token: String): Boolean {
+    return try {
+        val result = LastFmScrobbler.getSessionFromToken(token)
+        result.fold(
+            onSuccess = { (key, name) ->
+                settingsDataStore.setLastfmSession(key, name)
+                settingsDataStore.setLastfmScrobbleEnabled(true)
+                LastFmScrobbler.sessionKey = key
+                _lastfmMessage.value = "Connected to Last.fm as $name"
+                true
+            },
+            onFailure = { e ->
+                _lastfmMessage.value = "Last.fm: ${e.message ?: "authentication failed"}"
+                false
+            }
+        )
+    } catch (e: Exception) {
+        Log.e("MusicVM", "Last.fm token exchange failed", e)
+        _lastfmMessage.value = "Last.fm: ${e.message ?: "authentication failed"}"
+        false
+    }
+}

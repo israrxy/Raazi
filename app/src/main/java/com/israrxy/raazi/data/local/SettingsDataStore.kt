@@ -75,6 +75,12 @@ class SettingsDataStore(private val context: Context) {
         val LAST_TELEMETRY_PING_KEY = longPreferencesKey("last_telemetry_ping")
         val TELEMETRY_ENABLED_KEY = booleanPreferencesKey("telemetry_enabled")
         val PRIVACY_POLICY_ACCEPTED_KEY = booleanPreferencesKey("privacy_policy_accepted")
+        val RAAZI_USER_ID_KEY = stringPreferencesKey("raazi_user_id")
+        val RAAZI_USER_EMAIL_KEY = stringPreferencesKey("raazi_user_email")
+        val RAAZI_USER_NAME_KEY = stringPreferencesKey("raazi_user_name")
+        val RAAZI_USER_PICTURE_KEY = stringPreferencesKey("raazi_user_picture")
+        val RAAZI_GOOGLE_ID_TOKEN_KEY = stringPreferencesKey("raazi_google_id_token")
+        val RAAZI_LAST_SYNC_KEY = longPreferencesKey("raazi_last_sync")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -156,6 +162,35 @@ class SettingsDataStore(private val context: Context) {
             if (username.isNullOrBlank()) prefs.remove(LASTFM_USERNAME_KEY) else prefs[LASTFM_USERNAME_KEY] = username
         }
     }
+
+    val raaziUserId: Flow<String?> = nullablePrefFlow(RAAZI_USER_ID_KEY)
+    val raaziUserEmail: Flow<String?> = nullablePrefFlow(RAAZI_USER_EMAIL_KEY)
+    val raaziUserName: Flow<String?> = nullablePrefFlow(RAAZI_USER_NAME_KEY)
+    val raaziUserPicture: Flow<String?> = nullablePrefFlow(RAAZI_USER_PICTURE_KEY)
+    val raaziGoogleIdToken: Flow<String?> = nullablePrefFlow(RAAZI_GOOGLE_ID_TOKEN_KEY)
+    val raaziLastSync: Flow<Long> = prefFlow(RAAZI_LAST_SYNC_KEY, 0L)
+
+    suspend fun saveRaaziAccount(id: String, email: String, name: String?, picture: String?, idToken: String) {
+        context.dataStore.edit { prefs ->
+            prefs[RAAZI_USER_ID_KEY] = id
+            prefs[RAAZI_USER_EMAIL_KEY] = email
+            if (!name.isNullOrBlank()) prefs[RAAZI_USER_NAME_KEY] = name else prefs.remove(RAAZI_USER_NAME_KEY)
+            if (!picture.isNullOrBlank()) prefs[RAAZI_USER_PICTURE_KEY] = picture else prefs.remove(RAAZI_USER_PICTURE_KEY)
+            prefs[RAAZI_GOOGLE_ID_TOKEN_KEY] = idToken
+        }
+    }
+
+    suspend fun clearRaaziAccount() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(RAAZI_USER_ID_KEY)
+            prefs.remove(RAAZI_USER_EMAIL_KEY)
+            prefs.remove(RAAZI_USER_NAME_KEY)
+            prefs.remove(RAAZI_USER_PICTURE_KEY)
+            prefs.remove(RAAZI_GOOGLE_ID_TOKEN_KEY)
+        }
+    }
+
+    suspend fun setRaaziLastSync(timestamp: Long) = setPref(RAAZI_LAST_SYNC_KEY, timestamp)
 
     val isOnboardingCompleted: Flow<Boolean> = prefFlow(IS_ONBOARDING_COMPLETED_KEY, false)
     suspend fun setOnboardingCompleted(completed: Boolean) = setPref(IS_ONBOARDING_COMPLETED_KEY, completed)

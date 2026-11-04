@@ -91,6 +91,7 @@
                 <data android:scheme="raazi" android:host="playlist" />
                 <data android:scheme="raazi" android:host="album" />
                 <data android:scheme="raazi" android:host="artist" />
+                <data android:scheme="raazi" android:host="lastfm-callback" />
             </intent-filter>
         </activity>
         

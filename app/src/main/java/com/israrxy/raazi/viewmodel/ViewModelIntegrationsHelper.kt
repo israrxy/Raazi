@@ -248,6 +248,15 @@ internal fun MusicPlayerViewModel.finalizeSpotifyImportImpl(playlistTitle: Strin
 internal fun MusicPlayerViewModel.handleDeepLinkImpl(uri: Uri) {
     val scheme = uri.scheme?.lowercase().orEmpty()
     val host = uri.host?.lowercase().orEmpty()
+
+    if ((scheme == "raazi" && host == "lastfm-callback") || uri.path?.contains("lastfm-callback") == true) {
+        val token = uri.getQueryParameter("token")?.trim()
+        if (!token.isNullOrBlank()) {
+            authenticateLastFmToken(token)
+        }
+        return
+    }
+
     val pathSegments = uri.pathSegments.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }
 
     val routeType = if (scheme == "raazi") {

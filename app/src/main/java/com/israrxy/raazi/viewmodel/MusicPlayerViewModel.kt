@@ -75,8 +75,7 @@ class MusicPlayerViewModel(
     val advancedDownloadManager: AdvancedDownloadManager = AdvancedDownloadManager(app, musicDao, musicExtractor)
 
     val isYouTubeLoggedIn: StateFlow<Boolean> = settingsDataStore.innerTubeCookie
-        .map { cookie -> cookie?.contains("SAPISID") == true }
-        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+        .map { it?.contains("SAPISID") == true }.stateIn(viewModelScope, SharingStarted.Lazily, false)
     val youTubeAccountName: StateFlow<String?> = settingsDataStore.accountName.stateIn(viewModelScope, SharingStarted.Lazily, null)
     val youTubeAccountEmail: StateFlow<String?> = settingsDataStore.accountEmail.stateIn(viewModelScope, SharingStarted.Lazily, null)
     val useLoginForBrowse: StateFlow<Boolean> = settingsDataStore.useLoginForBrowse.stateIn(viewModelScope, SharingStarted.Lazily, true)
@@ -386,16 +385,10 @@ class MusicPlayerViewModel(
     fun playFromPlaylist(index: Int) { _currentPlaylist.value?.items?.takeIf { index in it.indices }?.let { playPlaylist(it, index) } }
     fun playPlaylist(items: List<MusicItem>, startIndex: Int = 0) { if (items.isNotEmpty()) { _isSearchQueue.value = false; playPlaylistInternal(items, startIndex) } }
     fun playSearchQueue(items: List<MusicItem>, startIndex: Int = 0) = playSearchQueueImpl(items, startIndex)
-    fun pause() { runCatching { playbackService?.pause() } }
-    fun resume() { runCatching { playbackService?.resume() } }
-    fun stop() { runCatching { playbackService?.stop() } }
-    fun next() { runCatching { playbackService?.next() } }
-    fun previous() { runCatching { playbackService?.previous() } }
-    fun seekTo(position: Long) { runCatching { playbackService?.seekTo(position) } }
-    fun toggleShuffle() { runCatching { playbackService?.toggleShuffle() } }
-    fun toggleRepeat() { runCatching { playbackService?.toggleRepeat() } }
-    fun addToQueue(items: List<MusicItem>) { runCatching { playbackService?.addToQueue(items) } }
-    fun addToQueue(item: MusicItem) = addToQueue(listOf(item))
+    fun pause() { runCatching { playbackService?.pause() } }; fun resume() { runCatching { playbackService?.resume() } }; fun stop() { runCatching { playbackService?.stop() } }
+    fun next() { runCatching { playbackService?.next() } }; fun previous() { runCatching { playbackService?.previous() } }; fun seekTo(position: Long) { runCatching { playbackService?.seekTo(position) } }
+    fun toggleShuffle() { runCatching { playbackService?.toggleShuffle() } }; fun toggleRepeat() { runCatching { playbackService?.toggleRepeat() } }
+    fun addToQueue(items: List<MusicItem>) { runCatching { playbackService?.addToQueue(items) } }; fun addToQueue(item: MusicItem) = addToQueue(listOf(item))
     fun playNext(items: List<MusicItem>) { runCatching { playbackService?.playNext(items) } }
     fun playPause() { if (_playbackState.value.isPlaying) pause() else resume() }
     fun playFromQueue(upcomingIndex: Int) = jumpToQueueIndex(_playbackState.value.currentIndex + 1 + upcomingIndex)
@@ -433,6 +426,8 @@ class MusicPlayerViewModel(
     fun logoutFromYouTube() = logoutFromYouTubeImpl()
     fun setUseLoginForBrowse(enabled: Boolean) { viewModelScope.launch { YouTubeAccountSession.setUseLoginForBrowse(settingsDataStore, enabled) } }
     suspend fun connectLastFm(username: String, password: String): Boolean = connectLastFmImpl(username, password)
+    fun authenticateLastFmToken(token: String) { viewModelScope.launch { authenticateLastFmTokenImpl(token) } }
+    fun launchLastFmWebAuth(context: Context) = LastFmScrobbler.launchWebAuth(context)
     fun clearLastFmMessage() { _lastfmMessage.value = null }
 
     fun loadPlaylist(playlistId: String) = loadPlaylistImpl(playlistId)

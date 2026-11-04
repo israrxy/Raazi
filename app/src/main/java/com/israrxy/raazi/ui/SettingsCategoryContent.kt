@@ -95,95 +95,11 @@ internal fun SettingsCategoryDetailList(
         when (currentCategory) {
             SettingsCategory.ACCOUNT -> {
                 item {
-                    SettingsSection(title = "YouTube Music") {
-                        if (isYouTubeLoggedIn) {
-                            SettingsAccountSummaryItem(
-                                title = youTubeAccountName?.takeIf { it.isNotBlank() } ?: "YouTube Music Account",
-                                subtitle = youTubeAccountEmail?.takeIf { it.isNotBlank() } ?: "Connected"
-                            )
-                            SettingsDivider()
-                            SettingsSwitchItem(
-                                icon = Icons.Filled.Public,
-                                title = "Use Login for Browse",
-                                subtitle = "Personalize Home feed using your account",
-                                checked = useLoginForBrowse,
-                                onCheckedChange = { viewModel.setUseLoginForBrowse(it) }
-                            )
-                            SettingsDivider()
-                            SettingsActionItem(
-                                icon = Icons.Filled.Sync,
-                                title = if (isSyncingYouTubeLibrary) "Syncing Library..." else "Sync Library Now",
-                                subtitle = youTubeSyncStatus ?: "Pull liked songs and saved playlists",
-                                onClick = {
-                                    if (!isSyncingYouTubeLibrary) {
-                                        viewModel.syncYouTubeLibrary(isManual = true)
-                                    }
-                                }
-                            )
-                            SettingsDivider()
-                            SettingsActionItem(
-                                icon = Icons.Filled.ManageAccounts,
-                                title = "Refresh Session",
-                                subtitle = "Re-open YouTube Music login",
-                                onClick = onNavigateToYouTubeLogin
-                            )
-                            SettingsDivider()
-                            SettingsActionItem(
-                                icon = Icons.AutoMirrored.Filled.Logout,
-                                title = "Sign Out",
-                                subtitle = "Disconnect your YouTube Music account",
-                                onClick = {
-                                    viewModel.logoutFromYouTube()
-                                    Toast.makeText(context, "Signed out of YouTube Music", Toast.LENGTH_SHORT).show()
-                                },
-                                isDestructive = true
-                            )
-                        } else {
-                            SettingsActionItem(
-                                icon = Icons.AutoMirrored.Filled.Login,
-                                title = "Sign in to YouTube Music",
-                                subtitle = "Sync library, playlists & personalized home feed",
-                                onClick = onNavigateToYouTubeLogin
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    SettingsSection(title = "Last.fm") {
-                        if (!lastFmSessionKey.isNullOrBlank()) {
-                            SettingsActionItem(
-                                icon = Icons.Filled.AccountCircle,
-                                title = lastFmUsername ?: "Connected",
-                                subtitle = "Tap to sign out of Last.fm",
-                                onClick = {
-                                    scope.launch {
-                                        settingsDataStore.setLastfmSession(null, null)
-                                        settingsDataStore.setLastfmScrobbleEnabled(false)
-                                        Toast.makeText(context, "Signed out of Last.fm", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                isDestructive = true
-                            )
-                            SettingsDivider()
-                            SettingsSwitchItem(
-                                icon = Icons.Filled.Album,
-                                title = "Scrobble Tracks",
-                                subtitle = "Send listening history to Last.fm",
-                                checked = isScrobblingEnabled,
-                                onCheckedChange = { enabled ->
-                                    scope.launch { settingsDataStore.setLastfmScrobbleEnabled(enabled) }
-                                }
-                            )
-                        } else {
-                            SettingsActionItem(
-                                icon = Icons.AutoMirrored.Filled.Login,
-                                title = "Sign in to Last.fm",
-                                subtitle = "Scrobble tracks you play",
-                                onClick = onShowLastFmLoginDialog
-                            )
-                        }
-                    }
+                    com.israrxy.raazi.ui.settings.SettingsDualLoginSection(
+                        viewModel = viewModel,
+                        settingsDataStore = settingsDataStore,
+                        onNavigateToYouTubeLogin = onNavigateToYouTubeLogin
+                    )
                 }
             }
 

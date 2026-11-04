@@ -133,6 +133,8 @@ fun SettingsScreen(
     val youTubeAccountName by viewModel.youTubeAccountName.collectAsStateWithLifecycle()
     val youTubeAccountEmail by viewModel.youTubeAccountEmail.collectAsStateWithLifecycle()
     val useLoginForBrowse by viewModel.useLoginForBrowse.collectAsStateWithLifecycle()
+    val raaziEmail by settingsDataStore.raaziUserEmail.collectAsStateWithLifecycle(initialValue = null)
+    val raaziName by settingsDataStore.raaziUserName.collectAsStateWithLifecycle(initialValue = null)
     val isSyncingYouTubeLibrary by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
     val youTubeSyncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
 
@@ -146,7 +148,6 @@ fun SettingsScreen(
     var showConcurrentDownloadsDialog by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showResetSettingsDialog by remember { mutableStateOf(false) }
-    var showLastFmLoginDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = selectedCategory != null) {
@@ -243,11 +244,9 @@ fun SettingsScreen(
                             Column {
                                 SettingsCategory.entries.forEachIndexed { index, category ->
                                     val valueText = when (category) {
-                                        SettingsCategory.ACCOUNT -> if (isYouTubeLoggedIn) {
-                                            youTubeAccountName?.takeIf { it.isNotBlank() } ?: "Connected"
-                                        } else {
-                                            "Not signed in"
-                                        }
+                                        SettingsCategory.ACCOUNT -> raaziName?.takeIf { it.isNotBlank() }
+                                            ?: youTubeAccountName?.takeIf { it.isNotBlank() }
+                                            ?: "Not signed in"
                                         SettingsCategory.APPEARANCE -> appTheme
                                         SettingsCategory.PLAYBACK -> audioQuality
                                         SettingsCategory.LYRICS_AI -> if (translateLyrics) targetLanguage.uppercase() else "Off"
@@ -472,15 +471,6 @@ fun SettingsScreen(
             scope = scope,
             settingsDataStore = settingsDataStore,
             onDismiss = { showResetSettingsDialog = false }
-        )
-    }
-
-    if (showLastFmLoginDialog) {
-        SettingsLastFmLoginDialog(
-            viewModel = viewModel,
-            settingsDataStore = settingsDataStore,
-            scope = scope,
-            onDismiss = { showLastFmLoginDialog = false }
         )
     }
 }

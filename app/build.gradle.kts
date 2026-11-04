@@ -164,6 +164,9 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
+    // Chrome Custom Tabs for web authentication
+    implementation("androidx.browser:browser:1.8.0")
+
     // Palette API for dynamic colors
     implementation("androidx.palette:palette-ktx:1.0.0")
 
