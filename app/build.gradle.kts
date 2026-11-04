@@ -159,10 +159,14 @@ dependencies {
     // Extended Icons
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 
-    // Android Credential Manager
+    // Android Credential Manager & Google Play Services Auth
     implementation("androidx.credentials:credentials:1.2.2")
     implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+
+    // WorkManager for debounced background sync
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Chrome Custom Tabs for web authentication
     implementation("androidx.browser:browser:1.8.0")

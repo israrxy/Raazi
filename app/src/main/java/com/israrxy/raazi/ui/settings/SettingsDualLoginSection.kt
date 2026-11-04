@@ -1,6 +1,8 @@
 package com.israrxy.raazi.ui.settings
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Dual-Login Settings Section:
- * 1. Raazi Ecosystem (1-Tap Google Sign-In, Cloud Backup, Last.fm Scrobbles & Stats)
+ * 1. Raazi Ecosystem (1-Tap Google Sign-In, Google Drive appDataFolder Backup, Last.fm)
  * 2. YouTube Music (Legacy in-app WebView session sync)
  */
 @Composable
@@ -39,6 +41,27 @@ fun SettingsDualLoginSection(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Google Sign-In Activity Result Launcher
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        scope.launch {
+            isRaaziSyncing = true
+            val res = RaaziAccountManager.handleSignInResult(result.data, context, settingsDataStore)
+            isRaaziSyncing = false
+            res.fold(
+                onSuccess = { name ->
+                    Toast.makeText(context, "Welcome to Raazi, $name! Google Drive connected.", Toast.LENGTH_SHORT).show()
+                },
+                onFailure = {
+                    if (it.message != "Sign-in cancelled") {
+                        Toast.makeText(context, "Sign in: ${it.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }
+    }
 
     // Raazi Account State
     val raaziEmail by settingsDataStore.raaziUserEmail.collectAsStateWithLifecycle(initialValue = null)
@@ -110,7 +133,7 @@ fun SettingsDualLoginSection(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Cloud",
+                            text = "Google Drive",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -123,23 +146,24 @@ fun SettingsDualLoginSection(
                 // Cloud Sync Button
                 SettingsActionItem(
                     icon = Icons.Filled.CloudSync,
-                    title = if (isRaaziSyncing) "Syncing with Cloud..." else "Sync Cloud Library",
+                    title = if (isRaaziSyncing) "Syncing with Google Drive..." else "Sync Google Drive Library",
                     subtitle = if (raaziLastSync > 0) {
                         "Last synced: ${formatTimestamp(raaziLastSync)}"
                     } else {
-                        "Backup playlists & favorites to Cosmos DB"
+                        "Backup playlists, favorites & Last.fm to Google Drive"
                     },
                     onClick = {
                         if (!isRaaziSyncing) {
                             isRaaziSyncing = true
                             scope.launch {
-                                val result = RaaziAccountManager.syncWithCloud(
+                                val result = RaaziAccountManager.syncWithDrive(
+                                    context = context,
                                     settingsDataStore = settingsDataStore,
                                     database = com.israrxy.raazi.RaaziApplication.instance.database
                                 )
                                 isRaaziSyncing = false
                                 result.fold(
-                                    onSuccess = { Toast.makeText(context, "Cloud sync complete!", Toast.LENGTH_SHORT).show() },
+                                    onSuccess = { Toast.makeText(context, "Google Drive sync complete!", Toast.LENGTH_SHORT).show() },
                                     onFailure = { Toast.makeText(context, "Sync failed: ${it.message}", Toast.LENGTH_SHORT).show() }
                                 )
                             }
@@ -191,10 +215,10 @@ fun SettingsDualLoginSection(
                 SettingsActionItem(
                     icon = Icons.AutoMirrored.Filled.Logout,
                     title = "Sign Out of Raazi",
-                    subtitle = "Disconnect cloud backup on this device",
+                    subtitle = "Disconnect Google Drive backup on this device",
                     onClick = {
                         scope.launch {
-                            RaaziAccountManager.signOut(settingsDataStore)
+                            RaaziAccountManager.signOut(context, settingsDataStore)
                             Toast.makeText(context, "Signed out of Raazi", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -205,26 +229,10 @@ fun SettingsDualLoginSection(
                 SettingsActionItem(
                     icon = Icons.AutoMirrored.Filled.Login,
                     title = "Sign in with Google",
-                    subtitle = "1-Tap setup for cloud playlists, stats & permanent Last.fm",
+                    subtitle = "1-Tap setup for private Google Drive backup & permanent Last.fm",
                     onClick = {
-                        scope.launch {
-                            val res = RaaziAccountManager.signInWithGoogle(context, settingsDataStore)
-                            res.fold(
-                                onSuccess = { name ->
-                                    Toast.makeText(context, "Welcome to Raazi, $name!", Toast.LENGTH_SHORT).show()
-                                    // Trigger first sync in background
-                                    RaaziAccountManager.syncWithCloud(
-                                        settingsDataStore = settingsDataStore,
-                                        database = com.israrxy.raazi.RaaziApplication.instance.database
-                                    )
-                                },
-                                onFailure = {
-                                    if (it.message != "Sign-in cancelled") {
-                                        Toast.makeText(context, "Sign in: ${it.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            )
-                        }
+                        val signInClient = RaaziAccountManager.getGoogleSignInClient(context)
+                        googleSignInLauncher.launch(signInClient.signInIntent)
                     }
                 )
 

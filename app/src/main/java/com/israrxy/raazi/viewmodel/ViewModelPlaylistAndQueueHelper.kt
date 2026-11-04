@@ -309,6 +309,7 @@ internal fun MusicPlayerViewModel.createPlaylistImpl(name: String, syncedToYouTu
             } else {
                 "Created playlist \"${playlist.title}\"."
             }
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error creating playlist", e)
             _error.value = "Failed to create playlist: ${e.message}"
@@ -330,6 +331,7 @@ internal fun MusicPlayerViewModel.createPlaylistWithTracksImpl(
             val songCount = if (tracks.size == 1) "1 song" else "${tracks.size} songs"
             _youTubeSyncStatus.value =
                 "Created playlist \"${playlist.title}\" with $songCount."
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error creating playlist with tracks", e)
             _error.value = "Failed to create playlist: ${e.message}"
@@ -341,6 +343,7 @@ internal fun MusicPlayerViewModel.addToPlaylistByIdImpl(playlistId: String, trac
     viewModelScope.launch {
         try {
             repository.addToPlaylist(playlistId, track)
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error adding track to playlist", e)
             _error.value = e.message ?: "Failed to add song to playlist."
@@ -352,6 +355,7 @@ internal fun MusicPlayerViewModel.addToPlaylistEntityImpl(track: MusicItem, play
     viewModelScope.launch {
         try {
             repository.addToPlaylist(track, playlist)
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error adding track to playlist", e)
             _error.value = e.message ?: "Failed to add song to playlist."
@@ -363,6 +367,7 @@ internal fun MusicPlayerViewModel.addTracksToPlaylistEntityImpl(tracks: List<Mus
     viewModelScope.launch {
         try {
             repository.addToPlaylist(tracks, playlist)
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error adding tracks to playlist", e)
             _error.value = e.message ?: "Failed to add songs to playlist."
@@ -375,6 +380,7 @@ internal fun MusicPlayerViewModel.deletePlaylistImpl(playlistId: String) {
         try {
             repository.deletePlaylist(playlistId)
             _youTubeSyncStatus.value = "Playlist deleted."
+            com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app)
         } catch (e: Exception) {
             Log.e("MusicVM", "Error deleting playlist", e)
             _error.value = e.message ?: "Failed to delete playlist."

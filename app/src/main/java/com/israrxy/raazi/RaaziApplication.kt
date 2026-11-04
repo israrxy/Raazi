@@ -20,6 +20,8 @@ class RaaziApplication : Application(), ImageLoaderFactory {
     lateinit var database: AppDatabase
     lateinit var container: AppContainer
 
+    val settingsDataStore by lazy { SettingsDataStore(this) }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .diskCache {
@@ -86,10 +88,13 @@ class RaaziApplication : Application(), ImageLoaderFactory {
                 android.util.Log.e("RaaziApp", "YouTube account bootstrap failed", e)
             }
             try {
-                val settings = SettingsDataStore(applicationContext)
+                val settings = settingsDataStore
                 val hifiUrl = settings.hifiApiUrl.first()
                 if (!hifiUrl.isNullOrBlank()) {
                     com.israrxy.raazi.player.flac.HifiApiClient.customInstanceUrl = hifiUrl
+                }
+                if (!settings.raaziAccountEmail.first().isNullOrBlank()) {
+                    com.israrxy.raazi.data.account.RaaziDriveSyncWorker.triggerImmediate(applicationContext)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("RaaziApp", "HifiApi bootstrap failed", e)

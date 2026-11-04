@@ -406,7 +406,7 @@ class MusicPlayerViewModel(
     fun fetchAutoPlayQueue(track: MusicItem) = fetchAutoPlayQueueImpl(track)
     fun startRadio(track: MusicItem) = startRadioImpl(track)
     fun saveCurrentQueueAsPlaylist(name: String? = null, tracks: List<MusicItem>? = null) = saveCurrentQueueAsPlaylistImpl(name, tracks)
-    fun toggleFavorite(musicItem: MusicItem) = viewModelScope.launch { if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem) }
+    fun toggleFavorite(musicItem: MusicItem) = viewModelScope.launch { if (favoriteTracks.value.any { it.id == musicItem.id }) repository.removeFromFavorites(musicItem) else repository.addToFavorites(musicItem); com.israrxy.raazi.data.account.RaaziAccountManager.scheduleAutoSync(app) }
     fun setTracksFavorite(tracks: List<MusicItem>, liked: Boolean) = setTracksFavoriteImpl(tracks, liked)
     fun fetchSongCredits(track: MusicItem) = fetchSongCreditsImpl(track)
     fun toggleSavedCollection(item: MusicItem) { viewModelScope.launch { repository.toggleSavedCollection(item) } }
