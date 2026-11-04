@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.data.db.PlaylistEntity
-import com.israrxy.raazi.data.db.PlaylistWithTracks
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.components.AddToPlaylistDialog
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -135,7 +134,7 @@ internal fun LibraryScreenDialogs(
     showAddToPlaylistDialog: Boolean,
     tracksForPlaylistAdd: List<MusicItem>,
     onDismissAddToPlaylist: () -> Unit,
-    onPlaylistSelectedForAdd: (PlaylistWithTracks) -> Unit,
+    onPlaylistSelectedForAdd: (PlaylistEntity) -> Unit,
     showCreateDialog: Boolean,
     playlistName: String,
     onPlaylistNameChange: (String) -> Unit,

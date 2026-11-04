@@ -426,7 +426,7 @@ fun LibraryScreen(
         },
         onPlaylistSelectedForAdd = { targetPlaylist ->
             viewModel.addToPlaylist(tracksForPlaylistAdd, targetPlaylist)
-            Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Added to ${targetPlaylist.displayTitle}", Toast.LENGTH_SHORT).show()
             showAddToPlaylistDialog = false
             tracksForPlaylistAdd = emptyList()
             if (isTrackSelectionMode) {
