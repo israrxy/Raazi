@@ -48,7 +48,7 @@ internal fun LibrarySyncCard(
             .fillMaxWidth()
             .clickable(
                 enabled = !sync.syncing,
-                onClick = if (sync.loggedIn) actions.syncLibrary else actions.openYouTubeLogin
+                onClick = actions.syncLibrary
             )
     ) {
         Row(
@@ -74,23 +74,29 @@ internal fun LibrarySyncCard(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                val title = when (sync.syncType) {
+                    LibrarySyncType.DUAL -> sync.accountName ?: "Google Drive & YouTube"
+                    LibrarySyncType.GOOGLE_DRIVE -> sync.accountName ?: "Google Drive Backup"
+                    LibrarySyncType.YOUTUBE_MUSIC -> sync.accountName ?: "YouTube Music connected"
+                    LibrarySyncType.NONE -> "Back up your library"
+                }
+                val subtitle = when {
+                    sync.syncing -> "Syncing likes and playlists\u2026"
+                    sync.syncType == LibrarySyncType.DUAL -> "Google Drive & YouTube Music active"
+                    sync.syncType == LibrarySyncType.GOOGLE_DRIVE -> "Private Google Drive backup active"
+                    sync.syncType == LibrarySyncType.YOUTUBE_MUSIC -> "Likes and playlists stay in step"
+                    else -> "Sign in to back up playlists & likes"
+                }
+
                 Text(
-                    text = sync.accountName?.takeIf { sync.loggedIn } ?: if (sync.loggedIn) {
-                        "YouTube Music connected"
-                    } else {
-                        "Connect YouTube Music"
-                    },
+                    text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = when {
-                        sync.syncing -> "Syncing likes and playlists\u2026"
-                        sync.loggedIn -> "Likes and playlists stay in step"
-                        else -> "Sign in to back up your library"
-                    },
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -111,7 +117,7 @@ internal fun LibrarySyncCard(
             if (sync.syncing) {
                 LinearProgressIndicator(modifier = Modifier.width(64.dp))
             } else {
-                TextButton(onClick = if (sync.loggedIn) actions.syncLibrary else actions.openYouTubeLogin) {
+                TextButton(onClick = actions.syncLibrary) {
                     Text(if (sync.loggedIn) "Sync" else "Connect")
                 }
             }

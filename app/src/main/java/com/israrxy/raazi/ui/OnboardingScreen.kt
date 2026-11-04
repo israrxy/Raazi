@@ -122,13 +122,13 @@ fun OnboardingScreen(
                     onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } },
                     onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } }
                 )
-                4 -> YouTubeConnectPage(
+                4 -> OnboardingAccountPage(
                     viewModel = viewModel,
                     settingsDataStore = settingsDataStore,
                     onWebViewVisibilityChange = { isWebViewVisible = it },
-                    onConnected = {
+                    onFinished = {
                         scope.launch {
-                            delay(600)
+                            delay(400)
                             settingsDataStore.setPrivacyPolicyAccepted(true)
                             onFinish()
                         }

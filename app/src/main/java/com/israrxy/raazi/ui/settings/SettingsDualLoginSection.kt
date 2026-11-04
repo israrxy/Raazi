@@ -70,6 +70,7 @@ fun SettingsDualLoginSection(
     val raaziName by settingsDataStore.raaziUserName.collectAsStateWithLifecycle(initialValue = null)
     val raaziPicture by settingsDataStore.raaziUserPicture.collectAsStateWithLifecycle(initialValue = null)
     val raaziLastSync by settingsDataStore.raaziLastSync.collectAsStateWithLifecycle(initialValue = 0L)
+    val raaziAutoSyncEnabled by settingsDataStore.raaziAutoSyncEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     // Last.fm State
     val lastFmSessionKey by settingsDataStore.lastfmSessionKey.collectAsStateWithLifecycle(initialValue = null)
@@ -167,6 +168,24 @@ fun SettingsDualLoginSection(
                                     onSuccess = { Toast.makeText(context, "Google Drive sync complete!", Toast.LENGTH_SHORT).show() },
                                     onFailure = { Toast.makeText(context, "Sync failed: ${it.message}", Toast.LENGTH_SHORT).show() }
                                 )
+                            }
+                        }
+                    }
+                )
+
+                SettingsDivider()
+
+                // Auto-Sync Switch
+                SettingsSwitchItem(
+                    icon = Icons.Filled.Sync,
+                    title = "Auto-Sync Library",
+                    subtitle = "Automatically back up playlists & likes to Google Drive",
+                    checked = raaziAutoSyncEnabled,
+                    onCheckedChange = { enabled ->
+                        scope.launch {
+                            settingsDataStore.setRaaziAutoSyncEnabled(enabled)
+                            if (enabled) {
+                                RaaziAccountManager.scheduleAutoSync(context)
                             }
                         }
                     }

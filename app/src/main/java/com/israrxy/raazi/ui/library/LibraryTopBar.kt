@@ -63,7 +63,7 @@ internal fun LibraryHeader(
     onOpenDownloads: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSpotifyImport: () -> Unit,
-    isLoggedIn: Boolean = false,
+    syncType: LibrarySyncType = LibrarySyncType.NONE,
     isSyncing: Boolean = false,
     onSync: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -104,10 +104,16 @@ internal fun LibraryHeader(
             }
         }
         IconButton(onClick = onSync, enabled = !isSyncing) {
+            val contentDesc = when (syncType) {
+                LibrarySyncType.DUAL -> "Sync Drive & YouTube"
+                LibrarySyncType.GOOGLE_DRIVE -> "Sync Google Drive library"
+                LibrarySyncType.YOUTUBE_MUSIC -> "Sync YouTube Music library"
+                LibrarySyncType.NONE -> "Connect account to sync"
+            }
             Icon(
                 imageVector = Icons.Default.Sync,
-                contentDescription = if (isLoggedIn) "Sync library" else "Connect YouTube Music",
-                tint = if (isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = contentDesc,
+                tint = if (syncType.isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.rotate(rotation)
             )
         }

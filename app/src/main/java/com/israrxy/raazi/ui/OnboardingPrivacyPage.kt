@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -106,6 +107,14 @@ internal fun OnboardingPrivacyPage(
             icon = Icons.Default.Devices,
             title = "Anonymous Active Device Ping",
             description = "To calculate public install counts, a daily ping sends an anonymous device UUID, app version, and Android version. You can opt out anytime in Settings."
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        OnboardingPrivacyPoint(
+            icon = Icons.Default.CloudSync,
+            title = "Zero-Server Cloud Backup",
+            description = "If you use cloud backup, playlists and likes sync directly to an isolated app folder in your personal Google Drive (appDataFolder). We host zero databases or servers—your data is strictly yours."
         )
 
         Spacer(Modifier.height(24.dp))

@@ -225,8 +225,10 @@ internal fun LibraryRow(
 internal fun LibraryEmptyState(
     actions: LibraryActions,
     isLoggedIn: Boolean = false,
+    syncType: LibrarySyncType = LibrarySyncType.NONE,
     modifier: Modifier = Modifier
 ) {
+    val activeSyncType = if (syncType != LibrarySyncType.NONE) syncType else if (isLoggedIn) LibrarySyncType.YOUTUBE_MUSIC else LibrarySyncType.NONE
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -256,8 +258,14 @@ internal fun LibraryEmptyState(
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(4.dp))
-        TextButton(onClick = if (isLoggedIn) actions.syncLibrary else actions.openYouTubeLogin) {
-            Text(if (isLoggedIn) "Sync Library" else "Connect YouTube Music")
+        TextButton(onClick = actions.syncLibrary) {
+            val label = when (activeSyncType) {
+                LibrarySyncType.DUAL -> "Sync Library"
+                LibrarySyncType.GOOGLE_DRIVE -> "Sync Google Drive"
+                LibrarySyncType.YOUTUBE_MUSIC -> "Sync YouTube Music"
+                LibrarySyncType.NONE -> "Connect Account"
+            }
+            Text(label)
         }
     }
 }

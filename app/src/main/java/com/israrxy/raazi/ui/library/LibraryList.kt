@@ -22,9 +22,9 @@ internal fun LazyListScope.LibraryListContent(
             onOpenDownloads = { actions.openPlaylist("downloads") },
             onOpenHistory = { actions.openPlaylist("history") },
             onOpenSpotifyImport = actions.openSpotifyImport,
-            isLoggedIn = sync.loggedIn,
+            syncType = sync.syncType,
             isSyncing = sync.syncing,
-            onSync = if (sync.loggedIn) actions.syncLibrary else actions.openYouTubeLogin
+            onSync = actions.syncLibrary
         )
     }
     item("search") { LibrarySearchField(query = state.query, onQueryChange = actions.search) }
@@ -45,7 +45,7 @@ internal fun LazyListScope.LibraryListContent(
     renderPlaylists(state, actions)
 
     if (state.isEmptyLibrary) {
-        item("empty") { LibraryEmptyState(actions = actions, isLoggedIn = sync.loggedIn) }
+        item("empty") { LibraryEmptyState(actions = actions, isLoggedIn = sync.loggedIn, syncType = sync.syncType) }
         return
     }
 

@@ -11,7 +11,10 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.israrxy.raazi.data.db.AppDatabase
 import com.israrxy.raazi.data.local.SettingsDataStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -110,8 +113,16 @@ object RaaziAccountManager {
 
     /**
      * Schedule a debounced background sync when favorites or playlists are modified.
+     * Respects user's auto-sync preference and requires active Google Drive account.
      */
     fun scheduleAutoSync(context: Context) {
-        RaaziDriveSyncWorker.scheduleDebouncedSync(context)
+        CoroutineScope(Dispatchers.IO).launch {
+            val app = context.applicationContext as? com.israrxy.raazi.RaaziApplication ?: return@launch
+            val enabled = app.settingsDataStore.raaziAutoSyncEnabled.first()
+            val email = app.settingsDataStore.raaziUserEmail.first()
+            if (enabled && !email.isNullOrBlank()) {
+                RaaziDriveSyncWorker.scheduleDebouncedSync(context)
+            }
+        }
     }
 }

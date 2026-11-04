@@ -46,13 +46,25 @@ data class LibraryMenuItem(
     val destructive: Boolean = false
 )
 
+/** Types of cloud library sync active on this device. */
+enum class LibrarySyncType {
+    NONE,
+    GOOGLE_DRIVE,
+    YOUTUBE_MUSIC,
+    DUAL;
+
+    val isConnected: Boolean get() = this != NONE
+}
+
 /** Everything the sync / account card needs to render itself. */
 data class LibrarySyncState(
-    val loggedIn: Boolean,
-    val accountName: String?,
-    val syncing: Boolean,
+    val syncType: LibrarySyncType = LibrarySyncType.NONE,
+    val accountName: String? = null,
+    val syncing: Boolean = false,
     val dismissed: Boolean = false
-)
+) {
+    val loggedIn: Boolean get() = syncType.isConnected
+}
 
 /** Callbacks the library list emits. Kept in one place so screens and lists stay in sync. */
 data class LibraryActions(

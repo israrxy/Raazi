@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.israrxy.raazi.RaaziApplication
+import com.israrxy.raazi.data.account.RaaziAccountManager
 import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
@@ -73,6 +75,23 @@ fun LibraryScreen(
     val playCounts by viewModel.trackPlayCounts.collectAsStateWithLifecycle()
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val dismissYoutubePrompt by viewModel.settingsDataStore.dismissYoutubeConnectPrompt.collectAsStateWithLifecycle(initialValue = false)
+
+    val raaziEmail by viewModel.settingsDataStore.raaziUserEmail.collectAsStateWithLifecycle(initialValue = null)
+    val raaziName by viewModel.settingsDataStore.raaziUserName.collectAsStateWithLifecycle(initialValue = null)
+    var isRaaziSyncing by remember { mutableStateOf(false) }
+
+    val isRaaziLoggedIn = !raaziEmail.isNullOrBlank()
+    val isYouTubeLoggedIn = loggedIn
+
+    val syncType = remember(isRaaziLoggedIn, isYouTubeLoggedIn) {
+        when {
+            isRaaziLoggedIn && isYouTubeLoggedIn -> LibrarySyncType.DUAL
+            isRaaziLoggedIn -> LibrarySyncType.GOOGLE_DRIVE
+            isYouTubeLoggedIn -> LibrarySyncType.YOUTUBE_MUSIC
+            else -> LibrarySyncType.NONE
+        }
+    }
+    val isSyncing = syncing || isRaaziSyncing
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -135,7 +154,56 @@ fun LibraryScreen(
         openSettings = onNavigateToSettings,
         openSpotifyImport = onNavigateToSpotifyImport,
         openYouTubeLogin = onNavigateToYouTubeLogin,
-        syncLibrary = { viewModel.syncYouTubeLibrary(isManual = true) },
+        syncLibrary = {
+            when (syncType) {
+                LibrarySyncType.DUAL -> {
+                    if (!syncing) {
+                        viewModel.syncYouTubeLibrary(isManual = true)
+                    }
+                    if (!isRaaziSyncing) {
+                        isRaaziSyncing = true
+                        scope.launch {
+                            val res = RaaziAccountManager.syncWithDrive(
+                                context = context,
+                                settingsDataStore = viewModel.settingsDataStore,
+                                database = RaaziApplication.instance.database
+                            )
+                            isRaaziSyncing = false
+                            res.fold(
+                                onSuccess = { Toast.makeText(context, "Google Drive & YouTube synced!", Toast.LENGTH_SHORT).show() },
+                                onFailure = { Toast.makeText(context, "Drive sync: ${it.message}", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+                    }
+                }
+                LibrarySyncType.GOOGLE_DRIVE -> {
+                    if (!isRaaziSyncing) {
+                        isRaaziSyncing = true
+                        scope.launch {
+                            val res = RaaziAccountManager.syncWithDrive(
+                                context = context,
+                                settingsDataStore = viewModel.settingsDataStore,
+                                database = RaaziApplication.instance.database
+                            )
+                            isRaaziSyncing = false
+                            res.fold(
+                                onSuccess = { Toast.makeText(context, "Google Drive sync complete!", Toast.LENGTH_SHORT).show() },
+                                onFailure = { Toast.makeText(context, "Drive sync: ${it.message}", Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+                    }
+                }
+                LibrarySyncType.YOUTUBE_MUSIC -> {
+                    if (!syncing) {
+                        viewModel.syncYouTubeLibrary(isManual = true)
+                    }
+                }
+                LibrarySyncType.NONE -> {
+                    onNavigateToSettings()
+                    Toast.makeText(context, "Connect Google Drive or YouTube to sync", Toast.LENGTH_SHORT).show()
+                }
+            }
+        },
         dismissSyncCard = { syncCardDismissed = true },
         dismissSyncCardPermanently = {
             syncCardDismissed = true
@@ -224,19 +292,37 @@ fun LibraryScreen(
         isPlaylistSelectionMode = isPlaylistSelectionMode
     )
 
+    val activeAccountName = when (syncType) {
+        LibrarySyncType.DUAL -> raaziName ?: accountName ?: "Drive & YouTube"
+        LibrarySyncType.GOOGLE_DRIVE -> raaziName ?: raaziEmail
+        LibrarySyncType.YOUTUBE_MUSIC -> accountName
+        LibrarySyncType.NONE -> null
+    }
+
     val sync = LibrarySyncState(
-        loggedIn = loggedIn,
-        accountName = accountName,
-        syncing = syncing,
-        dismissed = syncCardDismissed || (!loggedIn && dismissYoutubePrompt)
+        syncType = syncType,
+        accountName = activeAccountName,
+        syncing = isSyncing,
+        dismissed = syncCardDismissed || (!syncType.isConnected && dismissYoutubePrompt)
     )
 
-    // Auto-sync library when logged in
+    // Auto-sync library when visiting screen
     var hasAutoSyncedThisVisit by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(loggedIn) {
-        if (loggedIn && !hasAutoSyncedThisVisit && !syncing) {
+    LaunchedEffect(syncType) {
+        if (syncType.isConnected && !hasAutoSyncedThisVisit && !isSyncing) {
             hasAutoSyncedThisVisit = true
-            viewModel.syncYouTubeLibrary()
+            if (isYouTubeLoggedIn) {
+                viewModel.syncYouTubeLibrary()
+            }
+            if (isRaaziLoggedIn) {
+                scope.launch {
+                    RaaziAccountManager.syncWithDrive(
+                        context = context,
+                        settingsDataStore = viewModel.settingsDataStore,
+                        database = RaaziApplication.instance.database
+                    )
+                }
+            }
         }
     }
 
@@ -330,68 +416,56 @@ fun LibraryScreen(
         }
     }
 
-    if (showAddToPlaylistDialog && tracksForPlaylistAdd.isNotEmpty()) {
-        com.israrxy.raazi.ui.components.AddToPlaylistDialog(
-            viewModel = viewModel,
-            tracksToAdd = tracksForPlaylistAdd,
-            onDismiss = {
-                showAddToPlaylistDialog = false
-                tracksForPlaylistAdd = emptyList()
-            },
-            onPlaylistSelected = { targetPlaylist ->
-                viewModel.addToPlaylist(tracksForPlaylistAdd, targetPlaylist)
-                Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
-                showAddToPlaylistDialog = false
-                tracksForPlaylistAdd = emptyList()
-                if (isTrackSelectionMode) {
-                    selectedTracks.clear()
-                    isTrackSelectionMode = false
-                }
+    LibraryScreenDialogs(
+        viewModel = viewModel,
+        showAddToPlaylistDialog = showAddToPlaylistDialog,
+        tracksForPlaylistAdd = tracksForPlaylistAdd,
+        onDismissAddToPlaylist = {
+            showAddToPlaylistDialog = false
+            tracksForPlaylistAdd = emptyList()
+        },
+        onPlaylistSelectedForAdd = { targetPlaylist ->
+            viewModel.addToPlaylist(tracksForPlaylistAdd, targetPlaylist)
+            Toast.makeText(context, "Added to ${targetPlaylist.title}", Toast.LENGTH_SHORT).show()
+            showAddToPlaylistDialog = false
+            tracksForPlaylistAdd = emptyList()
+            if (isTrackSelectionMode) {
+                selectedTracks.clear()
+                isTrackSelectionMode = false
             }
-        )
-    }
-
-    if (showCreateDialog) {
-        CreatePlaylistDialog(
-            name = playlistName,
-            onNameChange = { playlistName = it },
-            createSynced = createSynced,
-            onCreateSyncedChange = { createSynced = it },
-            canCreateSynced = loggedIn,
-            onDismiss = {
-                showCreateDialog = false
-                playlistName = ""
-                createSynced = false
-            },
-            onCreate = {
-                viewModel.createPlaylist(playlistName, syncedToYouTube = createSynced)
-                showCreateDialog = false
-                playlistName = ""
-                createSynced = false
-            }
-        )
-    }
-
-    if (showRenameDialog && playlistToRename != null) {
-        RenamePlaylistDialog(
-            name = renamePlaylistName,
-            onNameChange = { renamePlaylistName = it },
-            onDismiss = { showRenameDialog = false },
-            onRename = {
-                viewModel.renamePlaylist(playlistToRename!!.id, renamePlaylistName)
-                showRenameDialog = false
-            }
-        )
-    }
-
-    if (showDeleteDialog && playlistToDelete != null) {
-        DeletePlaylistDialog(
-            playlistTitle = playlistToDelete?.displayTitle.orEmpty(),
-            onDismiss = { showDeleteDialog = false },
-            onDelete = {
-                viewModel.deletePlaylist(playlistToDelete!!.id)
-                showDeleteDialog = false
-            }
-        )
-    }
+        },
+        showCreateDialog = showCreateDialog,
+        playlistName = playlistName,
+        onPlaylistNameChange = { playlistName = it },
+        createSynced = createSynced,
+        onCreateSyncedChange = { createSynced = it },
+        canCreateSynced = loggedIn,
+        onDismissCreate = {
+            showCreateDialog = false
+            playlistName = ""
+            createSynced = false
+        },
+        onCreatePlaylist = {
+            viewModel.createPlaylist(playlistName, syncedToYouTube = createSynced)
+            showCreateDialog = false
+            playlistName = ""
+            createSynced = false
+        },
+        showRenameDialog = showRenameDialog,
+        playlistToRename = playlistToRename,
+        renamePlaylistName = renamePlaylistName,
+        onRenamePlaylistNameChange = { renamePlaylistName = it },
+        onDismissRename = { showRenameDialog = false },
+        onRenamePlaylist = {
+            playlistToRename?.let { viewModel.renamePlaylist(it.id, renamePlaylistName) }
+            showRenameDialog = false
+        },
+        showDeleteDialog = showDeleteDialog,
+        playlistToDelete = playlistToDelete,
+        onDismissDelete = { showDeleteDialog = false },
+        onDeletePlaylist = {
+            playlistToDelete?.let { viewModel.deletePlaylist(it.id) }
+            showDeleteDialog = false
+        }
+    )
 }

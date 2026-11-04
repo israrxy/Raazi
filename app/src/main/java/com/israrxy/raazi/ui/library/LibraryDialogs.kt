@@ -16,6 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.israrxy.raazi.data.db.PlaylistEntity
+import com.israrxy.raazi.data.db.PlaylistWithTracks
+import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.ui.components.AddToPlaylistDialog
+import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 // ---------------------------------------------------------------------------------------
 // Create / rename / delete dialogs.
@@ -122,4 +127,69 @@ internal fun DeletePlaylistDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+internal fun LibraryScreenDialogs(
+    viewModel: MusicPlayerViewModel,
+    showAddToPlaylistDialog: Boolean,
+    tracksForPlaylistAdd: List<MusicItem>,
+    onDismissAddToPlaylist: () -> Unit,
+    onPlaylistSelectedForAdd: (PlaylistWithTracks) -> Unit,
+    showCreateDialog: Boolean,
+    playlistName: String,
+    onPlaylistNameChange: (String) -> Unit,
+    createSynced: Boolean,
+    onCreateSyncedChange: (Boolean) -> Unit,
+    canCreateSynced: Boolean,
+    onDismissCreate: () -> Unit,
+    onCreatePlaylist: () -> Unit,
+    showRenameDialog: Boolean,
+    playlistToRename: PlaylistEntity?,
+    renamePlaylistName: String,
+    onRenamePlaylistNameChange: (String) -> Unit,
+    onDismissRename: () -> Unit,
+    onRenamePlaylist: () -> Unit,
+    showDeleteDialog: Boolean,
+    playlistToDelete: PlaylistEntity?,
+    onDismissDelete: () -> Unit,
+    onDeletePlaylist: () -> Unit
+) {
+    if (showAddToPlaylistDialog && tracksForPlaylistAdd.isNotEmpty()) {
+        AddToPlaylistDialog(
+            viewModel = viewModel,
+            tracksToAdd = tracksForPlaylistAdd,
+            onDismiss = onDismissAddToPlaylist,
+            onPlaylistSelected = onPlaylistSelectedForAdd
+        )
+    }
+
+    if (showCreateDialog) {
+        CreatePlaylistDialog(
+            name = playlistName,
+            onNameChange = onPlaylistNameChange,
+            createSynced = createSynced,
+            onCreateSyncedChange = onCreateSyncedChange,
+            canCreateSynced = canCreateSynced,
+            onDismiss = onDismissCreate,
+            onCreate = onCreatePlaylist
+        )
+    }
+
+    if (showRenameDialog && playlistToRename != null) {
+        RenamePlaylistDialog(
+            name = renamePlaylistName,
+            onNameChange = onRenamePlaylistNameChange,
+            onDismiss = onDismissRename,
+            onRename = onRenamePlaylist
+        )
+    }
+
+    if (showDeleteDialog && playlistToDelete != null) {
+        DeletePlaylistDialog(
+            playlistTitle = playlistToDelete.displayTitle,
+            onDismiss = onDismissDelete,
+            onDelete = onDeletePlaylist
+        )
+    }
 }

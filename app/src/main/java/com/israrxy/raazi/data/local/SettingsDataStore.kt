@@ -81,6 +81,7 @@ class SettingsDataStore(private val context: Context) {
         val RAAZI_USER_PICTURE_KEY = stringPreferencesKey("raazi_user_picture")
         val RAAZI_GOOGLE_ID_TOKEN_KEY = stringPreferencesKey("raazi_google_id_token")
         val RAAZI_LAST_SYNC_KEY = longPreferencesKey("raazi_last_sync")
+        val RAAZI_AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("raazi_auto_sync_enabled")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -169,6 +170,9 @@ class SettingsDataStore(private val context: Context) {
     val raaziUserPicture: Flow<String?> = nullablePrefFlow(RAAZI_USER_PICTURE_KEY)
     val raaziGoogleIdToken: Flow<String?> = nullablePrefFlow(RAAZI_GOOGLE_ID_TOKEN_KEY)
     val raaziLastSync: Flow<Long> = prefFlow(RAAZI_LAST_SYNC_KEY, 0L)
+    val raaziAutoSyncEnabled: Flow<Boolean> = prefFlow(RAAZI_AUTO_SYNC_ENABLED_KEY, true)
+
+    suspend fun setRaaziAutoSyncEnabled(enabled: Boolean) = setPref(RAAZI_AUTO_SYNC_ENABLED_KEY, enabled)
 
     suspend fun saveRaaziAccount(id: String, email: String, name: String?, picture: String?, idToken: String) {
         context.dataStore.edit { prefs ->

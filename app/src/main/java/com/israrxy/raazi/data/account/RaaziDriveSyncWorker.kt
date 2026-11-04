@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.israrxy.raazi.RaaziApplication
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 /**
@@ -70,6 +71,11 @@ class RaaziDriveSyncWorker(
     override suspend fun doWork(): Result {
         return try {
             val app = applicationContext as? RaaziApplication ?: return Result.failure()
+            val autoSyncEnabled = app.settingsDataStore.raaziAutoSyncEnabled.first()
+            if (!autoSyncEnabled) {
+                Log.d(TAG, "Auto-sync disabled by user; skipping background sync")
+                return Result.success()
+            }
             val result = GoogleDriveSyncManager.sync(
                 context = applicationContext,
                 settingsDataStore = app.settingsDataStore,

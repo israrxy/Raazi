@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.Security
@@ -105,6 +106,12 @@ fun PrivacyPolicyDialog(
                         icon = Icons.Default.Devices,
                         title = "Anonymous Active Device Heartbeat",
                         description = "To measure how many devices actively have Raazi installed, the app sends a lightweight daily ping with: (1) an anonymous random install UUID stored only on your device, (2) the Raazi app version, and (3) your Android OS version. This data is never linked to your identity or IP address."
+                    )
+
+                    PrivacyItem(
+                        icon = Icons.Default.CloudSync,
+                        title = "Zero-Server Google Drive Sync (Optional)",
+                        description = "When you use cloud backup, Raazi syncs your playlists and favorites directly to an isolated app data folder inside your personal Google Drive (appDataFolder). Raazi has zero backend servers or databases—your library data is strictly between your device and Google's encrypted storage."
                     )
 
                     PrivacyItem(
