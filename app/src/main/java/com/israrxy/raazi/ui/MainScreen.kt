@@ -246,9 +246,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             isOnline = isOnline,
             justReconnected = justReconnected,
             currentDestination = currentDestination,
-            hasMiniPlayer = showMiniPlayerBar,
-            isMiniPlayerFloating = !showBottomBar,
-            isRingtoneScreen = onRingtoneScreen
+            navController = navController
         )
     }
 }

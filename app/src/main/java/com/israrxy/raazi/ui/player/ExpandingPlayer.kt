@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.lerp
 import com.israrxy.raazi.ui.PlayerScreen
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpandingPlayer(
     viewModel: MusicPlayerViewModel,
