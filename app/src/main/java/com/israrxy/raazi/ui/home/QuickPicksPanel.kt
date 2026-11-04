@@ -8,24 +8,35 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,13 +66,13 @@ fun QuickPicksPanel(
     if (items.isEmpty()) return
 
     val configuration = LocalConfiguration.current
-    val columnWidth = (configuration.screenWidthDp.dp - 48.dp).coerceIn(280.dp, 350.dp)
+    val columnWidth = (configuration.screenWidthDp.dp - 48.dp).coerceIn(280.dp, 360.dp)
     val columns = items.chunked(4)
 
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(columns) { columnTracks ->
             Column(
@@ -85,7 +96,9 @@ fun QuickPicksPanel(
                             )
                             viewModel.playFromQuickPicks(track, items)
                             onNavigateToPlayer()
-                        }
+                        },
+                        onPlayNext = { viewModel.playNext(listOf(track)) },
+                        onAddToQueue = { viewModel.addToQueue(track) }
                     )
                 }
             }
@@ -102,12 +115,16 @@ private fun QuickPickRowItem(
     onToggleSelection: (MusicItem) -> Unit,
     onEnterSelection: (MusicItem) -> Unit,
     onClick: () -> Unit,
+    onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(70.dp)
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
                 onClick = { if (isSelectionMode) onToggleSelection(musicItem) else onClick() },
@@ -117,13 +134,14 @@ private fun QuickPickRowItem(
         color = if (isSelected) {
             MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        }
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+        },
+        tonalElevation = 1.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -134,19 +152,15 @@ private fun QuickPickRowItem(
                     modifier = Modifier.size(26.dp)
                 )
             } else {
-                Box(
+                AsyncImage(
+                    model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(54.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    AsyncImage(
-                        model = ThumbnailUtils.getListThumbnail(musicItem.thumbnailUrl),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
             }
 
             Column(
@@ -161,25 +175,82 @@ private fun QuickPickRowItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = musicItem.artist.ifBlank { "Unknown Artist" },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            IconButton(
-                onClick = onClick,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
+            if (!isSelectionMode) {
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Song options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        shape = RoundedCornerShape(14.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.widthIn(min = 180.dp)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Play Next") },
+                            onClick = {
+                                showMenu = false
+                                onPlayNext()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.QueueMusic,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add to Queue") },
+                            onClick = {
+                                showMenu = false
+                                onAddToQueue()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.PlaylistAdd,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Select") },
+                            onClick = {
+                                showMenu = false
+                                onEnterSelection(musicItem)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Checklist,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        )
+                    }
+                }
             }
         }
     }
