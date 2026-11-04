@@ -106,24 +106,54 @@ object RaaziAccountManager {
             val lastFmKey = settingsDataStore.lastfmSessionKey.first()
             val lastFmUser = settingsDataStore.lastfmUsername.first()
 
-            // Collect local favorites
-            val localFavorites = database.musicDao().getAllTracks().first().map { it.id }
+            // Collect local favorites with full metadata
+            val localFavoriteTracks = database.musicDao().getAllTracks().first()
+            val favoritesJson = JSONArray()
+            for (f in localFavoriteTracks) {
+                favoritesJson.put(JSONObject().apply {
+                    put("id", f.id)
+                    put("title", f.title)
+                    put("artist", f.artist)
+                    put("duration", f.duration)
+                    put("thumbnailUrl", f.thumbnailUrl)
+                    put("audioUrl", f.audioUrl)
+                    put("videoUrl", f.videoUrl)
+                    put("isLive", f.isLive)
+                })
+            }
 
-            // Collect local playlists
+            // Collect local playlists with tracks
             val localPlaylistsWithTracks = database.musicDao().getAllPlaylistsWithTracks().first()
             val playlistsJson = JSONArray()
             for (p in localPlaylistsWithTracks) {
-                val pObj = JSONObject()
-                pObj.put("id", p.playlist.id)
-                pObj.put("title", p.playlist.title)
-                pObj.put("trackIds", JSONArray(p.tracks.map { it.id }))
+                val pObj = JSONObject().apply {
+                    put("id", p.playlist.id)
+                    put("title", p.playlist.title)
+                    put("description", p.playlist.description)
+                    put("thumbnailUrl", p.playlist.thumbnailUrl)
+                    put("customTitle", p.playlist.customTitle ?: "")
+                    val tracksJson = JSONArray()
+                    for (t in p.tracks) {
+                        tracksJson.put(JSONObject().apply {
+                            put("id", t.id)
+                            put("title", t.title)
+                            put("artist", t.artist)
+                            put("duration", t.duration)
+                            put("thumbnailUrl", t.thumbnailUrl)
+                            put("audioUrl", t.audioUrl)
+                            put("videoUrl", t.videoUrl)
+                            put("isLive", t.isLive)
+                        })
+                    }
+                    put("tracks", tracksJson)
+                }
                 playlistsJson.put(pObj)
             }
 
             val requestBodyJson = JSONObject().apply {
                 put("lastfmSessionKey", lastFmKey ?: "")
                 put("lastfmUsername", lastFmUser ?: "")
-                put("favorites", JSONArray(localFavorites))
+                put("favorites", favoritesJson)
                 put("playlists", playlistsJson)
             }
 
@@ -158,31 +188,92 @@ object RaaziAccountManager {
                     settingsDataStore.setLastfmScrobbleEnabled(true)
                 }
 
+                // Restore favorites
+                val cloudFavorites = respJson.optJSONArray("favorites")
+                if (cloudFavorites != null) {
+                    for (i in 0 until cloudFavorites.length()) {
+                        val fItem = cloudFavorites.opt(i)
+                        val fObj = fItem as? JSONObject
+                        val fId = fObj?.optString("id") ?: fItem as? String ?: continue
+                        if (fId.isBlank()) continue
+
+                        val existing = database.musicDao().getTrack(fId)
+                        val entity = TrackEntity(
+                            id = fId,
+                            title = fObj?.optString("title")?.ifBlank { null } ?: existing?.title ?: "Track",
+                            artist = fObj?.optString("artist")?.ifBlank { null } ?: existing?.artist ?: "Unknown Artist",
+                            duration = fObj?.optLong("duration", 0L) ?: existing?.duration ?: 0L,
+                            thumbnailUrl = fObj?.optString("thumbnailUrl")?.ifBlank { null } ?: existing?.thumbnailUrl ?: "",
+                            audioUrl = fObj?.optString("audioUrl")?.ifBlank { null } ?: existing?.audioUrl ?: "",
+                            videoUrl = fObj?.optString("videoUrl")?.ifBlank { null } ?: existing?.videoUrl ?: "",
+                            isLive = fObj?.optBoolean("isLive", false) ?: existing?.isLive ?: false,
+                            localPath = existing?.localPath,
+                            isFavorite = true,
+                            favoriteSyncState = TrackEntity.FAVORITE_SYNCED
+                        )
+                        database.musicDao().insertTrack(entity)
+                    }
+                }
+
                 // Restore cloud playlists
                 val cloudPlaylists = respJson.optJSONArray("playlists")
                 if (cloudPlaylists != null) {
                     val existingIds = database.musicDao().getAllPlaylists().first().map { it.id }.toSet()
                     for (i in 0 until cloudPlaylists.length()) {
-                        val pObj = cloudPlaylists.getJSONObject(i)
+                        val pObj = cloudPlaylists.optJSONObject(i) ?: continue
                         val pId = pObj.optString("id")
                         val pTitle = pObj.optString("title")
-                        val trackIds = pObj.optJSONArray("trackIds")
+                        val pDesc = pObj.optString("description")
+                        val pThumb = pObj.optString("thumbnailUrl")
+                        val pCustom = pObj.optString("customTitle")
 
                         if (pId.isNotBlank() && pTitle.isNotBlank() && pId !in existingIds) {
                             database.musicDao().insertPlaylist(
                                 PlaylistEntity(
                                     id = pId,
                                     title = pTitle,
-                                    description = "Cloud playlist",
-                                    thumbnailUrl = ""
+                                    description = pDesc.ifBlank { "Cloud playlist" },
+                                    thumbnailUrl = pThumb,
+                                    customTitle = pCustom.ifBlank { null }
                                 )
                             )
-                            if (trackIds != null) {
-                                for (j in 0 until trackIds.length()) {
-                                    val tId = trackIds.getString(j)
-                                    database.musicDao().insertPlaylistTrackCrossRef(
-                                        PlaylistTrackCrossRef(playlistId = pId, trackId = tId, position = j)
-                                    )
+
+                            val tracksArray = pObj.optJSONArray("tracks")
+                            val trackIdsArray = pObj.optJSONArray("trackIds")
+
+                            if (tracksArray != null) {
+                                for (j in 0 until tracksArray.length()) {
+                                    val tObj = tracksArray.optJSONObject(j) ?: continue
+                                    val tId = tObj.optString("id")
+                                    if (tId.isNotBlank()) {
+                                        val existing = database.musicDao().getTrack(tId)
+                                        val entity = TrackEntity(
+                                            id = tId,
+                                            title = tObj.optString("title").ifBlank { existing?.title ?: "Track" },
+                                            artist = tObj.optString("artist").ifBlank { existing?.artist ?: "Unknown Artist" },
+                                            duration = tObj.optLong("duration", 0L),
+                                            thumbnailUrl = tObj.optString("thumbnailUrl").ifBlank { existing?.thumbnailUrl ?: "" },
+                                            audioUrl = tObj.optString("audioUrl").ifBlank { existing?.audioUrl ?: "" },
+                                            videoUrl = tObj.optString("videoUrl").ifBlank { existing?.videoUrl ?: "" },
+                                            isLive = tObj.optBoolean("isLive", false),
+                                            localPath = existing?.localPath,
+                                            isFavorite = existing?.isFavorite ?: false,
+                                            favoriteSyncState = existing?.favoriteSyncState ?: TrackEntity.FAVORITE_SYNCED
+                                        )
+                                        database.musicDao().insertTrack(entity)
+                                        database.musicDao().insertPlaylistTrackCrossRef(
+                                            PlaylistTrackCrossRef(playlistId = pId, trackId = tId, position = j)
+                                        )
+                                    }
+                                }
+                            } else if (trackIdsArray != null) {
+                                for (j in 0 until trackIdsArray.length()) {
+                                    val tId = trackIdsArray.optString(j)
+                                    if (tId.isNotBlank()) {
+                                        database.musicDao().insertPlaylistTrackCrossRef(
+                                            PlaylistTrackCrossRef(playlistId = pId, trackId = tId, position = j)
+                                        )
+                                    }
                                 }
                             }
                         }

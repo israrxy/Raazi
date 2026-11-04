@@ -81,15 +81,31 @@ async function handleSync(context, method) {
       // Fetch existing to merge
       const existingDoc = await getCosmosDoc(endpoint, masterKey, userId);
 
-      const mergedFavorites = Array.from(new Set([
-        ...(existingDoc?.favorites || []),
-        ...incomingFavorites
-      ]));
+      // Merge favorites by id
+      const favMap = new Map();
+      (existingDoc?.favorites || []).forEach(f => {
+        if (typeof f === "string") favMap.set(f, { id: f });
+        else if (f?.id) favMap.set(f.id, f);
+      });
+      incomingFavorites.forEach(f => {
+        if (typeof f === "string") {
+          if (!favMap.has(f)) favMap.set(f, { id: f });
+        } else if (f?.id) {
+          const prev = favMap.get(f.id) || {};
+          favMap.set(f.id, { ...prev, ...f });
+        }
+      });
+      const mergedFavorites = Array.from(favMap.values());
 
       // Merge playlists by id
       const playlistMap = new Map();
       (existingDoc?.playlists || []).forEach(p => p.id && playlistMap.set(p.id, p));
-      incomingPlaylists.forEach(p => p.id && playlistMap.set(p.id, p));
+      incomingPlaylists.forEach(p => {
+        if (p?.id) {
+          const prev = playlistMap.get(p.id) || {};
+          playlistMap.set(p.id, { ...prev, ...p });
+        }
+      });
       const mergedPlaylists = Array.from(playlistMap.values());
 
       const finalLastFmKey = incomingLastFmKey || existingDoc?.lastfmSessionKey || "";
