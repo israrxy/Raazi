@@ -31,7 +31,6 @@ object RaaziAccountManager {
             .requestEmail()
             .requestProfile()
             .requestScopes(DRIVE_APPDATA_SCOPE)
-            .requestIdToken(GOOGLE_WEB_CLIENT_ID)
             .build()
         return GoogleSignIn.getClient(context, gso)
     }
