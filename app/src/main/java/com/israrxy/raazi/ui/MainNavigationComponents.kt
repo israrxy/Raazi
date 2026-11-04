@@ -69,7 +69,7 @@ internal val topLevelDestinations = listOf(
 )
 
 internal val bottomBarBaseHeight = 76.dp
-internal val miniPlayerGap = 10.dp
+internal val miniPlayerGap = 0.dp
 
 internal fun cleanPlaylistId(id: String): String {
     val trimmed = id.trim()

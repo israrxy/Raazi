@@ -52,11 +52,8 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Run targeted unit tests
-        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --tests "com.israrxy.raazi.data.remote.NewPipeCaptionLyricsExtractorTest" --tests "com.israrxy.raazi.data.lyrics.BengaliRomanizerTest" --build-cache --parallel --stacktrace
-
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --build-cache --parallel --stacktrace
+      - name: Build and test debug APK
+        run: ./gradlew :app:testDebugUnitTest --tests "com.israrxy.raazi.ui.library.LibraryStateTest" --tests "com.israrxy.raazi.data.remote.NewPipeCaptionLyricsExtractorTest" --tests "com.israrxy.raazi.data.lyrics.BengaliRomanizerTest" :app:assembleDebug --build-cache --parallel --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

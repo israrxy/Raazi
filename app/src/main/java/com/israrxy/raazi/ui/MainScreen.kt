@@ -151,15 +151,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val collapsedMiniPlayerBottomPadding =
         if (showBottomBar) {
-            navigationBarInset + bottomBarBaseHeight + miniPlayerGap
+            navigationBarInset + bottomBarBaseHeight
         } else {
-            navigationBarInset + 12.dp
+            navigationBarInset + 8.dp
         }
     val contentBottomPadding =
         if (showBottomBar) {
-            navigationBarInset + bottomBarBaseHeight
+            navigationBarInset + bottomBarBaseHeight + (if (showMiniPlayerBar) 66.dp else 0.dp)
         } else {
-            0.dp
+            if (showMiniPlayerBar) 74.dp else 0.dp
         }
     val sheetPeekHeight = 0.dp
 
@@ -440,7 +440,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = if (showBottomBar) 6.dp else 12.dp)
                 .padding(bottom = collapsedMiniPlayerBottomPadding)
         ) {
             MiniPlayer(

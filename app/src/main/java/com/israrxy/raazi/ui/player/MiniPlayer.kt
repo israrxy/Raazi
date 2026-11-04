@@ -116,17 +116,18 @@ fun MiniPlayer(
         val supportingText = track.artist.ifBlank { statusText }.ifBlank { "Playing now" }
 
         val cardInteractionSource = remember { MutableInteractionSource() }
+        val miniPlayerShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(miniPlayerShape)
                 .clickable(
                     interactionSource = cardInteractionSource,
                     indication = LocalIndication.current
                 ) { onNavigateToPlayer() }
                 .animateContentSize(),
-            shape = RoundedCornerShape(18.dp),
+            shape = miniPlayerShape,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
                 width = 1.dp,
