@@ -68,7 +68,6 @@ class MusicPlayerViewModel(
     internal val repository: MusicRepository,
     internal val musicDao: MusicDao
 ) : AndroidViewModel(app) {
-
     internal val searchHistoryManager = SearchHistoryManager(app)
     val searchHistory: StateFlow<List<String>> = searchHistoryManager.history
     internal val musicExtractor = YouTubeMusicExtractor.getInstance()
@@ -379,7 +378,8 @@ class MusicPlayerViewModel(
 
     fun playMusic(musicItem: MusicItem) = playMusicImpl(musicItem)
     fun playFromSearch(index: Int) { _searchResults.value?.items?.getOrNull(index)?.let(::playMusic) }
-    fun playFromQuickPicks(index: Int) { if (_quickPicks.value.isNotEmpty()) playPlaylist(_quickPicks.value, index) }
+    fun playFromQuickPicks(track: MusicItem, allPicks: List<MusicItem> = _quickPicks.value) { val remaining = allPicks.filter { it.id != track.id }; playPlaylist(listOf(track) + remaining, 0); fetchAutoPlayQueue(track) }
+    fun playFromQuickPicks(index: Int) { _quickPicks.value.getOrNull(index)?.let { playFromQuickPicks(it, _quickPicks.value) } }
     fun playFromKeepListening(index: Int) { if (_keepListening.value.isNotEmpty()) playPlaylist(_keepListening.value, index) }
     fun playFromHistory(index: Int) { viewModelScope.launch { if (playbackHistory.value.isNotEmpty()) playPlaylist(playbackHistory.value, index) } }
     fun playFromTrending(index: Int) { _trendingResults.value?.items?.takeIf { it.isNotEmpty() }?.let { playPlaylist(it, index) } }

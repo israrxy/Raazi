@@ -88,6 +88,19 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                             )
                         }
                     }
+                    val ytQuickPicks = finalPage.sections.firstOrNull { s ->
+                        s.title.contains("quick pick", ignoreCase = true) ||
+                        s.label?.contains("start radio", ignoreCase = true) == true
+                    }
+                    if (ytQuickPicks != null) {
+                        val songs = ytQuickPicks.items.mapNotNull { yt ->
+                            (yt as? SongItem)?.let { convertYTItemToMusicItem(it, MusicContentType.SONG) }
+                        }
+                        if (songs.isNotEmpty()) {
+                            _quickPicks.value = songs
+                        }
+                        finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
+                    }
                     _homePage.value = finalPage
                     _error.value = null
                     rebuildHomeFeedState()
@@ -148,7 +161,21 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
             try {
                 val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
                 YouTube.home(params = chipParams).onSuccess { page ->
-                    _homePage.value = page
+                    var finalPage = page
+                    val ytQuickPicks = finalPage.sections.firstOrNull { s ->
+                        s.title.contains("quick pick", ignoreCase = true) ||
+                        s.label?.contains("start radio", ignoreCase = true) == true
+                    }
+                    if (ytQuickPicks != null) {
+                        val songs = ytQuickPicks.items.mapNotNull { yt ->
+                            (yt as? SongItem)?.let { convertYTItemToMusicItem(it, MusicContentType.SONG) }
+                        }
+                        if (songs.isNotEmpty()) {
+                            _quickPicks.value = songs
+                        }
+                        finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
+                    }
+                    _homePage.value = finalPage
                 }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error refreshing YouTube home", e)
@@ -221,7 +248,10 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         )
     }
 
-    val quickPickItems = rankHomeMusicItems(_quickPicks.value).take(12)
+    val quickPickItems = _quickPicks.value
+        .filter { it.id !in dismissedHomeItemIds }
+        .distinctBy { it.id }
+        .take(20)
     if (quickPickItems.isNotEmpty()) {
         sections += HomeSection(
             id = "quick_picks",
@@ -378,12 +408,18 @@ internal fun MusicPlayerViewModel.refreshHomeSectionImpl(sectionId: String) {
     if (sectionId == "quick_picks") {
         viewModelScope.launch {
             try {
-                val picks = repository.quickPicks.first()
-                if (picks.isNotEmpty()) {
-                    _quickPicks.value = picks.shuffled().take(50)
+                val current = _quickPicks.value
+                if (current.size > 8) {
+                    _quickPicks.value = current.shuffled()
                     rebuildHomeFeedState()
                 } else {
-                    refreshHomeContentImpl()
+                    val picks = repository.quickPicks.first()
+                    if (picks.isNotEmpty()) {
+                        _quickPicks.value = picks.shuffled().take(50)
+                        rebuildHomeFeedState()
+                    } else {
+                        refreshHomeContentImpl()
+                    }
                 }
             } catch (e: Exception) {
                 refreshHomeContentImpl()
