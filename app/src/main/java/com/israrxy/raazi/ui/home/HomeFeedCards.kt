@@ -2,6 +2,7 @@ package com.israrxy.raazi.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -10,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -269,7 +271,7 @@ fun YouTubeFeedCard(
                     Box(contentAlignment = Alignment.Center) {
                         if (isSelected) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.filled.Check,
+                                imageVector = Icons.Default.Check,
                                 contentDescription = "Selected",
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(18.dp)
