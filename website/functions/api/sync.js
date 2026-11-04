@@ -9,19 +9,34 @@ const GOOGLE_CLIENT_ID = "974661534423-d8bo9cjl2a1tj3b1bnh7oe247qlcg1gt.apps.goo
 const DB_ID = "raazi_db";
 const COLL_ID = "users";
 
-export async function onRequest(context) {
-  const { request, env } = context;
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
 
-  // Handle CORS preflight
-  if (request.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
-      },
-    });
-  }
+export async function onRequestOptions() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
+export async function onRequestGet(context) {
+  return handleSync(context, "GET");
+}
+
+export async function onRequestPost(context) {
+  return handleSync(context, "POST");
+}
+
+export async function onRequest(context) {
+  const method = context.request.method.toUpperCase();
+  if (method === "OPTIONS") return onRequestOptions();
+  if (method === "GET") return onRequestGet(context);
+  if (method === "POST") return onRequestPost(context);
+  return jsonResponse({ error: "Method not allowed" }, 405);
+}
+
+async function handleSync(context, method) {
+  const { request, env } = context;
 
   try {
     // 1. Verify Google Authorization header
@@ -46,13 +61,13 @@ export async function onRequest(context) {
     }
     const { endpoint, masterKey } = parseCosmosConnectionString(connStr);
 
-    if (request.method === "GET") {
+    if (method === "GET") {
       // Fetch existing user doc
       const doc = await getCosmosDoc(endpoint, masterKey, userId);
       return jsonResponse(doc || { id: userId, email: userEmail, favorites: [], playlists: [] });
     }
 
-    if (request.method === "POST") {
+    if (method === "POST") {
       const body = await request.json().catch(() => ({}));
       const incomingFavorites = Array.isArray(body.favorites) ? body.favorites : [];
       const incomingPlaylists = Array.isArray(body.playlists) ? body.playlists : [];
@@ -105,7 +120,7 @@ function jsonResponse(data, status = 200) {
     status,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
+      ...CORS_HEADERS,
     },
   });
 }
@@ -192,7 +207,6 @@ async function upsertCosmosDoc(endpoint, masterKey, doc) {
       "x-ms-documentdb-partitionkey": JSON.stringify([doc.id]),
       "Authorization": auth,
     },
-    body: JSON.stringify(doc),
   });
 
   if (!res.ok) {
