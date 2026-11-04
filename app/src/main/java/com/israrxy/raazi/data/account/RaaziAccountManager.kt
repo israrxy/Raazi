@@ -6,6 +6,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.israrxy.raazi.data.db.AppDatabase
@@ -43,7 +44,7 @@ object RaaziAccountManager {
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(GOOGLE_WEB_CLIENT_ID)
-                .setAutoSelectEnabled(true)
+                .setAutoSelectEnabled(false)
                 .build()
 
             val request = GetCredentialRequest.Builder()
@@ -73,6 +74,9 @@ object RaaziAccountManager {
             }
         } catch (_: GetCredentialCancellationException) {
             Result.failure(Exception("Sign-in cancelled"))
+        } catch (e: NoCredentialException) {
+            Log.e(TAG, "No credentials available", e)
+            Result.failure(Exception("No Google account selected or Android Client ID not registered in Google Cloud Console"))
         } catch (e: Exception) {
             Log.e(TAG, "Google sign in failed", e)
             Result.failure(e)
