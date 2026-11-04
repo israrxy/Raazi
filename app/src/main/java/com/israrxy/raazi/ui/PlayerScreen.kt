@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,12 +41,14 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 fun PlayerScreen(
     viewModel: MusicPlayerViewModel,
     navController: androidx.navigation.NavController,
-    sheetState: SheetState,
+    sheetState: SheetState? = null,
     onCollapse: () -> Unit,
     isLyricsVisible: Boolean,
     onLyricsVisibilityChange: (Boolean) -> Unit
 ) {
-    val isExpanded = sheetState.targetValue == SheetValue.Expanded || sheetState.currentValue == SheetValue.Expanded
+    val isExpanded = sheetState?.let {
+        it.targetValue == SheetValue.Expanded || it.currentValue == SheetValue.Expanded
+    } ?: true
     if (!isExpanded) {
         Spacer(modifier = Modifier.height(0.dp))
         return
@@ -147,15 +151,32 @@ fun PlayerScreen(
                             .statusBarsPadding()
                             .padding(horizontal = 24.dp)
                     ) {
-                        PlayerTopModeHeader(
-                            playbackState = playbackState,
-                            isLyricsVisible = isLyricsVisible,
-                            sleepTimerActive = sleepTimerActive,
-                            onCollapse = onCollapse,
-                            onLyricsVisibilityChange = onLyricsVisibilityChange,
-                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                            onShowOptionsSheet = { showOptionsSheet = true }
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pointerInput(Unit) {
+                                    var totalDrag = 0f
+                                    detectVerticalDragGestures(
+                                        onDragStart = { totalDrag = 0f },
+                                        onVerticalDrag = { _, dragAmount ->
+                                            totalDrag += dragAmount
+                                            if (totalDrag > 30f) {
+                                                onCollapse()
+                                            }
+                                        }
+                                    )
+                                }
+                        ) {
+                            PlayerTopModeHeader(
+                                playbackState = playbackState,
+                                isLyricsVisible = isLyricsVisible,
+                                sleepTimerActive = sleepTimerActive,
+                                onCollapse = onCollapse,
+                                onLyricsVisibilityChange = onLyricsVisibilityChange,
+                                onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                                onShowOptionsSheet = { showOptionsSheet = true }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(24.dp))
 
@@ -256,6 +277,18 @@ fun PlayerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
+                            .pointerInput(Unit) {
+                                var totalDrag = 0f
+                                detectVerticalDragGestures(
+                                    onDragStart = { totalDrag = 0f },
+                                    onVerticalDrag = { _, dragAmount ->
+                                        totalDrag += dragAmount
+                                        if (totalDrag > 30f) {
+                                            onCollapse()
+                                        }
+                                    }
+                                )
+                            }
                     ) {
                         PlayerTopModeHeader(
                             playbackState = playbackState,

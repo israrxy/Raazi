@@ -169,7 +169,7 @@ internal fun SimpleBottomNavBar(
     hasMiniPlayerAbove: Boolean = false
 ) {
     val navShape = if (hasMiniPlayerAbove) {
-        RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp)
+        RoundedCornerShape(0.dp)
     } else {
         RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     }
@@ -183,9 +183,9 @@ internal fun SimpleBottomNavBar(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = navShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 10.dp,
-            shadowElevation = 18.dp
+            shadowElevation = if (hasMiniPlayerAbove) 0.dp else 18.dp
         ) {
             Row(
                 modifier = Modifier

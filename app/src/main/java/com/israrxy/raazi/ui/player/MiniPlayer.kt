@@ -118,7 +118,7 @@ fun MiniPlayer(
 
         val cardInteractionSource = remember { MutableInteractionSource() }
         val miniPlayerShape = if (isDocked) {
-            RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+            RoundedCornerShape(0.dp)
         } else {
             RoundedCornerShape(16.dp)
         }
@@ -133,11 +133,18 @@ fun MiniPlayer(
                 ) { onNavigateToPlayer() }
                 .animateContentSize(),
             shape = miniPlayerShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
-            ),
+            color = MaterialTheme.colorScheme.surface,
+            border = if (isDocked) {
+                BorderStroke(
+                    width = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)
+                )
+            } else {
+                BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
+                )
+            },
             tonalElevation = 6.dp,
             shadowElevation = if (isDocked) 0.dp else 8.dp
         ) {
