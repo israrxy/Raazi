@@ -465,7 +465,7 @@ class MusicRepository(
     }
 
     val quickPicks: Flow<List<MusicItem>> = db.musicDao().getSmartRecommendations().map { entities ->
-        entities.map { mapTrackToDomain(it) }
+        entities.map { mapHistoryToDomain(it) }
     }
 
     fun getForgottenFavorites(): Flow<List<MusicItem>> {

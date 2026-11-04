@@ -107,34 +107,9 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertTracks(tracks: List<TrackEntity>): List<Long>
 
-    // Smart Quick Picks: blends playback history from top played artists with tracks in library/related
-    @Query("""
-        SELECT 
-            h.id as id,
-            h.title as title,
-            h.artist as artist,
-            h.duration as duration,
-            h.thumbnailUrl as thumbnailUrl,
-            h.audioUrl as audioUrl,
-            h.videoUrl as videoUrl,
-            0 as isLive,
-            NULL as localPath,
-            0 as isFavorite,
-            0 as favoriteSyncState,
-            h.timestamp as timestamp
-        FROM playback_history h
-        WHERE h.artist IN (
-            SELECT artist FROM playback_history GROUP BY artist ORDER BY MAX(timestamp) DESC LIMIT 10
-        )
-        UNION
-        SELECT 
-            t.id, t.title, t.artist, t.duration, t.thumbnailUrl, t.audioUrl, t.videoUrl,
-            t.isLive, t.localPath, t.isFavorite, t.favoriteSyncState, t.timestamp
-        FROM tracks t
-        ORDER BY RANDOM()
-        LIMIT 40
-    """)
-    fun getSmartRecommendations(): Flow<List<TrackEntity>>
+    // Smart Quick Picks: returns most played and recent tracks from playback history
+    @Query("SELECT * FROM playback_history ORDER BY playCount DESC, timestamp DESC LIMIT 50")
+    fun getSmartRecommendations(): Flow<List<PlaybackHistoryEntity>>
     
     // Playback History - increased limit for better recommendations
     @Query("SELECT * FROM playback_history ORDER BY timestamp DESC LIMIT 100")
