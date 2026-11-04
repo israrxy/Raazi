@@ -153,7 +153,7 @@ fun MiniPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
-                        .pointerInput(track.id, onCollapseToFloating) {
+                        .pointerInput(track.id, onCollapseToFloating, onNavigateToPlayer) {
                             var totalX = 0f
                             var totalY = 0f
                             var hasCollapsed = false
@@ -170,6 +170,10 @@ fun MiniPlayer(
                                         hasCollapsed = true
                                         change.consume()
                                         onCollapseToFloating()
+                                    } else if (!hasCollapsed && totalY < -24.dp.toPx()) {
+                                        hasCollapsed = true
+                                        change.consume()
+                                        onNavigateToPlayer()
                                     } else {
                                         change.consume()
                                     }
