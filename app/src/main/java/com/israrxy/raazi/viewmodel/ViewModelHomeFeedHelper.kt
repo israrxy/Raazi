@@ -71,6 +71,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                         finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
                     }
                     _homePage.value = finalPage
+                    cachedDefaultHomePage = finalPage
                     _error.value = null
                 } else if (_quickPicks.value.isEmpty()) {
                     try {
@@ -237,8 +238,8 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
     if (activeCategoryChip != null) {
         sections += _categorySections.value
         _homeFeedState.value = HomeFeedUiState(
-            isLoading = _isCategoryLoading.value && _categorySections.value.isEmpty(),
-            isRefreshing = isRefreshing || _isCategoryLoading.value,
+            isLoading = false,
+            isRefreshing = _isCategoryLoading.value || isRefreshing,
             sections = sections,
             errorMessage = _error.value
         )
@@ -441,6 +442,16 @@ internal fun MusicPlayerViewModel.refreshHomeSectionImpl(sectionId: String) {
                 }
             } catch (e: Exception) {
                 refreshHomeContentImpl()
+            }
+        }
+    } else if (sectionId == "keep_listening") {
+        viewModelScope.launch {
+            try {
+                val history = repository.playbackHistory.first().take(30)
+                _keepListening.value = history
+                rebuildHomeFeedState()
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error refreshing keep listening", e)
             }
         }
     } else {

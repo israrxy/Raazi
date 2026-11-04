@@ -10,7 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -168,7 +171,9 @@ fun HomeCategoryFilterBar(
     selectedChip: com.zionhuang.innertube.pages.HomePage.Chip?,
     onSelectChip: (com.zionhuang.innertube.pages.HomePage.Chip?) -> Unit
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LazyRow(
+        state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
@@ -278,4 +283,127 @@ internal fun HomeFeedItem.stableId(): String = when (this) {
     is HomeFeedItem.PlaylistResult -> playlist.id
     is HomeFeedItem.Mood -> title
     is HomeFeedItem.YouTube -> item.id
+}
+
+@Composable
+fun HomeFeedErrorView(
+    activeCategoryTitle: String?,
+    chips: List<com.zionhuang.innertube.pages.HomePage.Chip>,
+    selectedChip: com.zionhuang.innertube.pages.HomePage.Chip?,
+    errorMessage: String?,
+    onRefreshStatus: () -> Unit,
+    onSelectChip: (com.zionhuang.innertube.pages.HomePage.Chip?) -> Unit,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        HomeStatusHeader(
+            activeCategoryTitle = activeCategoryTitle,
+            isRefreshing = false,
+            onRefresh = onRefreshStatus
+        )
+        HomeCategoryFilterBar(
+            chips = chips,
+            selectedChip = selectedChip,
+            onSelectChip = onSelectChip
+        )
+        Spacer(modifier = Modifier.height(56.dp))
+        Icon(
+            imageVector = Icons.Default.CloudOff,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Something went wrong",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = errorMessage ?: "Failed to load your feed. Check your connection and try again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = onRetry,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 48.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Refresh, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Retry", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+fun HomeFeedEmptyView(
+    activeCategoryTitle: String?,
+    chips: List<com.zionhuang.innertube.pages.HomePage.Chip>,
+    selectedChip: com.zionhuang.innertube.pages.HomePage.Chip?,
+    isRefreshing: Boolean,
+    onRefreshStatus: () -> Unit,
+    onSelectChip: (com.zionhuang.innertube.pages.HomePage.Chip?) -> Unit,
+    onNavigateToSearch: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        HomeStatusHeader(
+            activeCategoryTitle = activeCategoryTitle,
+            isRefreshing = isRefreshing,
+            onRefresh = onRefreshStatus
+        )
+        HomeCategoryFilterBar(
+            chips = chips,
+            selectedChip = selectedChip,
+            onSelectChip = onSelectChip
+        )
+        Spacer(modifier = Modifier.height(64.dp))
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Search for a song",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Find your favorite music to get started.\nYour history will appear here.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = onNavigateToSearch,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Search, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Search a Song", fontWeight = FontWeight.SemiBold)
+        }
+    }
 }

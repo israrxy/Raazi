@@ -148,115 +148,61 @@ fun HomeScreen(
                     }
                 }
             } else if (homeFeedState.errorMessage != null && homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
-                // Error state — failed to load home content
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    HomeStatusHeader(
-                        activeCategoryTitle = selectedInnerTubeChip?.title,
-                        isRefreshing = homeFeedState.isRefreshing,
-                        onRefresh = { viewModel.refreshHomeSection("home_status") }
-                    )
-                    HomeCategoryFilterBar(
-                        chips = allCategoryChips,
-                        selectedChip = selectedInnerTubeChip,
-                        onSelectChip = { viewModel.selectFilterChip(it) }
-                    )
-                    Spacer(modifier = Modifier.height(56.dp))
-                    Icon(
-                        imageVector = Icons.Default.CloudOff,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Something went wrong",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = homeFeedState.errorMessage ?: "Failed to load your feed. Check your connection and try again.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            if (selectedInnerTubeChip != null) {
-                                viewModel.selectFilterChip(selectedInnerTubeChip)
-                            } else {
-                                viewModel.loadHomeContent()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 48.dp)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Retry", fontWeight = FontWeight.SemiBold)
+                HomeFeedErrorView(
+                    activeCategoryTitle = selectedInnerTubeChip?.title,
+                    chips = allCategoryChips,
+                    selectedChip = selectedInnerTubeChip,
+                    errorMessage = homeFeedState.errorMessage,
+                    onRefreshStatus = { viewModel.refreshHomeSection("home_status") },
+                    onSelectChip = { viewModel.selectFilterChip(it) },
+                    onRetry = {
+                        if (selectedInnerTubeChip != null) {
+                            viewModel.selectFilterChip(selectedInnerTubeChip)
+                        } else {
+                            viewModel.loadHomeContent()
+                        }
                     }
-                }
+                )
             } else if (homeFeedState.sections.none { it.type != HomeSectionType.STATUS }) {
-                // Empty state — new user with no history or content
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    HomeStatusHeader(
+                if (selectedInnerTubeChip != null && homeFeedState.isRefreshing) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = effectiveBottomPadding, top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        item {
+                            HomeStatusHeader(
+                                activeCategoryTitle = selectedInnerTubeChip?.title,
+                                isRefreshing = true,
+                                onRefresh = { viewModel.refreshHomeSection("home_status") }
+                            )
+                            HomeCategoryFilterBar(
+                                chips = allCategoryChips,
+                                selectedChip = selectedInnerTubeChip,
+                                onSelectChip = { viewModel.selectFilterChip(it) }
+                            )
+                        }
+                        item {
+                            com.israrxy.raazi.ui.components.ShimmerSectionHeader()
+                            Spacer(modifier = Modifier.height(10.dp))
+                            com.israrxy.raazi.ui.components.ShimmerQuickPicksPanel()
+                        }
+                        item {
+                            com.israrxy.raazi.ui.components.ShimmerSectionHeader()
+                            Spacer(modifier = Modifier.height(10.dp))
+                            com.israrxy.raazi.ui.components.ShimmerFeedRail()
+                        }
+                    }
+                } else {
+                    HomeFeedEmptyView(
                         activeCategoryTitle = selectedInnerTubeChip?.title,
-                        isRefreshing = homeFeedState.isRefreshing,
-                        onRefresh = { viewModel.refreshHomeSection("home_status") }
-                    )
-                    HomeCategoryFilterBar(
                         chips = allCategoryChips,
                         selectedChip = selectedInnerTubeChip,
-                        onSelectChip = { viewModel.selectFilterChip(it) }
+                        isRefreshing = homeFeedState.isRefreshing,
+                        onRefreshStatus = { viewModel.refreshHomeSection("home_status") },
+                        onSelectChip = { viewModel.selectFilterChip(it) },
+                        onNavigateToSearch = onNavigateToSearch
                     )
-                    Spacer(modifier = Modifier.height(64.dp))
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Search for a song",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Find your favorite music to get started.\nYour history will appear here.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = onNavigateToSearch,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 32.dp)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Search, null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Search a Song", fontWeight = FontWeight.SemiBold)
-                    }
                 }
             } else {
                 LazyColumn(
