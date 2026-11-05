@@ -271,7 +271,7 @@ class MusicPlayerViewModel(
     val userPlaylists: StateFlow<List<PlaylistEntity>> = musicDao.getAllPlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _activeDownloads = MutableStateFlow<Map<Long, Pair<MusicItem, Int>>>(emptyMap())
     val activeDownloads: StateFlow<Map<Long, Pair<MusicItem, Int>>> = _activeDownloads.asStateFlow()
-    private val _audioSourceLabel = MutableStateFlow("YouTube")
+    internal val _audioSourceLabel = MutableStateFlow("YouTube")
     val audioSourceLabel: StateFlow<String> = _audioSourceLabel.asStateFlow()
 
     sealed class RingtoneState {

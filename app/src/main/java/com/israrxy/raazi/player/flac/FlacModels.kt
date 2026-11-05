@@ -81,3 +81,9 @@ data class FlacResult(
     val durationMs: Long? = null,
     val tidalTrackId: Long? = null,
 )
+
+sealed class FlacResolutionResult {
+    data class Success(val flacResult: FlacResult) : FlacResolutionResult()
+    data class Failure(val reason: String, val technicalDetail: String? = null) : FlacResolutionResult()
+}
+

@@ -30,7 +30,12 @@ import com.israrxy.raazi.model.PlaybackVideoQuality
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.utils.ShareUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import com.israrxy.raazi.player.flac.FlacResolutionResult
+import com.israrxy.raazi.player.StreamResolver
+import com.israrxy.raazi.viewmodel.switchCurrentTrackStreamToFlac
+import com.israrxy.raazi.viewmodel.switchCurrentTrackStreamToStandard
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +71,9 @@ fun PlayerOptionsSheet(
     val downloadState = allDownloads.find { it.trackId == track.id }
     val isDownloaded = downloadState?.status == DownloadEntity.STATUS_COMPLETED
     val audioSourceLabel by viewModel.audioSourceLabel.collectAsStateWithLifecycle()
+    val streamQuality by viewModel.streamQuality.collectAsStateWithLifecycle()
+    val isFlacStream = (streamQuality?.contains("FLAC", ignoreCase = true) == true) ||
+        (StreamResolver.sessionFlacEnabled == true)
 
     Column(
         modifier = Modifier
@@ -109,6 +117,48 @@ fun PlayerOptionsSheet(
                 }
             )
         }
+
+        Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
+
+        // --- Audio stream quality (Lossless FLAC) ---
+        SheetOption(
+            icon = if (isFlacStream) Icons.Default.GraphicEq else Icons.Default.HighQuality,
+            title = if (isFlacStream) "Lossless stream active" else "Switch to Lossless FLAC",
+            subtitle = if (isFlacStream) {
+                "Playing ${streamQuality ?: "FLAC"} · Tap to switch to Standard (AAC)"
+            } else {
+                "Stream studio quality audio from HiFi catalog"
+            },
+            onClick = {
+                if (isFlacStream) {
+                    viewModel.switchCurrentTrackStreamToStandard {
+                        Toast.makeText(context, "Switched to standard stream", Toast.LENGTH_SHORT).show()
+                    }
+                    onDismiss()
+                } else {
+                    Toast.makeText(context, "Resolving lossless FLAC stream...", Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                    viewModel.switchCurrentTrackStreamToFlac(context, track) { result ->
+                        when (result) {
+                            is FlacResolutionResult.Success -> {
+                                Toast.makeText(
+                                    context,
+                                    "Switched to Lossless (${result.flacResult.qualityLabel})",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            is FlacResolutionResult.Failure -> {
+                                Toast.makeText(
+                                    context,
+                                    "FLAC Unavailable: ${result.reason}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+            }
+        )
 
         Divider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
 

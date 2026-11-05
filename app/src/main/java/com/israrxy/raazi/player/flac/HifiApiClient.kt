@@ -25,8 +25,19 @@ object HifiApiClient {
     )
 
     var customInstanceUrl: String? = null
+    @Volatile
+    var lastResolutionIssue: String? = null
 
     private fun baseUrl(): String = customInstanceUrl ?: defaultInstances.first()
+
+    private fun formatExceptionMessage(e: Exception): String {
+        return when (e) {
+            is java.net.UnknownHostException -> "HiFi servers unreachable (DNS lookup failed)"
+            is java.net.SocketTimeoutException -> "HiFi server connection timed out"
+            is java.net.ConnectException -> "Connection refused by HiFi servers"
+            else -> "HiFi connection error: ${e.localizedMessage ?: e.message ?: "unknown"}"
+        }
+    }
 
     private fun allUrls(path: String): List<String> {
         val urls = mutableListOf<String>()
@@ -40,6 +51,7 @@ object HifiApiClient {
 
     suspend fun searchByISRC(isrc: String): List<HifiTrack> = withContext(Dispatchers.IO) {
         val urls = allUrls("/search/?i=$isrc")
+        var lastErr: String? = null
         for (url in urls) {
             try {
                 val request = Request.Builder().url(url).get().build()
@@ -50,13 +62,18 @@ object HifiApiClient {
                     val tracks = result.items.orEmpty()
                     if (tracks.isNotEmpty()) {
                         Log.d(TAG, "ISRC search succeeded on $url: ${tracks.size} results")
+                        lastResolutionIssue = null
                         return@withContext tracks
                     }
+                } else {
+                    lastErr = "HiFi server returned HTTP ${response.code}"
                 }
             } catch (e: Exception) {
+                lastErr = formatExceptionMessage(e)
                 Log.w(TAG, "ISRC search failed on $url: ${e.message}")
             }
         }
+        lastResolutionIssue = lastErr
         Log.w(TAG, "ISRC search failed on all instances for: $isrc")
         emptyList()
     }
@@ -64,6 +81,7 @@ object HifiApiClient {
     suspend fun searchByText(query: String, limit: Int = 10): List<HifiTrack> = withContext(Dispatchers.IO) {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val urls = allUrls("/search/?s=$encoded&limit=$limit")
+        var lastErr: String? = null
         for (url in urls) {
             try {
                 val request = Request.Builder().url(url).get().build()
@@ -74,19 +92,25 @@ object HifiApiClient {
                     val tracks = result.items.orEmpty()
                     if (tracks.isNotEmpty()) {
                         Log.d(TAG, "Text search succeeded on $url: ${tracks.size} results")
+                        lastResolutionIssue = null
                         return@withContext tracks
                     }
+                } else {
+                    lastErr = "HiFi server returned HTTP ${response.code}"
                 }
             } catch (e: Exception) {
+                lastErr = formatExceptionMessage(e)
                 Log.w(TAG, "Text search failed on $url: ${e.message}")
             }
         }
+        lastResolutionIssue = lastErr
         Log.w(TAG, "Text search failed on all instances for: $query")
         emptyList()
     }
 
     suspend fun getStreamUrl(trackId: Long, quality: String = "HI_RES_LOSSLESS"): HifiStreamResponse? = withContext(Dispatchers.IO) {
         val urls = allUrls("/track?id=$trackId&quality=$quality")
+        var lastErr: String? = null
         for (url in urls) {
             try {
                 val request = Request.Builder().url(url).get().build()
@@ -96,13 +120,18 @@ object HifiApiClient {
                     val result = json.decodeFromString<HifiStreamResponse>(body)
                     if (!result.urls.isNullOrEmpty() || !result.manifest.isNullOrEmpty()) {
                         Log.d(TAG, "Stream URL succeeded on $url")
+                        lastResolutionIssue = null
                         return@withContext result
                     }
+                } else {
+                    lastErr = "HiFi server returned HTTP ${response.code}"
                 }
             } catch (e: Exception) {
+                lastErr = formatExceptionMessage(e)
                 Log.w(TAG, "Stream URL failed on $url: ${e.message}")
             }
         }
+        lastResolutionIssue = lastErr
         Log.w(TAG, "Stream URL failed on all instances for trackId: $trackId")
         null
     }
