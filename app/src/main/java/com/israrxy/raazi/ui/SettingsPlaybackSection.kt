@@ -26,10 +26,7 @@ internal fun LazyListScope.settingsPlaybackSection(
         val doubleTapSeekDuration by settingsDataStore.doubleTapSeekDuration.collectAsState(initial = "10")
         val keepScreenAwake by settingsDataStore.keepScreenAwake.collectAsState(initial = false)
         val pauseOnDisconnect by settingsDataStore.pauseOnDisconnect.collectAsState(initial = true)
-        val flacEnabled by settingsDataStore.flacEnabled.collectAsState(initial = false)
-        val hifiApiUrl by settingsDataStore.hifiApiUrl.collectAsState(initial = "")
         var showSeekDialog by remember { mutableStateOf(false) }
-        var showLosslessDialog by remember { mutableStateOf(false) }
 
         SettingsSection(title = "Audio Quality & Streaming") {
             SettingsSelectItem(
@@ -38,25 +35,6 @@ internal fun LazyListScope.settingsPlaybackSection(
                 value = audioQuality,
                 onClick = onShowAudioQualityDialog
             )
-            SettingsDivider()
-            SettingsSwitchItem(
-                icon = Icons.Filled.Audiotrack,
-                title = "Lossless Audio (FLAC)",
-                subtitle = if (flacEnabled) "Auto-switches to Lossless FLAC when available with studio master fallback" else "Disabled · Standard AAC/Opus audio",
-                checked = flacEnabled,
-                onCheckedChange = { enabled ->
-                    scope.launch { settingsDataStore.setFlacEnabled(enabled) }
-                }
-            )
-            if (flacEnabled) {
-                SettingsDivider()
-                SettingsSelectItem(
-                    icon = Icons.Filled.CloudQueue,
-                    title = "Lossless Server",
-                    value = if (hifiApiUrl.isNotBlank()) "Custom Server" else "Community Network (Auto)",
-                    onClick = { showLosslessDialog = true }
-                )
-            }
             SettingsDivider()
             SettingsSelectItem(
                 icon = Icons.Filled.GraphicEq,
@@ -125,15 +103,6 @@ internal fun LazyListScope.settingsPlaybackSection(
                     showSeekDialog = false
                 },
                 onDismiss = { showSeekDialog = false }
-            )
-        }
-
-        if (showLosslessDialog) {
-            com.israrxy.raazi.ui.settings.SettingsLosslessDialog(
-                initialUrl = hifiApiUrl,
-                settingsDataStore = settingsDataStore,
-                scope = scope,
-                onDismiss = { showLosslessDialog = false }
             )
         }
     }
