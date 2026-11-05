@@ -238,26 +238,37 @@ fun LyricsScreen(
                 kotlinx.coroutines.yield()
             }
 
-            val layoutInfo = listState.layoutInfo
-            val targetItem = layoutInfo.visibleItemsInfo.find { it.index == targetLazyIndex }
-            val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+            try {
+                val layoutInfo = listState.layoutInfo
+                val totalCount = layoutInfo.totalItemsCount
+                if (totalCount > 0) {
+                    val safeTargetIndex = targetLazyIndex.coerceIn(0, totalCount - 1)
+                    val targetItem = layoutInfo.visibleItemsInfo.find { it.index == safeTargetIndex }
+                    val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
-            if (targetItem != null && viewportHeight > 0) {
-                val desiredY = (viewportHeight * 0.36f).toInt()
-                val itemCenter = targetItem.offset + (targetItem.size / 2)
-                val diff = itemCenter - desiredY
-                if (abs(diff) > 8) {
-                    listState.animateScrollBy(
-                        value = diff.toFloat(),
-                        animationSpec = tween(durationMillis = 480, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
-                    )
+                    if (targetItem != null && viewportHeight > 0) {
+                        val desiredY = (viewportHeight * 0.36f).toInt()
+                        val itemCenter = targetItem.offset + (targetItem.size / 2)
+                        val diff = itemCenter - desiredY
+                        if (abs(diff) > 8) {
+                            listState.animateScrollBy(
+                                value = diff.toFloat(),
+                                animationSpec = tween(durationMillis = 480, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                            )
+                        }
+                    } else {
+                        // Compose requires scrollOffset >= 0 (negative offsets throw IllegalArgumentException)
+                        val anchorIndex = (safeTargetIndex - 1).coerceAtLeast(0)
+                        listState.animateScrollToItem(
+                            index = anchorIndex,
+                            scrollOffset = 0
+                        )
+                    }
                 }
-            } else {
-                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.36f).toInt() else -160
-                listState.animateScrollToItem(
-                    index = targetLazyIndex,
-                    scrollOffset = anchorOffset
-                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                android.util.Log.w("LyricsScreen", "Failed auto-scrolling lyrics to index $targetLazyIndex", e)
             }
         }
     }
@@ -407,11 +418,7 @@ fun LyricsScreen(
                 onToggleFavorite = { viewModel.toggleFavorite(it) }
             )
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 LyricsSettingsDropdownMenu(
                     visible = showOptionsMenu,
                     lyrics = lyrics,

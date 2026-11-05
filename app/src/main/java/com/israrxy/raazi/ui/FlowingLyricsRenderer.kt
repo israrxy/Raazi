@@ -80,18 +80,22 @@ internal fun FlowingLyricWord(
             val rawProgress = (currentPositionMs - word.startTimeMs).toFloat() / duration.toFloat()
             val progress = rawProgress.coerceIn(0.001f, 0.999f)
 
-            val flowingBrush = remember(progress) {
+            // Strictly monotonically increasing color stops (0.0f < p1 < p2 < 1.0f)
+            val p1 = progress.coerceIn(0.01f, 0.94f)
+            val p2 = (p1 + 0.05f).coerceIn(p1 + 0.01f, 0.99f)
+
+            val flowingBrush = remember(p1, p2) {
                 Brush.horizontalGradient(
                     0.0f to Color.White,
-                    progress to Color.White,
-                    (progress + 0.12f).coerceAtMost(1.0f) to Color.White.copy(alpha = 0.35f),
+                    p1 to Color.White,
+                    p2 to Color.White.copy(alpha = 0.35f),
                     1.0f to Color.White.copy(alpha = 0.35f)
                 )
             }
 
             Text(
                 text = transformed,
-                style = textStyle.copy(brush = flowingBrush),
+                style = textStyle.copy(brush = flowingBrush, color = Color.Unspecified),
                 modifier = Modifier.graphicsLayer {
                     val scale = 1f + 0.035f * (1f - kotlin.math.abs(progress - 0.5f) * 2f)
                     scaleX = scale
