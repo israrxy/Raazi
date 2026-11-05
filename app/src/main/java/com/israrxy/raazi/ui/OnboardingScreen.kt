@@ -1,49 +1,34 @@
 package com.israrxy.raazi.ui
 
-import android.annotation.SuppressLint
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Login
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.local.SettingsDataStore
-import com.israrxy.raazi.ui.theme.ElectricViolet
-import com.israrxy.raazi.ui.theme.Emerald500
-import com.israrxy.raazi.ui.theme.Zinc900
+import com.israrxy.raazi.data.region.RegionManager
+import com.israrxy.raazi.ui.onboarding.OnboardingAudioLyricsPage
+import com.israrxy.raazi.ui.onboarding.OnboardingHeroPage
+import com.israrxy.raazi.ui.onboarding.OnboardingPersonalizePage
+import com.israrxy.raazi.ui.settings.SettingsRegionDialog
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
-import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -57,30 +42,30 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val settingsDataStore = remember { SettingsDataStore(context) }
-    
-    // Privacy policy acceptance
-    val privacyAccepted by settingsDataStore.privacyPolicyAccepted.collectAsState(initial = false)
 
-    // Theme options from DataStore
+    // Settings & State flows
+    val privacyAccepted by settingsDataStore.privacyPolicyAccepted.collectAsState(initial = false)
     val themeMode by settingsDataStore.themeMode.collectAsState(initial = "System")
     val useDynamicColor by settingsDataStore.useDynamicColor.collectAsState(initial = true)
     val pastelAccent by settingsDataStore.pastelAccent.collectAsState(initial = "Emerald")
     val preferredLyricsType by settingsDataStore.preferredLyricsType.collectAsState(initial = "ROMANIZED")
+    val audioQuality by settingsDataStore.audioQuality.collectAsState(initial = "High")
     val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsState(initial = true)
-    val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
     val contentCountry by settingsDataStore.contentCountry.collectAsState(initial = "AUTO")
+    val detectedCountryCode = remember { RegionManager.detectHardwareCountry(context) }
+
     var showRegionDialog by remember { mutableStateOf(false) }
-    val detectedCountryCode = remember { com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context) }
-    
-    // WebView active state
     var isWebViewVisible by remember { mutableStateOf(false) }
+
+    // Page 3 is Privacy. Disable swiping past page 3 until accepted.
+    val isSwipeAllowed = pagerState.currentPage != 4 && (pagerState.currentPage != 3 || privacyAccepted)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Ambient background brush
+        // Ambient background gradient
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -94,39 +79,39 @@ fun OnboardingScreen(
                     )
                 )
         )
-        
-        // Pager containing pages
+
+        // Horizontal Pager
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = pagerState.currentPage != 4 && (pagerState.currentPage != 1 || privacyAccepted) // Disable swiping past privacy until accepted
+            userScrollEnabled = isSwipeAllowed
         ) { page ->
             when (page) {
-                0 -> WelcomeIntroPage()
-                1 -> OnboardingPrivacyPage(
+                0 -> OnboardingHeroPage()
+                1 -> OnboardingPersonalizePage(
+                    themeMode = themeMode,
+                    useDynamicColor = useDynamicColor,
+                    pastelAccent = pastelAccent,
+                    contentCountry = contentCountry,
+                    detectedCountryCode = detectedCountryCode,
+                    onThemeChange = { mode -> scope.launch { settingsDataStore.setThemeMode(mode) } },
+                    onDynamicColorToggle = { enabled -> scope.launch { settingsDataStore.setDynamicColor(enabled) } },
+                    onPastelAccentChange = { accent -> scope.launch { settingsDataStore.setPastelAccent(accent) } },
+                    onRegionClick = { showRegionDialog = true }
+                )
+                2 -> OnboardingAudioLyricsPage(
+                    preferredLyricsType = preferredLyricsType,
+                    audioQuality = audioQuality,
+                    microPlayerEnabled = microPlayerEnabled,
+                    onLyricsTypeChange = { type -> scope.launch { settingsDataStore.setPreferredLyricsType(type) } },
+                    onAudioQualityChange = { quality -> scope.launch { settingsDataStore.setAudioQuality(quality) } },
+                    onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } }
+                )
+                3 -> OnboardingPrivacyPage(
                     accepted = privacyAccepted,
                     onAcceptToggle = { accepted ->
                         scope.launch { settingsDataStore.setPrivacyPolicyAccepted(accepted) }
                     }
-                )
-                2 -> CustomizationPage(
-                    themeMode = themeMode,
-                    useDynamicColor = useDynamicColor,
-                    pastelAccent = pastelAccent,
-                    onThemeChange = { mode -> scope.launch { settingsDataStore.setThemeMode(mode) } },
-                    onDynamicColorToggle = { enabled -> scope.launch { settingsDataStore.setDynamicColor(enabled) } },
-                    onPastelAccentChange = { accent -> scope.launch { settingsDataStore.setPastelAccent(accent) } }
-                )
-                3 -> OnboardingPreferencesPage(
-                    preferredLyricsType = preferredLyricsType,
-                    microPlayerEnabled = microPlayerEnabled,
-                    lyricsAutoScroll = lyricsAutoScroll,
-                    contentCountry = contentCountry,
-                    detectedCountryCode = detectedCountryCode,
-                    onLyricsTypeChange = { type -> scope.launch { settingsDataStore.setPreferredLyricsType(type) } },
-                    onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } },
-                    onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } },
-                    onRegionClick = { showRegionDialog = true }
                 )
                 4 -> OnboardingAccountPage(
                     viewModel = viewModel,
@@ -134,8 +119,9 @@ fun OnboardingScreen(
                     onWebViewVisibilityChange = { isWebViewVisible = it },
                     onFinished = {
                         scope.launch {
-                            delay(400)
+                            delay(300)
                             settingsDataStore.setPrivacyPolicyAccepted(true)
+                            settingsDataStore.setOnboardingCompleted(true)
                             onFinish()
                         }
                     }
@@ -144,14 +130,15 @@ fun OnboardingScreen(
         }
 
         // Top Skip button
-        if (pagerState.currentPage < 4 && !isWebViewVisible && (pagerState.currentPage != 1 || privacyAccepted)) {
+        if (pagerState.currentPage < 4 && !isWebViewVisible) {
             TextButton(
                 onClick = {
                     scope.launch {
                         if (privacyAccepted) {
+                            settingsDataStore.setOnboardingCompleted(true)
                             onFinish()
                         } else {
-                            pagerState.animateScrollToPage(1)
+                            pagerState.animateScrollToPage(3)
                         }
                     }
                 },
@@ -161,13 +148,13 @@ fun OnboardingScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Skip All",
+                    text = "Skip",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
         }
-        
+
         // Bottom controller & Page Indicators
         if (!isWebViewVisible) {
             Row(
@@ -177,6 +164,7 @@ fun OnboardingScreen(
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Back Button
                 Box(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.CenterStart
@@ -188,31 +176,37 @@ fun OnboardingScreen(
                                     pagerState.animateScrollToPage(pagerState.currentPage - 1)
                                 }
                             },
-                            modifier = Modifier.height(50.dp),
-                            shape = RoundedCornerShape(25.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                            modifier = Modifier.height(48.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Back", fontWeight = FontWeight.Bold)
+                            Text("Back", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
 
+                // Page Indicator Dots
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(5) { index ->
                         val isSelected = pagerState.currentPage == index
-                        val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, label = "width")
+                        val width by animateDpAsState(
+                            targetValue = if (isSelected) 22.dp else 7.dp,
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            label = "dot_width"
+                        )
                         val color by animateColorAsState(
-                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            label = "color"
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            label = "dot_color"
                         )
 
                         Box(
                             modifier = Modifier
-                                .height(8.dp)
+                                .height(7.dp)
                                 .width(width)
                                 .clip(CircleShape)
                                 .background(color)
@@ -220,11 +214,12 @@ fun OnboardingScreen(
                     }
                 }
 
+                // Next / Finish Button
                 Box(
                     modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.CenterEnd
                 ) {
-                    val canProceed = pagerState.currentPage != 1 || privacyAccepted
+                    val canProceed = pagerState.currentPage != 3 || privacyAccepted
                     Button(
                         onClick = {
                             if (pagerState.currentPage < 4) {
@@ -234,30 +229,35 @@ fun OnboardingScreen(
                             } else {
                                 scope.launch {
                                     settingsDataStore.setPrivacyPolicyAccepted(true)
+                                    settingsDataStore.setOnboardingCompleted(true)
                                     onFinish()
                                 }
                             }
                         },
                         enabled = canProceed,
-                        modifier = Modifier.height(50.dp),
-                        shape = RoundedCornerShape(25.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp)
+                        modifier = Modifier.height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
                     ) {
+                        val isLastPage = pagerState.currentPage == 4
                         Text(
-                            text = if (pagerState.currentPage == 4) "Finish" else "Next",
+                            text = if (isLastPage) "Start" else "Next",
                             fontWeight = FontWeight.Bold
                         )
-                        if (pagerState.currentPage < 4) {
-                            Spacer(Modifier.width(6.dp))
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
-                        }
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            imageVector = if (isLastPage) Icons.Default.PlayArrow else Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
         }
 
+        // Region Selection Dialog
         if (showRegionDialog) {
-            com.israrxy.raazi.ui.settings.SettingsRegionDialog(
+            SettingsRegionDialog(
                 currentCountryCode = contentCountry,
                 detectedCountryCode = detectedCountryCode,
                 onDismiss = { showRegionDialog = false },
@@ -265,13 +265,13 @@ fun OnboardingScreen(
                     scope.launch {
                         settingsDataStore.setContentCountry(selectedCode)
                         val resolved = if (selectedCode.isBlank() || selectedCode.equals("AUTO", ignoreCase = true)) {
-                            com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context)
+                            RegionManager.detectHardwareCountry(context)
                         } else {
                             selectedCode
                         }
-                        com.israrxy.raazi.data.region.RegionManager.applyLocale(
+                        RegionManager.applyLocale(
                             resolved,
-                            com.israrxy.raazi.data.region.RegionManager.getLanguageCode()
+                            RegionManager.getLanguageCode()
                         )
                     }
                     showRegionDialog = false
@@ -280,4 +280,3 @@ fun OnboardingScreen(
         }
     }
 }
-
