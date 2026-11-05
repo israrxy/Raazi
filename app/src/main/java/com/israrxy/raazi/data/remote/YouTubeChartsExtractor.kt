@@ -33,25 +33,25 @@ class YouTubeChartsExtractor {
     private val PL_GLOBAL_TOP_VIDEOS = "VLPL4fGSI1pDJn3-A5n37Ua2u14s141v09fG"
     private val PL_TRENDING = "FEmusic_trending" // Or FEmusic_explore
     
-    suspend fun getCharts(): Map<String, List<MusicItem>> = withContext(Dispatchers.IO) {
+    suspend fun getCharts(targetCountry: String? = null): Map<String, List<MusicItem>> = withContext(Dispatchers.IO) {
         val results = mutableMapOf<String, List<MusicItem>>()
 
         // 1. Try Main Charts Page
-        val mainJson = browse("FEmusic_charts")
+        val mainJson = browse("FEmusic_charts", targetCountry)
         if (mainJson != null) {
             results.putAll(parseCharts(mainJson))
         }
 
         // 2. Fallbacks if specific sections are missing
         if (results.keys.none { it.contains("Top songs", true) }) {
-             browse(PL_GLOBAL_TOP_SONGS)?.let { json ->
+             browse(PL_GLOBAL_TOP_SONGS, targetCountry)?.let { json ->
                  val items = parsePlaylist(json)
                  if (items.isNotEmpty()) results["Global Top 100 Songs"] = items
              }
         }
 
         if (results.keys.none { it.contains("Top music videos", true) }) {
-             browse(PL_GLOBAL_TOP_VIDEOS)?.let { json ->
+             browse(PL_GLOBAL_TOP_VIDEOS, targetCountry)?.let { json ->
                  val items = parsePlaylist(json)
                  if (items.isNotEmpty()) results["Global Top 100 Music Videos"] = items
              }
@@ -60,7 +60,7 @@ class YouTubeChartsExtractor {
         results
     }
 
-    private fun browse(browseId: String): JsonObject? {
+    private fun browse(browseId: String, targetCountry: String? = null): JsonObject? {
         try {
             val headers = mapOf(
                 "X-Goog-Api-Format-Version" to "1",
@@ -73,8 +73,11 @@ class YouTubeChartsExtractor {
                  "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0"
             )
 
-            val countryCode = Locale.getDefault().country.takeIf { it.isNotBlank() } ?: "US"
-            val languageCode = Locale.getDefault().toLanguageTag().takeIf { it.isNotBlank() } ?: "en-US"
+            val countryCode = targetCountry?.takeIf { it.isNotBlank() }
+                ?: com.israrxy.raazi.data.region.RegionManager.getCountryCode().takeIf { it.isNotBlank() }
+                ?: Locale.getDefault().country.takeIf { it.isNotBlank() } ?: "US"
+            val languageCode = com.israrxy.raazi.data.region.RegionManager.getLanguageCode().takeIf { it.isNotBlank() }
+                ?: Locale.getDefault().toLanguageTag().takeIf { it.isNotBlank() } ?: "en-US"
 
             // Context Payload
             val context = JsonObject()

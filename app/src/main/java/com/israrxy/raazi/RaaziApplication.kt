@@ -69,9 +69,24 @@ class RaaziApplication : Application(), ImageLoaderFactory {
         }
         container = AppContainer(database, applicationContext)
 
+        // Pre-initialize hardware locale synchronously so first network calls carry detected region
+        try {
+            com.israrxy.raazi.data.region.RegionManager.applyLocale(
+                com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(this),
+                com.israrxy.raazi.data.region.RegionManager.detectSystemLanguage()
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("RaaziApp", "Early RegionManager init failed", e)
+        }
+
         bluetoothDeviceManager = com.israrxy.raazi.data.local.BluetoothDeviceManager(applicationContext)
 
         MainScope().launch(Dispatchers.IO) {
+            try {
+                com.israrxy.raazi.data.region.RegionManager.init(this@RaaziApplication, settingsDataStore)
+            } catch (e: Exception) {
+                android.util.Log.e("RaaziApp", "RegionManager settings init failed", e)
+            }
             try {
                 bluetoothDeviceManager.start()
             } catch (e: Exception) {

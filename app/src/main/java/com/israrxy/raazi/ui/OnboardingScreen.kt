@@ -68,6 +68,9 @@ fun OnboardingScreen(
     val preferredLyricsType by settingsDataStore.preferredLyricsType.collectAsState(initial = "ROMANIZED")
     val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsState(initial = true)
     val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
+    val contentCountry by settingsDataStore.contentCountry.collectAsState(initial = "AUTO")
+    var showRegionDialog by remember { mutableStateOf(false) }
+    val detectedCountryCode = remember { com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context) }
     
     // WebView active state
     var isWebViewVisible by remember { mutableStateOf(false) }
@@ -118,9 +121,12 @@ fun OnboardingScreen(
                     preferredLyricsType = preferredLyricsType,
                     microPlayerEnabled = microPlayerEnabled,
                     lyricsAutoScroll = lyricsAutoScroll,
+                    contentCountry = contentCountry,
+                    detectedCountryCode = detectedCountryCode,
                     onLyricsTypeChange = { type -> scope.launch { settingsDataStore.setPreferredLyricsType(type) } },
                     onMicroPlayerToggle = { enabled -> scope.launch { settingsDataStore.setMicroPlayerEnabled(enabled) } },
-                    onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } }
+                    onLyricsAutoScrollToggle = { enabled -> scope.launch { settingsDataStore.setLyricsAutoScroll(enabled) } },
+                    onRegionClick = { showRegionDialog = true }
                 )
                 4 -> OnboardingAccountPage(
                     viewModel = viewModel,
@@ -248,6 +254,29 @@ fun OnboardingScreen(
                     }
                 }
             }
+        }
+
+        if (showRegionDialog) {
+            com.israrxy.raazi.ui.settings.SettingsRegionDialog(
+                currentCountryCode = contentCountry,
+                detectedCountryCode = detectedCountryCode,
+                onDismiss = { showRegionDialog = false },
+                onRegionSelected = { selectedCode ->
+                    scope.launch {
+                        settingsDataStore.setContentCountry(selectedCode)
+                        val resolved = if (selectedCode.isBlank() || selectedCode.equals("AUTO", ignoreCase = true)) {
+                            com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context)
+                        } else {
+                            selectedCode
+                        }
+                        com.israrxy.raazi.data.region.RegionManager.applyLocale(
+                            resolved,
+                            com.israrxy.raazi.data.region.RegionManager.getLanguageCode()
+                        )
+                    }
+                    showRegionDialog = false
+                }
+            )
         }
     }
 }

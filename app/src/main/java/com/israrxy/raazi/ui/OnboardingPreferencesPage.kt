@@ -30,9 +30,12 @@ internal fun OnboardingPreferencesPage(
     preferredLyricsType: String,
     microPlayerEnabled: Boolean,
     lyricsAutoScroll: Boolean,
+    contentCountry: String = "AUTO",
+    detectedCountryCode: String = "US",
     onLyricsTypeChange: (String) -> Unit,
     onMicroPlayerToggle: (Boolean) -> Unit,
-    onLyricsAutoScrollToggle: (Boolean) -> Unit
+    onLyricsAutoScrollToggle: (Boolean) -> Unit,
+    onRegionClick: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -289,6 +292,49 @@ internal fun OnboardingPreferencesPage(
                     checked = lyricsAutoScroll,
                     onCheckedChange = onLyricsAutoScrollToggle
                 )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // Card 4: Content Region (Auto-detected)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onRegionClick() },
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Content Region",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val displayRegion = if (contentCountry.isBlank() || contentCountry.equals("AUTO", ignoreCase = true)) {
+                        val detectedName = com.israrxy.raazi.data.region.RegionManager.getRegionName(detectedCountryCode)
+                        "Auto-detect ($detectedName)"
+                    } else {
+                        com.israrxy.raazi.data.region.RegionManager.getRegionName(contentCountry)
+                    }
+                    Text(
+                        text = "Charts & Quick Picks tuned to: $displayRegion",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onRegionClick) {
+                    Text("Change")
+                }
             }
         }
 

@@ -82,6 +82,8 @@ class SettingsDataStore(private val context: Context) {
         val RAAZI_GOOGLE_ID_TOKEN_KEY = stringPreferencesKey("raazi_google_id_token")
         val RAAZI_LAST_SYNC_KEY = longPreferencesKey("raazi_last_sync")
         val RAAZI_AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("raazi_auto_sync_enabled")
+        val CONTENT_COUNTRY_KEY = stringPreferencesKey("content_country")
+        val CONTENT_LANGUAGE_KEY = stringPreferencesKey("content_language")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -340,4 +342,10 @@ class SettingsDataStore(private val context: Context) {
 
     val privacyPolicyAccepted: Flow<Boolean> = prefFlow(PRIVACY_POLICY_ACCEPTED_KEY, false)
     suspend fun setPrivacyPolicyAccepted(accepted: Boolean) = setPref(PRIVACY_POLICY_ACCEPTED_KEY, accepted)
+
+    val contentCountry: Flow<String> = prefFlow(CONTENT_COUNTRY_KEY, "AUTO")
+    suspend fun setContentCountry(country: String) = setPref(CONTENT_COUNTRY_KEY, country)
+
+    val contentLanguage: Flow<String> = prefFlow(CONTENT_LANGUAGE_KEY, "AUTO")
+    suspend fun setContentLanguage(language: String) = setPref(CONTENT_LANGUAGE_KEY, language)
 }

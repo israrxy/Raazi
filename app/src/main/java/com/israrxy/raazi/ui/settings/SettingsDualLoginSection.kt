@@ -89,6 +89,19 @@ fun SettingsDualLoginSection(
     val isSyncingYouTubeLibrary by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
     val youTubeSyncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
 
+    // Region State
+    val contentCountry by settingsDataStore.contentCountry.collectAsStateWithLifecycle(initialValue = "AUTO")
+    var showRegionDialog by remember { mutableStateOf(false) }
+    val detectedCountryCode = remember { com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context) }
+    val regionDisplayValue = remember(contentCountry, detectedCountryCode) {
+        if (contentCountry.isBlank() || contentCountry.equals("AUTO", ignoreCase = true)) {
+            val detectedName = com.israrxy.raazi.data.region.RegionManager.getRegionName(detectedCountryCode)
+            "Auto ($detectedName)"
+        } else {
+            com.israrxy.raazi.data.region.RegionManager.getRegionName(contentCountry)
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -349,6 +362,47 @@ fun SettingsDualLoginSection(
                 )
             }
         }
+
+        // ==========================================
+        // OPTION 3: CONTENT & REGION
+        // ==========================================
+        SettingsSection(title = "Content & Region") {
+            SettingsSelectItem(
+                icon = Icons.Filled.Language,
+                title = "Content Region",
+                value = regionDisplayValue,
+                onClick = { showRegionDialog = true }
+            )
+        }
+    }
+
+    if (showRegionDialog) {
+        SettingsRegionDialog(
+            currentCountryCode = contentCountry,
+            detectedCountryCode = detectedCountryCode,
+            onDismiss = { showRegionDialog = false },
+            onRegionSelected = { selectedCode ->
+                scope.launch {
+                    settingsDataStore.setContentCountry(selectedCode)
+                    val resolved = if (selectedCode.isBlank() || selectedCode.equals("AUTO", ignoreCase = true)) {
+                        com.israrxy.raazi.data.region.RegionManager.detectHardwareCountry(context)
+                    } else {
+                        selectedCode
+                    }
+                    com.israrxy.raazi.data.region.RegionManager.applyLocale(
+                        resolved,
+                        com.israrxy.raazi.data.region.RegionManager.getLanguageCode()
+                    )
+                    viewModel.refreshHomeContent()
+                    Toast.makeText(
+                        context,
+                        "Region set to ${com.israrxy.raazi.data.region.RegionManager.getRegionName(resolved)}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                showRegionDialog = false
+            }
+        )
     }
 }
 
