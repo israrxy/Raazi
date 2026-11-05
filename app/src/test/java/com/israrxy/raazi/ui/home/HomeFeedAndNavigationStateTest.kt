@@ -54,6 +54,10 @@ class HomeFeedAndNavigationStateTest {
             id = "song_1",
             title = "Starboy",
             artist = "The Weeknd",
+            duration = 180_000L,
+            thumbnailUrl = "https://example.com/thumb.jpg",
+            audioUrl = "",
+            videoUrl = "watch?v=song_1",
             contentType = MusicContentType.SONG
         )
         assertTrue(songItem.isPlayableSearchItem())
@@ -64,6 +68,10 @@ class HomeFeedAndNavigationStateTest {
             id = "artist_1",
             title = "The Weeknd",
             artist = "Artist",
+            duration = 0L,
+            thumbnailUrl = "https://example.com/artist.jpg",
+            audioUrl = "",
+            videoUrl = "",
             contentType = MusicContentType.ARTIST
         )
         assertTrue(artistItem.isArtistResult())
@@ -73,6 +81,10 @@ class HomeFeedAndNavigationStateTest {
             id = "pl_1",
             title = "Top Hits 2026",
             artist = "Raazi",
+            duration = 0L,
+            thumbnailUrl = "https://example.com/pl.jpg",
+            audioUrl = "",
+            videoUrl = "",
             isPlaylist = true,
             contentType = MusicContentType.PLAYLIST
         )
