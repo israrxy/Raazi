@@ -1,6 +1,6 @@
 package com.israrxy.raazi.data.lyrics
 
-import android.icu.text.Transliterator
+import android.os.Build
 import com.israrxy.raazi.service.LyricsTranslator
 
 enum class LyricsViewVariant(val label: String) {
@@ -8,20 +8,32 @@ enum class LyricsViewVariant(val label: String) {
     ROMANIZED("Romanized")
 }
 
+/**
+ * Isolated holder for Android ICU Transliterators (API 29+ only).
+ * Declared in a separate lazy holder so older Android versions (API 24-28)
+ * never encounter NoClassDefFoundError during class verification.
+ */
+private object IcuTransliteratorHolder {
+    val anyToLatin by lazy {
+        runCatching {
+            android.icu.text.Transliterator.getInstance("Any-Latin")
+        }.getOrNull()
+    }
+
+    val latinToAscii by lazy {
+        runCatching {
+            android.icu.text.Transliterator.getInstance("Latin-ASCII")
+        }.getOrNull()
+    }
+}
+
 object LyricsTextVariants {
-    private val anyToLatin = runCatching {
-        Transliterator.getInstance("Any-Latin")
-    }.getOrNull()
-
-    private val latinToAscii = runCatching {
-        Transliterator.getInstance("Latin-ASCII")
-    }.getOrNull()
-
     private val nonAsciiLetterRegex = Regex("""[^\p{ASCII}]""")
 
     fun availableVariants(text: String): List<LyricsViewVariant> = runCatching {
-        val romanized = romanize(text)
-        if ((romanized != text || nonAsciiLetterRegex.containsMatchIn(text)) && romanized.isNotBlank()) {
+        if (text.isBlank()) return@runCatching listOf(LyricsViewVariant.ORIGINAL)
+        val hasNonAscii = text.any { ch -> ch.code > 127 && Character.isLetter(ch) }
+        if (hasNonAscii) {
             listOf(LyricsViewVariant.ORIGINAL, LyricsViewVariant.ROMANIZED)
         } else {
             listOf(LyricsViewVariant.ORIGINAL)
@@ -69,18 +81,18 @@ object LyricsTextVariants {
         // 3. Convert Devanagari words using dedicated Modern Hinglish phonological engine
         var step = runCatching { HinglishRomanizer.romanize(text) }.getOrDefault(text)
 
-        // 4. If non-ASCII characters remain (e.g. Gurmukhi, Arabic, CJK), transliterate
-        if (nonAsciiLetterRegex.containsMatchIn(step)) {
-            val toLatin = anyToLatin
-            if (toLatin != null) {
-                step = runCatching {
+        // 4. If non-ASCII characters remain (e.g. Gurmukhi, Arabic, CJK), transliterate (API 29+)
+        if (nonAsciiLetterRegex.containsMatchIn(step) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                val toLatin = IcuTransliteratorHolder.anyToLatin
+                if (toLatin != null) {
                     val rawLatin = synchronized(toLatin) { toLatin.transliterate(step) }
                     val indicFixed = convertIndicDiacriticsToHinglish(rawLatin)
-                    val ascii = latinToAscii?.let { asciiTrans ->
+                    val ascii = IcuTransliteratorHolder.latinToAscii?.let { asciiTrans ->
                         synchronized(asciiTrans) { asciiTrans.transliterate(indicFixed) }
                     } ?: indicFixed
-                    HinglishRomanizer.naturalizeLatinHinglish(ascii)
-                }.getOrDefault(step)
+                    step = HinglishRomanizer.naturalizeLatinHinglish(ascii)
+                }
             }
         }
 
@@ -93,16 +105,12 @@ object LyricsTextVariants {
      */
     internal fun convertIndicDiacriticsToHinglish(latinWithDiacritics: String): String {
         var s = latinWithDiacritics
-        // Chandrabindu m̐ (m + \u0310) -> n
         s = s.replace("m\u0310", "n").replace("M\u0310", "N")
-        // Anusvara ṁ (\u1E41) / ṃ (\u1E43) -> m before labials (p, b, m), else n
         s = s.replace(Regex("[ṁṃ](?=[pbmPBM])"), "m")
         s = s.replace('ṁ', 'n').replace('ṃ', 'n')
         s = s.replace('Ṁ', 'N').replace('Ṃ', 'N')
-        // Sibilants ś / ṣ -> sh
         s = s.replace("ś", "sh").replace("ṣ", "sh")
         s = s.replace("Ś", "Sh").replace("Ṣ", "Sh")
-        // Common ISO-15919 vowel/consonant diacritics -> plain Hinglish letters
         s = s.replace("ā", "a").replace("ī", "i").replace("ū", "u")
         s = s.replace("ē", "e").replace("ō", "o")
         s = s.replace("ṛ", "r").replace("ṝ", "r")

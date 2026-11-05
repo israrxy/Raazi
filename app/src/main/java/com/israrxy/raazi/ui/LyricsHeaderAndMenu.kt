@@ -42,8 +42,8 @@ internal fun LyricsNowPlayingStrip(
     lyricsStatusBadge: String,
     isTrackLiked: Boolean,
     isPlaying: Boolean,
+    currentPosition: Long = 0L,
     duration: Long,
-    positionProvider: () -> Long,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     showOptionsMenu: Boolean,
@@ -179,10 +179,10 @@ internal fun LyricsNowPlayingStrip(
 
         // Compact sleek timeline under track card
         LyricsSleekTimeline(
+            currentPosition = currentPosition,
             duration = duration,
-            positionProvider = positionProvider,
             onSeek = onSeek,
-            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
         )
 
         Row(

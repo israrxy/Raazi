@@ -1,7 +1,5 @@
 package com.israrxy.raazi.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -22,14 +20,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.israrxy.raazi.model.RepeatMode as PlaybackRepeatMode
@@ -41,7 +39,7 @@ internal fun SpotifyYoutubeLyricItem(
     translation: String?,
     timestampMs: Long,
     words: List<LyricWordSegment> = emptyList(),
-    positionProvider: (() -> Long)? = null,
+    currentPositionMs: Long = 0L,
     isCurrent: Boolean,
     isPassed: Boolean,
     distance: Int,
@@ -52,10 +50,10 @@ internal fun SpotifyYoutubeLyricItem(
     val targetAlpha = when {
         isCurrent -> 1f
         showTimestampBadge -> 0.72f
-        isPassed -> 0.24f
-        distance == 1 -> 0.52f
+        isPassed -> 0.28f
+        distance == 1 -> 0.55f
         distance == 2 -> 0.36f
-        else -> 0.24f
+        else -> 0.22f
     }
 
     val animatedAlpha by animateFloatAsState(
@@ -114,11 +112,28 @@ internal fun SpotifyYoutubeLyricItem(
                 letterSpacing = (-0.3).sp
             )
 
-            if (isCurrent && words.isNotEmpty() && positionProvider != null) {
-                FlowingLyricLine(
-                    words = words,
-                    positionProvider = positionProvider,
-                    textStyle = lyricTextStyle
+            if (isCurrent && words.isNotEmpty()) {
+                val karaokeText = remember(words, currentPositionMs) {
+                    buildAnnotatedString {
+                        words.forEachIndexed { idx, word ->
+                            val wordColor = when {
+                                currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.95f)
+                                currentPositionMs >= word.startTimeMs -> Color.White
+                                else -> Color.White.copy(alpha = 0.35f)
+                            }
+                            withStyle(SpanStyle(color = wordColor)) {
+                                append(word.displayText)
+                            }
+                            if (idx < words.lastIndex) {
+                                append(" ")
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = karaokeText,
+                    style = lyricTextStyle,
+                    textAlign = TextAlign.Start
                 )
             } else {
                 Text(
@@ -208,4 +223,3 @@ internal fun MusicalInterludeDots(
         }
     }
 }
-

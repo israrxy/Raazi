@@ -123,9 +123,11 @@ fun buildRichLyricLines(
             words = parsedWords.mapIndexed { wIdx, (wStart, token) ->
                 val wEnd = parsedWords.getOrNull(wIdx + 1)?.first
                     ?: (wStart + 420L).coerceAtMost(nextLineStartMs)
+                val safeStart = wStart.coerceAtLeast(0L)
+                val safeEnd = wEnd.coerceAtLeast(safeStart + 80L)
                 LyricWordSegment(
-                    startTimeMs = wStart,
-                    endTimeMs = wEnd.coerceAtLeast(wStart + 80L),
+                    startTimeMs = safeStart,
+                    endTimeMs = safeEnd,
                     text = token,
                     displayText = LyricsTextVariants.transform(token, variant)
                 )
@@ -146,14 +148,15 @@ fun buildRichLyricLines(
                 } else {
                     ((activeSingDuration * weight) / totalWeight).coerceAtLeast(80L)
                 }
-                val seg = LyricWordSegment(
-                    startTimeMs = cursorMs,
-                    endTimeMs = (cursorMs + sliceMs).coerceAtMost(lineEndMs),
+                val safeStart = cursorMs
+                val safeEnd = (cursorMs + sliceMs).coerceAtLeast(safeStart + 80L)
+                cursorMs = safeEnd
+                LyricWordSegment(
+                    startTimeMs = safeStart,
+                    endTimeMs = safeEnd,
                     text = token,
                     displayText = LyricsTextVariants.transform(token, variant)
                 )
-                cursorMs += sliceMs
-                seg
             }
         }
 
@@ -249,75 +252,64 @@ internal fun LyricsEmptyPlaceholder(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier.size(64.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Lyrics,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(34.dp)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Lyrics,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
             }
 
             Text(
-                text = "Couldn't find lyrics automatically",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
+                text = "No lyrics found",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
             )
 
             Text(
-                text = "Search manually across Musixmatch, LRCLIB, Genius, Lyrica & YT Music to pick a matching version.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                text = "Try switching to another source or search lyrics manually",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Retry", style = MaterialTheme.typography.labelMedium)
+                }
+
                 Button(
                     onClick = onSearchManually,
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
+                        containerColor = Emerald400,
                         contentColor = Color.Black
                     )
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Search Lyrics",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onRetry,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Retry")
+                    Text(
+                        text = "Switch match",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

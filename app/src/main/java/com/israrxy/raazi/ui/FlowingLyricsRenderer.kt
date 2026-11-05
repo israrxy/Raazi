@@ -1,32 +1,24 @@
 package com.israrxy.raazi.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 
 /**
- * TeleMusic & Apple Music style flowing liquid word-by-word synced lyrics renderer.
- * Operates purely in the draw & graphicsLayer phase:
- * Words are laid out once. A dimmed base Text (white 35%) is stacked beneath an active
- * white Text clipped via clipRect to the word's progress from the positionProvider.
- * Zero composition-time time reads, zero brush/TextStyle allocations per frame.
+ * Supporting flowing lyrics components for word-by-word synced rendering.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FlowingLyricLine(
     words: List<LyricWordSegment>,
-    positionProvider: () -> Long,
+    currentPositionMs: Long,
     textStyle: TextStyle,
     modifier: Modifier = Modifier
 ) {
@@ -38,7 +30,7 @@ internal fun FlowingLyricLine(
         words.forEach { word ->
             FlowingLyricWord(
                 word = word,
-                positionProvider = positionProvider,
+                currentPositionMs = currentPositionMs,
                 textStyle = textStyle
             )
         }
@@ -48,33 +40,18 @@ internal fun FlowingLyricLine(
 @Composable
 internal fun FlowingLyricWord(
     word: LyricWordSegment,
-    positionProvider: () -> Long,
+    currentPositionMs: Long,
     textStyle: TextStyle
 ) {
-    val duration = (word.endTimeMs - word.startTimeMs).coerceAtLeast(1L)
-
-    Box {
-        // Base dimmed text (white 35%)
-        Text(
-            text = word.displayText,
-            style = textStyle,
-            color = Color.White.copy(alpha = 0.35f)
-        )
-
-        // Active white text clipped in draw phase to word progress
-        Text(
-            text = word.displayText,
-            style = textStyle,
-            color = Color.White,
-            modifier = Modifier.drawWithContent {
-                val currentPos = runCatching { positionProvider() }.getOrDefault(0L)
-                val p = ((currentPos - word.startTimeMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                if (p > 0f) {
-                    clipRect(right = size.width * p) {
-                        this@drawWithContent.drawContent()
-                    }
-                }
-            }
-        )
+    val wordColor = when {
+        currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.95f)
+        currentPositionMs >= word.startTimeMs -> Color.White
+        else -> Color.White.copy(alpha = 0.35f)
     }
+
+    Text(
+        text = word.displayText,
+        style = textStyle,
+        color = wordColor
+    )
 }

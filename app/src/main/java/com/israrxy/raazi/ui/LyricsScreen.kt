@@ -43,12 +43,12 @@ import kotlin.math.abs
 
 /**
  * Unified Spotify + YouTube Music + Musixmatch style Lyrics Screen.
- * Fully optimized architecture:
- * - Text precomputation on Dispatchers.Default (no main thread transliteration)
- * - Wall-clock position provider with withFrameNanos (zero recomposition on time ticks)
- * - Draw-phase word wipe clipRect (0 layout remeasures per frame)
- * - Derived active line index with binary search
- * - Sleek timeline under song info, bottom controls removed for maximal lyrics viewport
+ * Features:
+ * - Precomputed text per variant
+ * - Smooth position ticking for the active line without UI freezes
+ * - Sleek, compact timeline under song info with play/pause button
+ * - Extended list padding (bottom controls removed)
+ * - Safe auto-scrolling with non-negative offsets
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -77,39 +77,19 @@ fun LyricsScreen(
         }
     }
 
-    // Fix 2: Anchored position provider replacing the delay(33) recomposition loop
-    var anchorPos by remember { mutableLongStateOf(currentPosition) }
-    var anchorTime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
-    var isAnchorPlaying by remember { mutableStateOf(isPlaying) }
-
-    LaunchedEffect(currentPosition, isPlaying) {
-        val now = SystemClock.elapsedRealtime()
-        val predicted = if (isAnchorPlaying) anchorPos + (now - anchorTime) else anchorPos
-        if (abs(currentPosition - predicted) > 150L || isPlaying != isAnchorPlaying) {
-            anchorPos = currentPosition
-            anchorTime = now
-            isAnchorPlaying = isPlaying
-        }
-    }
-
-    val frame = remember { mutableLongStateOf(0L) }
-    var hasActiveWords by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isPlaying, hasActiveWords) {
-        while (isPlaying && hasActiveWords) {
-            withFrameNanos { frame.longValue = it }
-        }
-    }
-
-    val positionProvider: () -> Long = remember(duration) {
-        {
-            if (hasActiveWords && frame.longValue >= 0L) {
-                // Subscribe the active draw scope or snapshot to frame ticks
+    // Smooth position tracker for active lyric line and timeline
+    var smoothPositionMs by remember { mutableLongStateOf(currentPosition) }
+    LaunchedEffect(currentPosition, isPlaying, duration) {
+        smoothPositionMs = currentPosition
+        if (isPlaying) {
+            val basePosition = currentPosition
+            val startWallClock = SystemClock.elapsedRealtime()
+            while (true) {
+                delay(33L)
+                val elapsed = SystemClock.elapsedRealtime() - startWallClock
+                val maxPos = if (duration > 0L) duration else Long.MAX_VALUE
+                smoothPositionMs = (basePosition + elapsed).coerceAtMost(maxPos)
             }
-            val now = SystemClock.elapsedRealtime()
-            val elapsed = if (isAnchorPlaying) (now - anchorTime) else 0L
-            val pos = anchorPos + elapsed
-            if (duration > 0L) pos.coerceIn(0L, duration) else pos.coerceAtLeast(0L)
         }
     }
 
@@ -169,7 +149,6 @@ fun LyricsScreen(
         parseLrcLines(lyrics?.syncedLyrics, hideBrackets = hideBrackets)
     }
 
-    // Synchronous remember for instant display, with warmup of Transliterator off main thread
     val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation, selectedVariant) {
         buildRichLyricLines(
             rawPairs = parsedPairs,
@@ -222,18 +201,10 @@ fun LyricsScreen(
         }
     }
 
-    // Derived active line index with binary search: invalidates readers ONLY when line changes
-    val activeLineIndex by remember(syncedLines) {
-        derivedStateOf {
-            runCatching {
-                binarySearchActiveLine(syncedLines, positionProvider())
-            }.getOrDefault(-1)
-        }
-    }
-
-    LaunchedEffect(syncedLines, activeLineIndex) {
-        hasActiveWords = isSynced && activeLineIndex in syncedLines.indices &&
-            syncedLines[activeLineIndex].words.isNotEmpty()
+    // Active line index using binary search
+    val activeLineIndex = remember(smoothPositionMs, syncedLines) {
+        if (syncedLines.isEmpty()) -1
+        else binarySearchActiveLine(syncedLines, smoothPositionMs)
     }
 
     val listState = rememberLazyListState()
@@ -258,18 +229,14 @@ fun LyricsScreen(
         isUserScrolling = false
     }
 
-    // Safe auto-scroll with ~1/3 viewport target, animateScrollBy when close, animateScrollToItem when far
+    // Smooth auto-scroll to focus active lyric line
     LaunchedEffect(activeLineIndex, isUserScrolling) {
         if (!isUserScrolling && activeLineIndex >= 0 && syncedLines.isNotEmpty()) {
             val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
             val headerOffset = if (firstLineTimestamp > 4000L) 1 else 0
             val targetLazyIndex = (activeLineIndex + headerOffset).coerceAtLeast(0)
 
-            runCatching {
-                if (listState.layoutInfo.totalItemsCount == 0) {
-                    kotlinx.coroutines.yield()
-                }
-
+            try {
                 val layoutInfo = listState.layoutInfo
                 val totalCount = layoutInfo.totalItemsCount
                 if (totalCount > 0) {
@@ -294,6 +261,9 @@ fun LyricsScreen(
                         )
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
             }
         }
     }
@@ -389,8 +359,8 @@ fun LyricsScreen(
                 lyricsStatusBadge = lyricsStatusBadge,
                 isTrackLiked = isTrackLiked,
                 isPlaying = isPlaying,
+                currentPosition = smoothPositionMs,
                 duration = duration,
-                positionProvider = positionProvider,
                 onPlayPause = {
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     if (isPlaying) viewModel.pause() else viewModel.resume()
@@ -448,8 +418,7 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     syncedLines = syncedLines,
                     activeLineIndex = activeLineIndex,
-                    currentPosition = currentPosition,
-                    positionProvider = positionProvider,
+                    currentPosition = smoothPositionMs,
                     duration = duration,
                     listState = listState,
                     isUserScrolling = isUserScrolling,
