@@ -2,6 +2,7 @@ package com.israrxy.raazi.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -18,6 +19,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.ui.components.ShimmerMusicItemCard
+import com.israrxy.raazi.ui.components.ShimmerSearchFilterChips
+import com.israrxy.raazi.ui.components.ShimmerSearchTopResultCard
+import com.israrxy.raazi.ui.components.ShimmerSectionHeader
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 
@@ -217,20 +221,27 @@ internal fun SearchSectionHeader(
 
 @Composable
 internal fun SearchLoadingState(query: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxSize().padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text(
-                text = "Searching for \"$query\"",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "Finding songs, artists, albums, and playlists",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 88.dp)
+    ) {
+        // 1. Shimmer category filter chips
+        ShimmerSearchFilterChips()
+
+        // 2. Shimmer Top Result Hero Card (accurately matching top result hero)
+        ShimmerSearchTopResultCard()
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 3. Shimmer Section Header ("Songs")
+        ShimmerSectionHeader()
+
+        // 4. Shimmer regular search result rows
+        repeat(5) {
+            ShimmerMusicItemCard()
         }
-        repeat(7) { ShimmerMusicItemCard() }
     }
 }
 

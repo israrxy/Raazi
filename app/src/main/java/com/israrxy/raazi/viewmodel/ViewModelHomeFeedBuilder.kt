@@ -210,7 +210,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
     }
 
     _homeFeedState.value = HomeFeedUiState(
-        isLoading = _isLoading.value && !isRefreshing,
+        isLoading = _isHomeFeedLoading.value && !isRefreshing,
         isRefreshing = isRefreshing,
         sections = sections,
         errorMessage = _error.value

@@ -39,7 +39,8 @@ fun HomeScreen(
     onNavigateToPlaylist: (String) -> Unit,
     onNavigateToArtist: (String, String) -> Unit,
     onNavigateToSearch: () -> Unit = {},
-    contentBottomPadding: androidx.compose.ui.unit.Dp = 0.dp
+    contentBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    lazyListState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
 ) {
     val homeFeedState by viewModel.homeFeedState.collectAsState()
     val homePage by viewModel.homePage.collectAsState()
@@ -206,6 +207,7 @@ fun HomeScreen(
                 }
             } else {
                 LazyColumn(
+                    state = lazyListState,
                     modifier = Modifier
                         .fillMaxSize(),
                     contentPadding = PaddingValues(bottom = effectiveBottomPadding, top = 8.dp),

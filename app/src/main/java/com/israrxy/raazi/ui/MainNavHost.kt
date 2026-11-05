@@ -30,6 +30,8 @@ internal fun MainNavHost(
     contentBottomPadding: Dp,
     modifier: Modifier = Modifier
 ) {
+    val homeLazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
+
     NavHost(
         navController = navController,
         startDestination = "home",
@@ -93,7 +95,8 @@ internal fun MainNavHost(
                         launchSingleTop = true
                     }
                 },
-                contentBottomPadding = contentBottomPadding
+                contentBottomPadding = contentBottomPadding,
+                lazyListState = homeLazyListState
             )
         }
         composable("search") {

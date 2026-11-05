@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal fun MusicPlayerViewModel.loadHomeContentImpl() {
     viewModelScope.launch {
         _isLoading.value = true
+        _isHomeFeedLoading.value = true
         _error.value = null
         _homeFeedState.value = _homeFeedState.value.copy(isLoading = true, errorMessage = null)
         try {
@@ -92,6 +93,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
             }
         } finally {
             _isLoading.value = false
+            _isHomeFeedLoading.value = false
             rebuildHomeFeedState()
         }
 
