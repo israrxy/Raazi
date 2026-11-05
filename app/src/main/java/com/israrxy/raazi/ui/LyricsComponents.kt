@@ -1,6 +1,7 @@
 package com.israrxy.raazi.ui
 
 import android.os.Build
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -13,6 +14,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -98,6 +100,22 @@ internal fun SpotifyYoutubeLyricItem(
         label = "lyric_bg_alpha"
     )
 
+    val blinkAnim = remember { Animatable(0f) }
+    LaunchedEffect(isCurrent) {
+        if (isCurrent) {
+            // TeleMusic line-change blink effect: pulse on transition and decay smoothly
+            blinkAnim.snapTo(0.24f)
+            blinkAnim.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+            )
+        } else {
+            blinkAnim.snapTo(0f)
+        }
+    }
+    val effectiveBgAlpha = (containerAlpha + blinkAnim.value).coerceIn(0f, 1f)
+    val borderAlpha = (blinkAnim.value * 1.5f).coerceIn(0f, 1f)
+
     val targetBlur = when {
         isCurrent || showTimestampBadge -> 0.dp
         distance == 1 -> 0.dp
@@ -122,7 +140,12 @@ internal fun SpotifyYoutubeLyricItem(
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = containerAlpha))
+            .background(Color.White.copy(alpha = effectiveBgAlpha))
+            .then(
+                if (borderAlpha > 0.01f) {
+                    Modifier.border(1.dp, Color.White.copy(alpha = borderAlpha), RoundedCornerShape(14.dp))
+                } else Modifier
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onShareLine
@@ -134,42 +157,24 @@ internal fun SpotifyYoutubeLyricItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            val lyricTextStyle = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = if (isCurrent) 25.sp else 21.sp,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                lineHeight = if (isCurrent) 33.sp else 29.sp,
+                letterSpacing = (-0.3).sp
+            )
+
             if (isCurrent && words.isNotEmpty()) {
-                val karaokeText = buildAnnotatedString {
-                    words.forEachIndexed { idx, word ->
-                        val transformedWord = LyricsTextVariants.transform(word.text, selectedVariant)
-                        val wordColor = when {
-                            currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.94f)
-                            currentPositionMs >= word.startTimeMs -> Color.White
-                            else -> Color.White.copy(alpha = 0.35f)
-                        }
-                        withStyle(SpanStyle(color = wordColor)) {
-                            append(transformedWord)
-                        }
-                        if (idx < words.lastIndex) {
-                            append(" ")
-                        }
-                    }
-                }
-                Text(
-                    text = karaokeText,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 25.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 33.sp,
-                        letterSpacing = (-0.3).sp
-                    ),
-                    textAlign = TextAlign.Start
+                FlowingLyricLine(
+                    words = words,
+                    currentPositionMs = currentPositionMs,
+                    selectedVariant = selectedVariant,
+                    textStyle = lyricTextStyle
                 )
             } else {
                 Text(
                     text = text.ifBlank { "♪" },
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = if (isCurrent) 25.sp else 21.sp,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                        lineHeight = if (isCurrent) 33.sp else 29.sp,
-                        letterSpacing = (-0.3).sp
-                    ),
+                    style = lyricTextStyle,
                     color = Color.White.copy(alpha = animatedAlpha),
                     textAlign = TextAlign.Start
                 )

@@ -42,6 +42,7 @@ internal fun LazyListScope.settingsLyricsSection(
         val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsState(initial = "LAST_USED")
         val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
         val defaultLyricsView by settingsDataStore.defaultLyricsView.collectAsState(initial = "KARAOKE")
+        val lyricsSyncPriority by settingsDataStore.lyricsSyncPriority.collectAsState(initial = "WORD_SYNC_FIRST")
 
         SettingsSection(title = "Lyrics Preferences & Script") {
             // Visual Preview Card
@@ -141,6 +142,30 @@ internal fun LazyListScope.settingsLyricsSection(
                 onClick = {
                     val next = if (defaultLyricsView == "KARAOKE") "PLAIN" else "KARAOKE"
                     scope.launch { settingsDataStore.setDefaultLyricsView(next) }
+                }
+            )
+
+            SettingsDivider()
+
+            // Lyrics Sync Ranking Priority
+            SettingsSelectItem(
+                icon = Icons.Filled.AutoAwesome,
+                title = "Lyrics Sync Priority",
+                value = when (lyricsSyncPriority) {
+                    "WORD_SYNC_FIRST" -> "Word-Synced (Flowing)"
+                    "LINE_SYNC_FIRST" -> "Line-Synced"
+                    "ANY_SYNC_FIRST" -> "Any Synced"
+                    "PLAIN_FIRST" -> "Plain Text"
+                    else -> "Word-Synced (Flowing)"
+                },
+                onClick = {
+                    val next = when (lyricsSyncPriority) {
+                        "WORD_SYNC_FIRST" -> "LINE_SYNC_FIRST"
+                        "LINE_SYNC_FIRST" -> "ANY_SYNC_FIRST"
+                        "ANY_SYNC_FIRST" -> "PLAIN_FIRST"
+                        else -> "WORD_SYNC_FIRST"
+                    }
+                    scope.launch { settingsDataStore.setLyricsSyncPriority(next) }
                 }
             )
 

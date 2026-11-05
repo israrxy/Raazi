@@ -33,8 +33,8 @@ class MusicRepository(
 ) {
     private val downloadManager = com.israrxy.raazi.service.SimpleDownloadManager(context)
     private val lrcLibApi = com.israrxy.raazi.data.remote.LrcLibApi(context)
-    private val lyricsAggregator = com.israrxy.raazi.data.remote.MultiSourceLyricsAggregator(context, lrcLibApi)
-    private val savedLyricsStore = SavedLyricsStore(context)
+    internal val lyricsAggregator = com.israrxy.raazi.data.remote.MultiSourceLyricsAggregator(context, lrcLibApi)
+    internal val savedLyricsStore = SavedLyricsStore(context)
     private val chartsExtractor = com.israrxy.raazi.data.remote.YouTubeChartsExtractor()
     internal val settingsDataStore = SettingsDataStore(context)
 
@@ -42,29 +42,14 @@ class MusicRepository(
         item: MusicItem,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL,
         forceRefresh: Boolean = false
-    ): com.israrxy.raazi.data.remote.Lyrics? {
-        if (!forceRefresh) savedLyricsStore.get(item.id)?.let { return it }
-        val fetched = lyricsAggregator.getLyrics(item.id, item.title, item.artist, item.duration, preferredScript, forceRefresh)
-        if (fetched != null && (!fetched.syncedLyrics.isNullOrBlank() || !fetched.plainLyrics.isNullOrBlank())) {
-            savedLyricsStore.put(item.id, fetched)
-        }
-        return fetched
-    }
+    ): com.israrxy.raazi.data.remote.Lyrics? = getLyricsImpl(item, preferredScript, forceRefresh)
 
     suspend fun searchLyricsOptions(
         item: MusicItem,
         titleOverride: String = item.title,
         artistOverride: String = item.artist,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
-    ): List<LyricsSearchResult> {
-        return lyricsAggregator.searchAllProviders(
-            trackId = item.id,
-            trackName = titleOverride,
-            artistName = artistOverride,
-            durationMs = item.duration,
-            preferredScript = preferredScript
-        )
-    }
+    ): List<LyricsSearchResult> = searchLyricsOptionsImpl(item, titleOverride, artistOverride, preferredScript)
 
     suspend fun saveLyricsForTrack(item: MusicItem, lyrics: com.israrxy.raazi.data.remote.Lyrics) {
         savedLyricsStore.put(item.id, lyrics.copy(source = "Saved ${lyrics.source}"))

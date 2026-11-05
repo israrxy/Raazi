@@ -45,7 +45,8 @@ class MultiSourceLyricsAggregator(
         artistName: String,
         durationMs: Long,
         preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        syncPriority: String = "WORD_SYNC_FIRST"
     ): Lyrics? = withContext(Dispatchers.IO) {
         val prepared = LyricsMetadataSanitizer.prepare(trackName, artistName)
         val cacheKey = "${prepared.cacheKey}|${durationMs / 1000L}|v3"
@@ -53,8 +54,11 @@ class MultiSourceLyricsAggregator(
         if (!forceRefresh) {
             cache.get(cacheKey)?.let { cached ->
                 if (LyricsScriptDetector.matches(preferredScript, cached)) {
-                    Log.d(tag, "Multi-source cache hit (${cached.source}) for ${prepared.cacheKey}")
-                    return@withContext cached
+                    val isCachedWordSynced = hasWordSync(cached.syncedLyrics)
+                    if (syncPriority != "WORD_SYNC_FIRST" || isCachedWordSynced) {
+                        Log.d(tag, "Multi-source cache hit (${cached.source}) for ${prepared.cacheKey}")
+                        return@withContext cached
+                    }
                 }
             }
         }
@@ -64,7 +68,8 @@ class MultiSourceLyricsAggregator(
             trackName = trackName,
             artistName = artistName,
             durationMs = durationMs,
-            preferredScript = preferredScript
+            preferredScript = preferredScript,
+            syncPriority = syncPriority
         )
 
         var best = ranked.firstOrNull()?.lyrics
@@ -92,7 +97,8 @@ class MultiSourceLyricsAggregator(
         trackName: String,
         artistName: String,
         durationMs: Long,
-        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL
+        preferredScript: LyricsScriptFilter = LyricsScriptFilter.ALL,
+        syncPriority: String = "WORD_SYNC_FIRST"
     ): List<LyricsSearchResult> = withContext(Dispatchers.IO) {
         val prepared = LyricsMetadataSanitizer.prepare(trackName, artistName)
         val durationSeconds = (durationMs / 1000.0).coerceAtLeast(0.0)
@@ -184,7 +190,8 @@ class MultiSourceLyricsAggregator(
             titleComparisons = prepared.titleComparisons,
             artistComparisons = prepared.artistComparisons,
             durationSeconds = durationSeconds,
-            preferredScript = preferredScript
+            preferredScript = preferredScript,
+            syncPriority = syncPriority
         )
 
         if (rankedResults.isEmpty()) {
@@ -214,8 +221,47 @@ class MultiSourceLyricsAggregator(
         titleComparisons: List<String>,
         artistComparisons: List<String>,
         durationSeconds: Double,
-        preferredScript: LyricsScriptFilter
+        preferredScript: LyricsScriptFilter,
+        syncPriority: String = "WORD_SYNC_FIRST"
     ): List<LyricsSearchResult> {
+        val baseComparator = compareByDescending<LyricsSearchResult> {
+            LyricsScriptDetector.matches(preferredScript, it.lyrics)
+        }
+        val comparator = when (syncPriority) {
+            "LINE_SYNC_FIRST" -> {
+                baseComparator
+                    .thenByDescending { !it.lyrics.syncedLyrics.isNullOrBlank() && !hasWordSync(it.lyrics.syncedLyrics) }
+                    .thenByDescending { hasWordSync(it.lyrics.syncedLyrics) }
+                    .thenByDescending { !it.lyrics.syncedLyrics.isNullOrBlank() }
+                    .thenByDescending { it.matchScore }
+                    .thenByDescending { it.titleScore }
+                    .thenBy { it.durationDelta }
+            }
+            "ANY_SYNC_FIRST" -> {
+                baseComparator
+                    .thenByDescending { !it.lyrics.syncedLyrics.isNullOrBlank() }
+                    .thenByDescending { it.matchScore }
+                    .thenByDescending { hasWordSync(it.lyrics.syncedLyrics) }
+                    .thenByDescending { it.titleScore }
+                    .thenBy { it.durationDelta }
+            }
+            "PLAIN_FIRST" -> {
+                baseComparator
+                    .thenByDescending { !it.lyrics.plainLyrics.isNullOrBlank() && it.lyrics.syncedLyrics.isNullOrBlank() }
+                    .thenByDescending { it.matchScore }
+                    .thenByDescending { it.titleScore }
+                    .thenBy { it.durationDelta }
+            }
+            else -> { // "WORD_SYNC_FIRST" (Default)
+                baseComparator
+                    .thenByDescending { hasWordSync(it.lyrics.syncedLyrics) }
+                    .thenByDescending { !it.lyrics.syncedLyrics.isNullOrBlank() }
+                    .thenByDescending { it.matchScore }
+                    .thenByDescending { it.titleScore }
+                    .thenBy { it.durationDelta }
+            }
+        }
+
         return candidates.mapNotNull { lyrics ->
             val titleScore = titleComparisons.maxOfOrNull {
                 LyricsMetadataSanitizer.similarityScore(it, lyrics.trackName)
@@ -237,8 +283,8 @@ class MultiSourceLyricsAggregator(
             val isWordSynced = hasWordSync(lyrics.syncedLyrics)
             val isLineSynced = !lyrics.syncedLyrics.isNullOrBlank()
             val syncBonus = when {
-                isWordSynced -> 16
-                isLineSynced -> 11
+                isWordSynced -> if (syncPriority == "LINE_SYNC_FIRST") 15 else 35
+                isLineSynced -> if (syncPriority == "LINE_SYNC_FIRST") 35 else 20
                 else -> 0
             }
 
@@ -276,20 +322,11 @@ class MultiSourceLyricsAggregator(
                 artistScore = artistScore,
                 durationDelta = durationDelta
             )
-        }.sortedWith(
-            compareByDescending<LyricsSearchResult> {
-                LyricsScriptDetector.matches(preferredScript, it.lyrics)
-            }
-                .thenByDescending { it.matchScore }
-                .thenByDescending { hasWordSync(it.lyrics.syncedLyrics) }
-                .thenByDescending { !it.lyrics.syncedLyrics.isNullOrBlank() }
-                .thenByDescending { it.titleScore }
-                .thenBy { it.durationDelta }
-        )
+        }.sortedWith(comparator)
     }
 
     companion object {
-        private const val PROVIDER_TIMEOUT_MS = 3200L
+        private const val PROVIDER_TIMEOUT_MS = 4500L
         private const val MIN_METADATA_SCORE = 52
         private val WORD_TAG_REGEX = Regex("""<\d+:\d+(?:\.\d+)?>""")
 
