@@ -64,6 +64,7 @@ private fun rememberPressScale(interactionSource: MutableInteractionSource): Sta
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlayerControlsAndActionsSection(
     viewModel: MusicPlayerViewModel,
