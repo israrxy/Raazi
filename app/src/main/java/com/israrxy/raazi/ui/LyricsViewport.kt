@@ -51,7 +51,7 @@ internal fun LyricsMainViewportContent(
     isSynced: Boolean,
     syncedLines: List<LyricLine>,
     activeLineIndex: Int,
-    currentPosition: Long,
+    currentPosition: Long = 0L,
     duration: Long,
     listState: LazyListState,
     isUserScrolling: Boolean,
@@ -88,8 +88,8 @@ internal fun LyricsMainViewportContent(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = 56.dp,
-                        bottom = 160.dp,
+                        top = 16.dp,
+                        bottom = 120.dp,
                         start = 20.dp,
                         end = 20.dp
                     ),
@@ -126,18 +126,12 @@ internal fun LyricsMainViewportContent(
                             (currentPosition - line.timestamp) > 3500L &&
                             currentPosition < nextTimestamp - 500L
 
-                        val displayLineText = remember(line.text, selectedVariant) {
-                            LyricsTextVariants.transform(line.text, selectedVariant)
-                        }
-
                         SpotifyYoutubeLyricItem(
-                            text = displayLineText,
+                            text = line.displayText,
                             translation = line.translation,
                             timestampMs = line.timestamp,
-                            lineEndTimestampMs = line.endTimestamp,
                             words = line.words,
-                            currentPositionMs = currentPosition,
-                            selectedVariant = selectedVariant,
+                            currentPositionMs = if (isCurrent) currentPosition else 0L,
                             isCurrent = isCurrent,
                             isPassed = isPassed,
                             distance = distance,
@@ -150,7 +144,7 @@ internal fun LyricsMainViewportContent(
                             onShareLine = {
                                 shareOrCopyLyricLine(
                                     context = context,
-                                    lyricText = displayLineText,
+                                    lyricText = line.displayText,
                                     trackTitle = currentTrack?.title,
                                     artistName = currentTrack?.artist
                                 )

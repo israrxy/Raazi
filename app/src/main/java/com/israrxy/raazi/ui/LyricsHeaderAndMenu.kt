@@ -1,18 +1,23 @@
 package com.israrxy.raazi.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +41,11 @@ internal fun LyricsNowPlayingStrip(
     isSynced: Boolean,
     lyricsStatusBadge: String,
     isTrackLiked: Boolean,
+    isPlaying: Boolean,
+    currentPosition: Long = 0L,
+    duration: Long,
+    onPlayPause: () -> Unit,
+    onSeek: (Long) -> Unit,
     showOptionsMenu: Boolean,
     availableVariants: List<LyricsViewVariant>,
     selectedVariant: LyricsViewVariant,
@@ -149,20 +159,32 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
 
-            IconButton(
-                onClick = onOpenTrackDetails,
-                modifier = Modifier.size(36.dp)
+            // Small play/pause button (about 38dp circle, white at 12% alpha)
+            Surface(
+                onClick = onPlayPause,
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.12f),
+                modifier = Modifier.size(38.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Song details",
-                    tint = Color.White.copy(alpha = 0.65f),
-                    modifier = Modifier.size(19.dp)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        // Compact sleek timeline under track card
+        LyricsSleekTimeline(
+            currentPosition = currentPosition,
+            duration = duration,
+            onSeek = onSeek,
+            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,65 +216,74 @@ internal fun LyricsNowPlayingStrip(
                 shape = RoundedCornerShape(8.dp),
                 color = if (showTranslation) Color.White else Color.White.copy(alpha = 0.07f)
             ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            if (isTranslating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(11.dp),
-                                    strokeWidth = 1.5.dp,
-                                    color = if (showTranslation) Color(0xFF09090B) else Color.White
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Translate,
-                                    contentDescription = null,
-                                    tint = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-                            Text(
-                                text = if (showTranslation) "Translated (${translateLang.uppercase()})" else "Translate",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (showTranslation) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f)
-                            )
-                        }
-                    }
-
-                    Surface(
-                        onClick = onToggleHideBrackets,
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f)
-                    ) {
-                        Text(
-                            text = if (hideBrackets) "Hide [ ]" else "Show [ ]",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (hideBrackets) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (hideBrackets) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (isTranslating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(11.dp),
+                            strokeWidth = 1.5.dp,
+                            color = if (showTranslation) Color(0xFF09090B) else Color.White
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = null,
+                            tint = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(12.dp)
                         )
                     }
+                    Text(
+                        text = if (showTranslation) "Translated (${translateLang.uppercase()})" else "Translate",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (showTranslation) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f)
+                    )
+                }
+            }
 
-                    if (lyricsScriptFilter != LyricsScriptFilter.ALL) {
-                        Surface(
-                            onClick = onToggleOptionsMenu,
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White.copy(alpha = 0.07f)
-                        ) {
-                            Text(
-                                text = "Script: ${lyricsScriptFilter.label}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.78f),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
+            Surface(
+                onClick = onToggleHideBrackets,
+                shape = RoundedCornerShape(8.dp),
+                color = if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f)
+            ) {
+                Text(
+                    text = if (hideBrackets) "Hide [ ]" else "Show [ ]",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (hideBrackets) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (hideBrackets) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+
+            Surface(
+                onClick = onOpenTrackDetails,
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White.copy(alpha = 0.07f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Details",
+                        tint = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "Info",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.78f)
+                    )
                 }
             }
         }
+    }
+}
 
 @Composable
 internal fun SongDetailsDialog(

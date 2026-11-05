@@ -1,7 +1,5 @@
 package com.israrxy.raazi.ui
 
-import android.os.Build
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -13,20 +11,15 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -37,8 +30,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.israrxy.raazi.data.lyrics.LyricsTextVariants
-import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.RepeatMode as PlaybackRepeatMode
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -47,10 +38,8 @@ internal fun SpotifyYoutubeLyricItem(
     text: String,
     translation: String?,
     timestampMs: Long,
-    lineEndTimestampMs: Long = timestampMs + 3000L,
     words: List<LyricWordSegment> = emptyList(),
     currentPositionMs: Long = 0L,
-    selectedVariant: LyricsViewVariant = LyricsViewVariant.ORIGINAL,
     isCurrent: Boolean,
     isPassed: Boolean,
     distance: Int,
@@ -69,16 +58,12 @@ internal fun SpotifyYoutubeLyricItem(
 
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = tween(
-            durationMillis = 280,
-            delayMillis = if (isCurrent) 0 else (distance * 35).coerceAtMost(140),
-            easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-        ),
+        animationSpec = tween(durationMillis = 280),
         label = "lyric_alpha"
     )
 
     val targetScale = when {
-        isCurrent -> 1.02f
+        isCurrent -> 1.01f
         distance == 1 -> 0.99f
         else -> 0.97f
     }
@@ -98,25 +83,11 @@ internal fun SpotifyYoutubeLyricItem(
         label = "lyric_bg_alpha"
     )
 
-    val targetBlur = when {
-        isCurrent || showTimestampBadge -> 0.dp
-        distance == 1 -> 0.dp
-        distance == 2 -> 1.5.dp
-        distance == 3 -> 2.5.dp
-        else -> 3.5.dp
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && targetBlur > 0.dp) {
-                    Modifier.blur(targetBlur)
-                } else {
-                    Modifier
-                }
-            )
             .graphicsLayer {
+                alpha = animatedAlpha
                 scaleX = animatedScale
                 scaleY = animatedScale
                 transformOrigin = TransformOrigin(0f, 0.5f)
@@ -134,43 +105,41 @@ internal fun SpotifyYoutubeLyricItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            val lyricTextStyle = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = if (isCurrent) 25.sp else 21.sp,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                lineHeight = if (isCurrent) 33.sp else 29.sp,
+                letterSpacing = (-0.3).sp
+            )
+
             if (isCurrent && words.isNotEmpty()) {
-                val karaokeText = buildAnnotatedString {
-                    words.forEachIndexed { idx, word ->
-                        val transformedWord = LyricsTextVariants.transform(word.text, selectedVariant)
-                        val wordColor = when {
-                            currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.94f)
-                            currentPositionMs >= word.startTimeMs -> Color.White
-                            else -> Color.White.copy(alpha = 0.35f)
-                        }
-                        withStyle(SpanStyle(color = wordColor)) {
-                            append(transformedWord)
-                        }
-                        if (idx < words.lastIndex) {
-                            append(" ")
+                val karaokeText = remember(words, currentPositionMs) {
+                    buildAnnotatedString {
+                        words.forEachIndexed { idx, word ->
+                            val wordColor = when {
+                                currentPositionMs >= word.endTimeMs -> Color.White.copy(alpha = 0.95f)
+                                currentPositionMs >= word.startTimeMs -> Color.White
+                                else -> Color.White.copy(alpha = 0.35f)
+                            }
+                            withStyle(SpanStyle(color = wordColor)) {
+                                append(word.displayText)
+                            }
+                            if (idx < words.lastIndex) {
+                                append(" ")
+                            }
                         }
                     }
                 }
                 Text(
                     text = karaokeText,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 25.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 33.sp,
-                        letterSpacing = (-0.3).sp
-                    ),
+                    style = lyricTextStyle,
                     textAlign = TextAlign.Start
                 )
             } else {
                 Text(
                     text = text.ifBlank { "♪" },
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = if (isCurrent) 25.sp else 21.sp,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                        lineHeight = if (isCurrent) 33.sp else 29.sp,
-                        letterSpacing = (-0.3).sp
-                    ),
-                    color = Color.White.copy(alpha = animatedAlpha),
+                    style = lyricTextStyle,
+                    color = Color.White,
                     textAlign = TextAlign.Start
                 )
             }
@@ -184,9 +153,7 @@ internal fun SpotifyYoutubeLyricItem(
                         fontWeight = FontWeight.Normal,
                         lineHeight = 21.sp
                     ),
-                    color = Color.White.copy(
-                        alpha = if (isCurrent) 0.68f else (animatedAlpha * 0.65f).coerceIn(0.15f, 0.55f)
-                    ),
+                    color = Color.White.copy(alpha = if (isCurrent) 0.68f else 0.40f),
                     textAlign = TextAlign.Start
                 )
             }
@@ -253,154 +220,6 @@ internal fun MusicalInterludeDots(
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = dotAlpha))
             )
-        }
-    }
-}
-
-@Composable
-internal fun LyricsBottomTransport(
-    currentPosition: Long,
-    duration: Long,
-    isPlaying: Boolean,
-    shuffleEnabled: Boolean,
-    repeatMode: PlaybackRepeatMode,
-    onSeek: (Long) -> Unit,
-    onPlayPause: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onToggleRepeat: () -> Unit
-) {
-    var isDraggingSlider by remember { mutableStateOf(false) }
-    var dragFraction by remember { mutableFloatStateOf(0f) }
-
-    val sliderValue = if (isDraggingSlider) {
-        dragFraction
-    } else if (duration > 0) {
-        (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    val displayedPosition = if (isDraggingSlider && duration > 0) {
-        (dragFraction * duration).toLong()
-    } else currentPosition
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = 0.28f),
-                        Color.Black.copy(alpha = 0.52f)
-                    )
-                )
-            )
-            .padding(horizontal = 20.dp, vertical = 10.dp)
-    ) {
-        Slider(
-            value = sliderValue,
-            onValueChange = {
-                isDraggingSlider = true
-                dragFraction = it
-            },
-            onValueChangeFinished = {
-                if (duration > 0) {
-                    onSeek((dragFraction * duration).toLong())
-                }
-                isDraggingSlider = false
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(alpha = 0.18f)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(22.dp)
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = formatLyricsTimestamp(displayedPosition),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isDraggingSlider) Color.White else Color.White.copy(alpha = 0.52f)
-            )
-            Text(
-                text = formatLyricsTimestamp(duration),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.52f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onToggleShuffle) {
-                Icon(
-                    imageVector = Icons.Default.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (shuffleEnabled) Color.White else Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(21.dp)
-                )
-            }
-
-            IconButton(onClick = onPrevious) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous",
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .clickable(onClick = onPlayPause),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = Color(0xFF09090B),
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-
-            IconButton(onClick = onNext) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next",
-                    tint = Color.White,
-                    modifier = Modifier.size(30.dp)
-                )
-            }
-
-            IconButton(onClick = onToggleRepeat) {
-                val repeatIcon = when (repeatMode) {
-                    PlaybackRepeatMode.ONE -> Icons.Default.RepeatOne
-                    else -> Icons.Default.Repeat
-                }
-                val isRepeatActive = repeatMode != PlaybackRepeatMode.OFF
-                Icon(
-                    imageVector = repeatIcon,
-                    contentDescription = "Repeat",
-                    tint = if (isRepeatActive) Color.White else Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(21.dp)
-                )
-            }
         }
     }
 }

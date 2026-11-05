@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,18 +26,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.israrxy.raazi.data.lyrics.LyricsTextVariants
+import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.ui.theme.Emerald400
 
+@Immutable
 data class LyricWordSegment(
     val startTimeMs: Long,
     val endTimeMs: Long,
-    val text: String
+    val text: String,
+    val displayText: String = text
 )
 
+@Immutable
 data class LyricLine(
     val timestamp: Long,
     val endTimestamp: Long = timestamp + 3000L,
     val text: String,
+    val displayText: String = text,
     val words: List<LyricWordSegment> = emptyList(),
     val hasExplicitWordSync: Boolean = false,
     val translation: String? = null
@@ -57,8 +64,8 @@ fun cleanBracketedText(text: String): String {
  * Robust LRC & Enhanced LRC parser supporting [mm:ss], [mm:ss.xx], [mm:ss.xxx]
  * and inline word timestamps <mm:ss.xx>word (Musixmatch RichSync / Enhanced LRC).
  */
-fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pair<Long, String>> {
-    if (syncedLyrics.isNullOrBlank()) return emptyList()
+fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pair<Long, String>> = runCatching {
+    if (syncedLyrics.isNullOrBlank()) return@runCatching emptyList()
     val result = mutableListOf<Pair<Long, String>>()
 
     syncedLyrics.lines().forEach { rawLine ->
@@ -78,17 +85,18 @@ fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pa
             }
         }
     }
-    return result.sortedBy { it.first }
-}
+    result.sortedBy { it.first }
+}.getOrDefault(emptyList())
 
 fun buildRichLyricLines(
     rawPairs: List<Pair<Long, String>>,
     durationMs: Long,
     translations: List<String>,
-    showTranslation: Boolean
-): List<LyricLine> {
-    if (rawPairs.isEmpty()) return emptyList()
-    return rawPairs.mapIndexed { idx, (lineStartMs, rawBody) ->
+    showTranslation: Boolean,
+    variant: LyricsViewVariant = LyricsViewVariant.ORIGINAL
+): List<LyricLine> = runCatching {
+    if (rawPairs.isEmpty()) return@runCatching emptyList()
+    rawPairs.mapIndexed { idx, (lineStartMs, rawBody) ->
         val nextLineStartMs = rawPairs.getOrNull(idx + 1)?.first
             ?: durationMs.takeIf { it > lineStartMs }
             ?: (lineStartMs + 4000L)
@@ -115,10 +123,13 @@ fun buildRichLyricLines(
             words = parsedWords.mapIndexed { wIdx, (wStart, token) ->
                 val wEnd = parsedWords.getOrNull(wIdx + 1)?.first
                     ?: (wStart + 420L).coerceAtMost(nextLineStartMs)
+                val safeStart = wStart.coerceAtLeast(0L)
+                val safeEnd = wEnd.coerceAtLeast(safeStart + 80L)
                 LyricWordSegment(
-                    startTimeMs = wStart,
-                    endTimeMs = wEnd.coerceAtLeast(wStart + 80L),
-                    text = token
+                    startTimeMs = safeStart,
+                    endTimeMs = safeEnd,
+                    text = token,
+                    displayText = LyricsTextVariants.transform(token, variant)
                 )
             }
             lineEndMs = words.lastOrNull()?.endTimeMs ?: (lineStartMs + rawGap.coerceAtMost(5000L))
@@ -137,13 +148,15 @@ fun buildRichLyricLines(
                 } else {
                     ((activeSingDuration * weight) / totalWeight).coerceAtLeast(80L)
                 }
-                val seg = LyricWordSegment(
-                    startTimeMs = cursorMs,
-                    endTimeMs = (cursorMs + sliceMs).coerceAtMost(lineEndMs),
-                    text = token
+                val safeStart = cursorMs
+                val safeEnd = (cursorMs + sliceMs).coerceAtLeast(safeStart + 80L)
+                cursorMs = safeEnd
+                LyricWordSegment(
+                    startTimeMs = safeStart,
+                    endTimeMs = safeEnd,
+                    text = token,
+                    displayText = LyricsTextVariants.transform(token, variant)
                 )
-                cursorMs += sliceMs
-                seg
             }
         }
 
@@ -151,12 +164,30 @@ fun buildRichLyricLines(
             timestamp = lineStartMs,
             endTimestamp = lineEndMs,
             text = cleanText,
+            displayText = LyricsTextVariants.transform(cleanText, variant),
             words = words,
             hasExplicitWordSync = hasExplicitWords,
             translation = if (showTranslation && idx < translations.size) translations[idx] else null
         )
     }
+}.getOrElse {
+    rawPairs.map { (t, body) ->
+        val clean = body.replace(STRIP_WORD_TAGS_REGEX, "").trim()
+        LyricLine(timestamp = t, endTimestamp = t + 3000L, text = clean, displayText = clean)
+    }
 }
+
+fun withPrecomputedVariant(lines: List<LyricLine>, variant: LyricsViewVariant): List<LyricLine> = runCatching {
+    if (lines.isEmpty()) return@runCatching emptyList()
+    lines.map { line ->
+        line.copy(
+            displayText = LyricsTextVariants.transform(line.text, variant),
+            words = line.words.map { w ->
+                w.copy(displayText = LyricsTextVariants.transform(w.text, variant))
+            }
+        )
+    }
+}.getOrDefault(lines)
 
 @Composable
 internal fun LyricsLoadingPlaceholder() {
@@ -221,75 +252,64 @@ internal fun LyricsEmptyPlaceholder(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier.size(64.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Lyrics,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(34.dp)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Lyrics,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
             }
 
             Text(
-                text = "Couldn't find lyrics automatically",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
+                text = "No lyrics found",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
             )
 
             Text(
-                text = "Search manually across Musixmatch, LRCLIB, Genius, Lyrica & YT Music to pick a matching version.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                text = "Try switching to another source or search lyrics manually",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Retry", style = MaterialTheme.typography.labelMedium)
+                }
+
                 Button(
                     onClick = onSearchManually,
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
+                        containerColor = Emerald400,
                         contentColor = Color.Black
                     )
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Search Lyrics",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onRetry,
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Retry")
+                    Text(
+                        text = "Switch match",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
