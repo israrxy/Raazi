@@ -14,34 +14,47 @@ object HifiApiClient {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val defaultInstances = listOf(
-        "https://hifi-api.binimum.org",
-        "https://hifi-api.monochrome.tf",
+        "https://hifi-api-bffw.onrender.com",
+        "https://monochrome-api.samidy.com",
+        "https://hifi-api-w9y8.onrender.com",
+        "https://wolf.qqdl.site",
+        "https://maus.qqdl.site",
+        "https://vogel.qqdl.site",
+        "https://katze.qqdl.site",
+        "https://hund.qqdl.site",
+        "https://tracks.monochrome.st"
     )
 
     var customInstanceUrl: String? = null
     @Volatile
     var lastResolutionIssue: String? = null
 
-    private fun baseUrl(): String = customInstanceUrl ?: defaultInstances.first()
+    private fun baseUrl(): String = customInstanceUrl?.takeIf { it.isNotBlank() } ?: defaultInstances.first()
 
     private fun formatExceptionMessage(e: Exception): String {
         return when (e) {
-            is java.net.UnknownHostException -> "HiFi servers unreachable (DNS lookup failed)"
-            is java.net.SocketTimeoutException -> "HiFi server connection timed out"
-            is java.net.ConnectException -> "Connection refused by HiFi servers"
+            is java.net.UnknownHostException -> "HiFi mirror unreachable (DNS lookup failed)"
+            is java.net.SocketTimeoutException -> "HiFi mirror connection timed out"
+            is java.net.ConnectException -> "Connection refused by HiFi mirror"
             else -> "HiFi connection error: ${e.localizedMessage ?: e.message ?: "unknown"}"
         }
     }
 
     private fun allUrls(path: String): List<String> {
         val urls = mutableListOf<String>()
-        customInstanceUrl?.let { urls.add("$it$path") }
+        val custom = customInstanceUrl?.trim()?.trimEnd('/')
+        if (!custom.isNullOrBlank()) {
+            urls.add("$custom$path")
+        }
         for (inst in defaultInstances) {
             val url = "$inst$path"
             if (url !in urls) urls.add(url)
@@ -162,6 +175,23 @@ object HifiApiClient {
             response.isSuccessful
         } catch (e: Exception) {
             false
+        }
+    }
+
+    suspend fun testConnection(url: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val target = url.trim().trimEnd('/')
+        val start = System.currentTimeMillis()
+        try {
+            val request = Request.Builder().url("$target/info?id=1").get().build()
+            val response = client.newCall(request).execute()
+            val elapsed = System.currentTimeMillis() - start
+            if (response.isSuccessful) {
+                Pair(true, "Connected (${elapsed}ms)")
+            } else {
+                Pair(false, "Server responded with HTTP ${response.code}")
+            }
+        } catch (e: Exception) {
+            Pair(false, formatExceptionMessage(e))
         }
     }
 }

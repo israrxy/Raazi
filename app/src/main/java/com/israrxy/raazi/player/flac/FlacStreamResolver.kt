@@ -2,7 +2,9 @@ package com.israrxy.raazi.player.flac
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -161,8 +163,9 @@ object FlacStreamResolver {
         val safeFileName = "${matchedTrack.id}.flac"
         val outputFile = File(cacheDir, safeFileName)
 
+        // 1. If local cache file exists, serve immediately with zero network latency
         if (outputFile.exists() && outputFile.length() > 0) {
-            Log.d(TAG, "FLAC already cached: ${outputFile.absolutePath}")
+            Log.d(TAG, "FLAC already cached locally: ${outputFile.absolutePath}")
             return@withContext FlacResolutionResult.Success(
                 FlacResult(
                     localPath = outputFile.absolutePath,
@@ -173,60 +176,53 @@ object FlacStreamResolver {
                     coverUrl = matchedTrack.cover,
                     durationMs = matchedTrack.duration,
                     tidalTrackId = matchedTrack.id,
+                    isStreamUrl = false
                 )
             )
         }
 
-        Log.d(TAG, "Downloading FLAC from: $streamUrl")
-        try {
-            val request = Request.Builder()
-                .url(streamUrl)
-                .header("User-Agent", "TIDAL_ANDROID/1039 okhttp/3.14.9")
-                .build()
+        // 2. Return stream URL directly for instant progressive playback (~400ms)
+        Log.i(TAG, "Direct progressive FLAC stream available: $streamUrl")
+        val streamResult = FlacResult(
+            localPath = streamUrl,
+            qualityLabel = formatQualityLabel(streamResponse, quality),
+            title = matchedTrack.title ?: title,
+            artist = matchedTrack.displayArtist,
+            album = matchedTrack.albumTitle,
+            coverUrl = matchedTrack.cover,
+            durationMs = matchedTrack.duration,
+            tidalTrackId = matchedTrack.id,
+            isStreamUrl = true
+        )
 
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                Log.e(TAG, "Download failed with status: ${response.code}")
-                return@withContext FlacResolutionResult.Failure(
-                    "FLAC stream download failed (HTTP ${response.code})"
-                )
-            }
-
-            response.body?.byteStream()?.use { input ->
-                outputFile.outputStream().use { output ->
-                    input.copyTo(output, bufferSize = 8192)
+        // 3. Concurrently cache to disk in background so future replays are instant local playback
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val request = Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", "TIDAL_ANDROID/1039 okhttp/3.14.9")
+                    .build()
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val tempFile = File(cacheDir, "${safeFileName}.tmp")
+                    response.body?.byteStream()?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output, bufferSize = 8192)
+                        }
+                    }
+                    if (tempFile.exists() && tempFile.length() > 0L) {
+                        tempFile.renameTo(outputFile)
+                        Log.i(TAG, "Background FLAC caching completed: ${outputFile.length()} bytes")
+                    } else {
+                        tempFile.delete()
+                    }
                 }
+            } catch (e: Exception) {
+                Log.d(TAG, "Background FLAC caching skipped/failed: ${e.message}")
             }
-
-            if (outputFile.length() == 0L) {
-                Log.e(TAG, "Downloaded file is empty")
-                outputFile.delete()
-                return@withContext FlacResolutionResult.Failure(
-                    "Downloaded FLAC stream was empty (0 bytes)"
-                )
-            }
-
-            Log.i(TAG, "FLAC downloaded successfully: ${outputFile.length()} bytes -> ${outputFile.absolutePath}")
-
-            FlacResolutionResult.Success(
-                FlacResult(
-                    localPath = outputFile.absolutePath,
-                    qualityLabel = formatQualityLabel(streamResponse, quality),
-                    title = matchedTrack.title ?: title,
-                    artist = matchedTrack.displayArtist,
-                    album = matchedTrack.albumTitle,
-                    coverUrl = matchedTrack.cover,
-                    durationMs = matchedTrack.duration,
-                    tidalTrackId = matchedTrack.id,
-                )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to download FLAC", e)
-            outputFile.delete()
-            FlacResolutionResult.Failure(
-                "FLAC download failed: ${e.localizedMessage ?: e.message}"
-            )
         }
+
+        return@withContext FlacResolutionResult.Success(streamResult)
     }
 
     suspend fun resolveFlacStream(

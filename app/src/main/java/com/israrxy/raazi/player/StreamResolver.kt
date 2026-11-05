@@ -227,8 +227,13 @@ object StreamResolver {
                         Log.i(TAG, "FLAC resolved successfully: ${flacResult.qualityLabel}")
                         val quality = flacResult.qualityLabel
                         if (updateQualityState) _currentStreamQuality.value = quality
+                        val streamUrl = if (flacResult.localPath.startsWith("http://") || flacResult.localPath.startsWith("https://")) {
+                            flacResult.localPath
+                        } else {
+                            "file://${flacResult.localPath}"
+                        }
                         return StreamResult(
-                            url = "file://${flacResult.localPath}",
+                            url = streamUrl,
                             userAgent = "Raazi/FLAC",
                             quality = quality,
                             mode = mode,

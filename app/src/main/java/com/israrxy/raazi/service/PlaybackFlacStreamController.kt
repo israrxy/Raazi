@@ -39,7 +39,11 @@ fun MusicPlaybackService.switchCurrentTrackToFlac(flacResult: FlacResult): Boole
     updatedList[activeIndex] = updatedTrack
     currentPlaylist = updatedList
 
-    val flacUri = Uri.fromFile(File(flacResult.localPath))
+    val flacUri = if (flacResult.localPath.startsWith("http://") || flacResult.localPath.startsWith("https://")) {
+        Uri.parse(flacResult.localPath)
+    } else {
+        Uri.fromFile(File(flacResult.localPath))
+    }
     val newMediaItem = MediaItem.Builder()
         .setUri(flacUri)
         .setMediaId(updatedTrack.id)

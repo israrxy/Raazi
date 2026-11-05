@@ -94,4 +94,18 @@ class FlacStreamSwitchTest {
             assertTrue(failure.reason.isNotBlank())
         }
     }
+
+    @Test
+    fun testFlacResultProgressiveStreamingProperty() {
+        val streamResult = FlacResult(
+            localPath = "https://cdn.example.com/audio/track_123.flac",
+            qualityLabel = "FLAC CD",
+            title = "Starboy",
+            artist = "The Weeknd",
+            isStreamUrl = true
+        )
+        assertTrue("isStreamUrl should be true for progressive HTTP streams", streamResult.isStreamUrl)
+        assertTrue(streamResult.localPath.startsWith("https://"))
+        assertEquals("FLAC CD", streamResult.qualityLabel)
+    }
 }

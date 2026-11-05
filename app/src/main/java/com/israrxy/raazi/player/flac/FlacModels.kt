@@ -80,6 +80,7 @@ data class FlacResult(
     val coverUrl: String? = null,
     val durationMs: Long? = null,
     val tidalTrackId: Long? = null,
+    val isStreamUrl: Boolean = false,
 )
 
 sealed class FlacResolutionResult {
