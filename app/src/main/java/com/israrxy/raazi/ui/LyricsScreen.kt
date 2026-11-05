@@ -2,7 +2,7 @@ package com.israrxy.raazi.ui
 
 import android.os.Build
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -217,7 +217,7 @@ fun LyricsScreen(
             lastManualScrollTime = System.currentTimeMillis()
         } else if (isUserScrolling) {
             val captured = lastManualScrollTime
-            delay(4000)
+            delay(2000)
             if (lastManualScrollTime == captured && !isDragged) {
                 isUserScrolling = false
             }
@@ -243,17 +243,17 @@ fun LyricsScreen(
             val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
             if (targetItem != null && viewportHeight > 0) {
-                val desiredY = (viewportHeight * 0.38f).toInt()
+                val desiredY = (viewportHeight * 0.36f).toInt()
                 val itemCenter = targetItem.offset + (targetItem.size / 2)
                 val diff = itemCenter - desiredY
-                if (abs(diff) > 10) {
+                if (abs(diff) > 8) {
                     listState.animateScrollBy(
                         value = diff.toFloat(),
-                        animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+                        animationSpec = tween(durationMillis = 480, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
                     )
                 }
             } else {
-                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.35f).toInt() else -160
+                val anchorOffset = if (viewportHeight > 0) -(viewportHeight * 0.36f).toInt() else -160
                 listState.animateScrollToItem(
                     index = targetLazyIndex,
                     scrollOffset = anchorOffset

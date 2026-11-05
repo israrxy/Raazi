@@ -123,7 +123,11 @@ fun PlayerScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+    ) {
         PlayerBlurredBackground(
             currentTrack = currentTrack,
             isLoading = isLoading

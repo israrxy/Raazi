@@ -1,5 +1,7 @@
 package com.israrxy.raazi.ui
 
+import android.os.Build
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -22,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,20 +61,24 @@ internal fun SpotifyYoutubeLyricItem(
     val targetAlpha = when {
         isCurrent -> 1f
         showTimestampBadge -> 0.72f
-        isPassed -> 0.24f
-        distance == 1 -> 0.52f
+        isPassed -> 0.28f
+        distance == 1 -> 0.55f
         distance == 2 -> 0.36f
-        else -> 0.24f
+        else -> 0.22f
     }
 
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = tween(durationMillis = 280),
+        animationSpec = tween(
+            durationMillis = 280,
+            delayMillis = if (isCurrent) 0 else (distance * 35).coerceAtMost(140),
+            easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+        ),
         label = "lyric_alpha"
     )
 
     val targetScale = when {
-        isCurrent -> 1.01f
+        isCurrent -> 1.02f
         distance == 1 -> 0.99f
         else -> 0.97f
     }
@@ -91,9 +98,24 @@ internal fun SpotifyYoutubeLyricItem(
         label = "lyric_bg_alpha"
     )
 
+    val targetBlur = when {
+        isCurrent || showTimestampBadge -> 0.dp
+        distance == 1 -> 0.dp
+        distance == 2 -> 1.5.dp
+        distance == 3 -> 2.5.dp
+        else -> 3.5.dp
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && targetBlur > 0.dp) {
+                    Modifier.blur(targetBlur)
+                } else {
+                    Modifier
+                }
+            )
             .graphicsLayer {
                 scaleX = animatedScale
                 scaleY = animatedScale

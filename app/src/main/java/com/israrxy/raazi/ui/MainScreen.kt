@@ -3,6 +3,9 @@ package com.israrxy.raazi.ui
 import android.net.Uri
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +68,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
 
     val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+    val isPlayerExpanded = sheetState.targetValue == SheetValue.Expanded || sheetState.currentValue == SheetValue.Expanded
+    val expansionProgress by animateFloatAsState(
+        targetValue = if (isPlayerExpanded) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.88f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "player_expansion_progress"
+    )
     val scope = rememberCoroutineScope()
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
@@ -235,20 +249,40 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = Color.Transparent,
-                    contentWindowInsets = WindowInsets(0, 0, 0, 0)
-                ) { innerPadding ->
-                    MainNavHost(
-                        navController = navController,
-                        viewModel = viewModel,
-                        openPlayerSheet = openPlayerSheet,
-                        contentBottomPadding = contentBottomPadding,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val scale = 1f - (0.045f * expansionProgress)
+                            scaleX = scale
+                            scaleY = scale
+                            clip = expansionProgress > 0.01f
+                            shape = RoundedCornerShape((20 * expansionProgress).dp)
+                        }
+                ) {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                    ) { innerPadding ->
+                        MainNavHost(
+                            navController = navController,
+                            viewModel = viewModel,
+                            openPlayerSheet = openPlayerSheet,
+                            contentBottomPadding = contentBottomPadding,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                        )
+                    }
+
+                    if (expansionProgress > 0.005f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.40f * expansionProgress))
+                        )
+                    }
                 }
 
                 if (showBottomBar) {
@@ -256,6 +290,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
+                            .graphicsLayer {
+                                translationY = (74.dp.toPx() * expansionProgress)
+                                alpha = (1f - expansionProgress * 1.6f).coerceIn(0f, 1f)
+                            }
                     ) {
                         SimpleBottomNavBar(
                             navController = navController,
@@ -265,13 +303,19 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     }
                 }
 
-                if (showMiniPlayerBar) {
+                if (showMiniPlayerBar && expansionProgress < 0.99f) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
                             .padding(bottom = collapsedMiniPlayerBottomPadding)
+                            .graphicsLayer {
+                                translationY = (-14.dp.toPx() * expansionProgress)
+                                alpha = (1f - expansionProgress * 2.2f).coerceIn(0f, 1f)
+                                scaleX = 1f - (0.03f * expansionProgress)
+                                scaleY = 1f - (0.03f * expansionProgress)
+                            }
                     ) {
                         MiniPlayer(
                             viewModel = viewModel,
