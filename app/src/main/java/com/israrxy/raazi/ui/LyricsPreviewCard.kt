@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SpotifyLyricsPreviewCard(
+internal fun SpotifyLyricsPreviewCard(
     presentation: LyricsPresentation,
     currentPosition: Long,
     onExpandLyrics: () -> Unit,

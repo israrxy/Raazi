@@ -42,7 +42,7 @@ import kotlin.math.abs
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LyricsScreen(
+internal fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
     presentation: LyricsPresentation,
     onOpenLyricsBrowser: () -> Unit = {},
