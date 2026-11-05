@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -367,15 +368,17 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
 
         // Full-Screen Player Screen Overlay (with interactive morph and flight)
+        val density = LocalDensity.current
         val origin = playerTransition.origin?.player ?: playerTransition.dockPlayer
-        val miniHeightPx = 68.dp.toPx()
-        val miniSidePx = if (showBottomBar) 0f else 12.dp.toPx()
+        val miniHeightPx = with(density) { 68.dp.toPx() }
+        val miniSidePx = with(density) { if (showBottomBar) 0f else 12.dp.toPx() }
         val originHeight = origin?.height ?: miniHeightPx
-        val originCorner = if (showBottomBar) 0f else 16.dp.toPx()
+        val originCorner = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
+        val cornerTarget = with(density) { 24.dp.toPx() }
         val side = lerpFloat(origin?.left ?: miniSidePx, 0f, playerExpansion.value)
         val right = lerpFloat(origin?.let { constraints.maxWidth - it.right } ?: miniSidePx, 0f, playerExpansion.value)
         val cardHeight = lerpFloat(originHeight, parentHeightPx, playerExpansion.value)
-        val defaultCardTop = parentHeightPx - collapsedMiniPlayerBottomPadding.toPx() - originHeight
+        val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - originHeight
         val cardTop = lerpFloat(origin?.top ?: defaultCardTop, 0f, playerExpansion.value)
 
         if (currentTrack != null && (playerExpansion.value > 0.001f || playerTransition.origin != null)) {
@@ -388,7 +391,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     }
                     .graphicsLayer {
                         translationY = cardTop
-                        shape = RevealCardShape(side, cardHeight, lerpFloat(originCorner, 24.dp.toPx(), progress), right)
+                        shape = RevealCardShape(side, cardHeight, lerpFloat(originCorner, cornerTarget, progress), right)
                         clip = true
                         shadowElevation = 18.dp.toPx() * progress
                     }
