@@ -118,6 +118,10 @@ internal fun LazyListScope.settingsPlaybackSection(
                 title = "When Track Selected",
                 options = listOf("Open Full Player", "Play in Mini Player"),
                 selectedOption = if (openPlayerOnTrackSelect) "Open Full Player" else "Play in Mini Player",
+                descriptions = mapOf(
+                    "Open Full Player" to "Expand the full player when you pick a song from a list",
+                    "Play in Mini Player" to "Start playback without leaving the current screen"
+                ),
                 onOptionSelected = { selected ->
                     scope.launch { settingsDataStore.setOpenPlayerOnTrackSelect(selected == "Open Full Player") }
                     showTrackSelectActionDialog = false
@@ -131,6 +135,12 @@ internal fun LazyListScope.settingsPlaybackSection(
                 title = "Double-Tap Seek Duration",
                 options = listOf("5", "10", "15", "30"),
                 selectedOption = doubleTapSeekDuration,
+                descriptions = mapOf(
+                    "5" to "Jump 5 seconds forward or back",
+                    "10" to "Balanced default for most songs",
+                    "15" to "Skip further with each double tap",
+                    "30" to "Large jumps for long tracks"
+                ),
                 onOptionSelected = { selected ->
                     scope.launch { settingsDataStore.setDoubleTapSeekDuration(selected) }
                     showSeekDialog = false

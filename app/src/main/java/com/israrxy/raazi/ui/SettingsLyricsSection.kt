@@ -201,6 +201,11 @@ internal fun LazyListScope.settingsLyricsSection(
                     "PLAYER" -> "Album Cover"
                     else -> "As Last Left"
                 },
+                descriptions = mapOf(
+                    "Album Cover" to "Open on the artwork and playback controls",
+                    "Lyrics Screen" to "Open straight into synced lyrics",
+                    "As Last Left" to "Remember the last screen you used"
+                ),
                 onOptionSelected = { selected ->
                     val value = when (selected) {
                         "Lyrics Screen" -> "LYRICS"
@@ -220,6 +225,10 @@ internal fun LazyListScope.settingsLyricsSection(
                 title = "Default Presentation",
                 options = options,
                 selectedOption = if (defaultLyricsView == "KARAOKE") "Synchronized Karaoke" else "Plain Text",
+                descriptions = mapOf(
+                    "Synchronized Karaoke" to "Follow the song with word-by-word highlighting",
+                    "Plain Text" to "Show static lyrics without timing effects"
+                ),
                 onOptionSelected = { selected ->
                     val value = if (selected == "Synchronized Karaoke") "KARAOKE" else "PLAIN"
                     scope.launch { settingsDataStore.setDefaultLyricsView(value) }
@@ -241,6 +250,12 @@ internal fun LazyListScope.settingsLyricsSection(
                     "PLAIN_FIRST" -> "Plain Text"
                     else -> "Word-Synced (Flowing)"
                 },
+                descriptions = mapOf(
+                    "Word-Synced (Flowing)" to "Prefer enhanced lyrics with per-word timing",
+                    "Line-Synced" to "Prefer classic line-timestamped lyrics",
+                    "Any Synced" to "Accept word or line synced results",
+                    "Plain Text" to "Always prefer unsynced lyrics"
+                ),
                 onOptionSelected = { selected ->
                     val value = when (selected) {
                         "Line-Synced" -> "LINE_SYNC_FIRST"

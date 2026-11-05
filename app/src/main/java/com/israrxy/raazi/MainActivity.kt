@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.LockScreen
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -196,23 +195,24 @@ class MainActivity : FragmentActivity() {
                                     )
                                 }
 
-                                // Daily "Follow me" prompt: once per calendar day
-                                // on first open. Also catches the first open right
-                                // after onboarding completes, since the date key
-                                // starts out empty.
+                                // One-time "Follow me" prompt. Dismissing it (or tapping
+                                // "Don't show again") persists and never shows it again.
+                                val followPromptDismissed by settingsDataStore.followPromptDismissed
+                                    .collectAsStateWithLifecycle(initialValue = true)
                                 var showFollowPrompt by remember { mutableStateOf(false) }
-                                LaunchedEffect(Unit) {
-                                    val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
-                                        .format(java.util.Date())
-                                    val last = settingsDataStore.lastFollowPromptDate.first()
-                                    if (last != today) {
-                                        showFollowPrompt = true
-                                        settingsDataStore.setLastFollowPromptDate(today)
-                                    }
+                                LaunchedEffect(followPromptDismissed) {
+                                    if (!followPromptDismissed) showFollowPrompt = true
                                 }
                                 if (showFollowPrompt) {
                                     com.israrxy.raazi.ui.components.FollowPromptDialog(
-                                        onDismiss = { showFollowPrompt = false }
+                                        onDismiss = {
+                                            showFollowPrompt = false
+                                            scope.launch { settingsDataStore.setFollowPromptDismissed(true) }
+                                        },
+                                        onDontShowAgain = {
+                                            showFollowPrompt = false
+                                            scope.launch { settingsDataStore.setFollowPromptDismissed(true) }
+                                        }
                                     )
                                 }
                                 MainScreen(viewModel = viewModel)

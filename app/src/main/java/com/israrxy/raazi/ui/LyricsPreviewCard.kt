@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import java.util.Locale
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -32,24 +33,18 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun SpotifyLyricsPreviewCard(
-    syncedLines: List<Pair<Long, String>>,
-    plainLyrics: String?,
+    presentation: LyricsPresentation,
     currentPosition: Long,
-    isLyricsLoading: Boolean,
     onExpandLyrics: () -> Unit,
     onSearchLyrics: () -> Unit,
     onSeekToLine: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val cleanSyncedLines = remember(syncedLines) {
-        syncedLines.map { (timeMs, rawText) ->
-            timeMs to rawText.replace(STRIP_WORD_TAGS_REGEX, "").replace(Regex("\\s+"), " ").trim()
-        }
-    }
+    val lines = presentation.syncedLines
 
-    val activeIdx = remember(currentPosition, cleanSyncedLines) {
-        if (cleanSyncedLines.isEmpty()) -1
-        else cleanSyncedLines.indexOfLast { it.first <= currentPosition }.coerceAtLeast(0)
+    val activeIdx = remember(currentPosition, lines) {
+        if (lines.isEmpty()) -1
+        else lines.indexOfLast { it.timestamp <= currentPosition }.coerceAtLeast(0)
     }
 
     Card(
@@ -83,7 +78,7 @@ fun SpotifyLyricsPreviewCard(
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
                     )
-                    if (syncedLines.isNotEmpty()) {
+                    if (lines.isNotEmpty()) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = Color.White.copy(alpha = 0.08f)
@@ -157,7 +152,7 @@ fun SpotifyLyricsPreviewCard(
             }
 
             when {
-                isLyricsLoading -> {
+                presentation.isLoading -> {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -178,11 +173,11 @@ fun SpotifyLyricsPreviewCard(
                     }
                 }
 
-                cleanSyncedLines.isNotEmpty() && activeIdx >= 0 -> {
-                    val prevLine = cleanSyncedLines.getOrNull(activeIdx - 1)
-                    val currLine = cleanSyncedLines.getOrNull(activeIdx)
-                    val nextLine1 = cleanSyncedLines.getOrNull(activeIdx + 1)
-                    val nextLine2 = cleanSyncedLines.getOrNull(activeIdx + 2)
+                lines.isNotEmpty() && activeIdx >= 0 -> {
+                    val prevLine = lines.getOrNull(activeIdx - 1)
+                    val currLine = lines.getOrNull(activeIdx)
+                    val nextLine1 = lines.getOrNull(activeIdx + 1)
+                    val nextLine2 = lines.getOrNull(activeIdx + 2)
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -190,7 +185,7 @@ fun SpotifyLyricsPreviewCard(
                     ) {
                         if (prevLine != null) {
                             Text(
-                                text = prevLine.second,
+                                text = prevLine.displayText,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.White.copy(alpha = 0.30f),
@@ -207,25 +202,36 @@ fun SpotifyLyricsPreviewCard(
                                         (fadeOut(tween(160)) + slideOutVertically { -it / 3 })
                                 },
                                 label = "preview_active_lyric"
-                            ) { activePair ->
-                                Text(
-                                    text = activePair.second,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 20.sp,
-                                        lineHeight = 26.sp
-                                    ),
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.clickable { onSeekToLine(activePair.first) }
-                                )
+                            ) { activeLine ->
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = activeLine.displayText,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontSize = 20.sp,
+                                            lineHeight = 26.sp
+                                        ),
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.clickable { onSeekToLine(activeLine.timestamp) }
+                                    )
+                                    activeLine.translation?.takeIf { it.isNotBlank() }?.let { translated ->
+                                        Text(
+                                            text = translated,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color.White.copy(alpha = 0.62f),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                             }
                         }
 
                         if (nextLine1 != null) {
                             Text(
-                                text = nextLine1.second,
+                                text = nextLine1.displayText,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White.copy(alpha = 0.52f),
@@ -236,7 +242,7 @@ fun SpotifyLyricsPreviewCard(
 
                         if (nextLine2 != null) {
                             Text(
-                                text = nextLine2.second,
+                                text = nextLine2.displayText,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Normal,
                                 color = Color.White.copy(alpha = 0.30f),
@@ -247,9 +253,10 @@ fun SpotifyLyricsPreviewCard(
                     }
                 }
 
-                !plainLyrics.isNullOrBlank() -> {
-                    val previewLines = remember(plainLyrics) {
-                        plainLyrics.lines().map { it.trim() }.filter { it.isNotBlank() }.take(4)
+                !presentation.plainLyrics.isNullOrBlank() -> {
+                    val plainText = presentation.plainLyrics.orEmpty()
+                    val previewLines = remember(plainText) {
+                        plainText.lines().map { it.trim() }.filter { it.isNotBlank() }.take(4)
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         previewLines.forEachIndexed { idx, line ->
@@ -274,7 +281,7 @@ fun SpotifyLyricsPreviewCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "No lyrics loaded",
+                            text = "No lyrics found",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.50f)
                         )
@@ -332,5 +339,5 @@ internal fun formatLyricsTimestamp(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0L)
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return String.format("%d:%02d", minutes, seconds)
+    return String.format(Locale.US, "%d:%02d", minutes, seconds)
 }

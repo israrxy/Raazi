@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.flow.first
@@ -61,6 +63,13 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             .distinctUntilChanged()
     }
     val currentTrack by currentTrackFlow.collectAsStateWithLifecycle(initialValue = null)
+    val snackbarHostState = remember { SnackbarHostState() }
+    val playbackError by viewModel.playbackError.collectAsStateWithLifecycle()
+    LaunchedEffect(playbackError) {
+        val message = playbackError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.clearPlaybackError()
+    }
     val lastTopLevelRoute by settingsDataStore.lastTopLevelRoute.collectAsStateWithLifecycle(initialValue = "home")
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -78,14 +87,14 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
     val openPlayerOnTrackSelect by settingsDataStore.openPlayerOnTrackSelect.collectAsStateWithLifecycle(initialValue = true)
     val resetToArtworkOnTrackChange by settingsDataStore.resetToArtworkOnTrackChange.collectAsStateWithLifecycle(initialValue = true)
-    var previousSongId by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastViewedTrackId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(currentTrack?.id) {
         val id = currentTrack?.id
-        if (id != null && id != previousSongId) {
-            if (previousSongId != null && resetToArtworkOnTrackChange) {
+        if (id != null && id != lastViewedTrackId) {
+            if (lastViewedTrackId != null && resetToArtworkOnTrackChange) {
                 isLyricsModeOpen = false
             }
-            previousSongId = id
+            lastViewedTrackId = id
         }
     }
 
@@ -285,7 +294,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 containerColor = Color.Transparent,
-                contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                snackbarHost = { SnackbarHost(snackbarHostState) }
             ) { innerPadding ->
                 MainNavHost(
                     navController = navController,
@@ -415,7 +425,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         val revealShapeB = remember { RevealCardShape() }
         val shapeToggle = remember { booleanArrayOf(false) }
 
-        if (currentTrack != null) {
+        if (currentTrack != null && (isExpanded || playerExpansion.value > 0.001f)) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

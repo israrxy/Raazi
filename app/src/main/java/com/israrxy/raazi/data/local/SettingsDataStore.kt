@@ -217,6 +217,10 @@ class SettingsDataStore(private val context: Context) {
     val lastFollowPromptDate: Flow<String?> = nullablePrefFlow(LAST_FOLLOW_PROMPT_KEY)
     suspend fun setLastFollowPromptDate(date: String) = setPref(LAST_FOLLOW_PROMPT_KEY, date)
 
+    val FOLLOW_PROMPT_DISMISSED_KEY = booleanPreferencesKey("follow_prompt_dismissed")
+    val followPromptDismissed: Flow<Boolean> = prefFlow(FOLLOW_PROMPT_DISMISSED_KEY, false)
+    suspend fun setFollowPromptDismissed(dismissed: Boolean) = setPref(FOLLOW_PROMPT_DISMISSED_KEY, dismissed)
+
     val themeMode: Flow<String> = prefFlow(THEME_MODE_KEY, "System")
     suspend fun setThemeMode(mode: String) = setPref(THEME_MODE_KEY, mode)
 

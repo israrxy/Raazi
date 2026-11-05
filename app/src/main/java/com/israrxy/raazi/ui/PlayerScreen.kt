@@ -87,8 +87,7 @@ fun PlayerScreen(
     val savedCollectionIds by viewModel.savedCollectionIds.collectAsStateWithLifecycle()
     var playlistTargetTrack by remember { mutableStateOf<MusicItem?>(null) }
 
-    val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
-    val isLyricsLoading by viewModel.isLyricsLoading.collectAsStateWithLifecycle()
+    val lyricsPresentation = rememberLyricsPresentation(viewModel, duration)
     val lyricsScriptFilter by viewModel.lyricsScriptFilter.collectAsStateWithLifecycle()
     val lyricsSearchResults by viewModel.lyricsSearchResults.collectAsStateWithLifecycle()
     val isLyricsSearchLoading by viewModel.isLyricsSearchLoading.collectAsStateWithLifecycle()
@@ -100,10 +99,6 @@ fun PlayerScreen(
     val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSleepTimer by remember { mutableStateOf(false) }
     val sleepTimerActive by com.israrxy.raazi.service.SleepTimer.getInstance().isActive.collectAsStateWithLifecycle()
-
-    val parsedSyncedLines = remember(lyrics?.syncedLyrics) {
-        parseLrcLines(lyrics?.syncedLyrics)
-    }
 
     var showPlayNextSheet by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
@@ -184,7 +179,7 @@ fun PlayerScreen(
                         PlayerArtworkOrVideoSection(
                             viewModel = viewModel,
                             playbackState = playbackState,
-                            modifier = dismissModifier,
+                            modifier = Modifier,
                             transition = transition,
                             cardTop = cardTop
                         )
@@ -230,10 +225,8 @@ fun PlayerScreen(
                     ) {
                         Spacer(modifier = Modifier.height(20.dp))
                         SpotifyLyricsPreviewCard(
-                            syncedLines = parsedSyncedLines,
-                            plainLyrics = lyrics?.plainLyrics,
+                            presentation = lyricsPresentation,
                             currentPosition = progress,
-                            isLyricsLoading = isLyricsLoading,
                             onExpandLyrics = { onLyricsVisibilityChange(true) },
                             onSearchLyrics = {
                                 showLyricsBrowser = true
@@ -274,6 +267,7 @@ fun PlayerScreen(
         ) {
             LyricsScreen(
                 viewModel = viewModel,
+                presentation = lyricsPresentation,
                 onOpenLyricsBrowser = {
                     showLyricsBrowser = true
                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
@@ -304,7 +298,7 @@ fun PlayerScreen(
         if (showLyricsBrowser) {
             LyricsBrowserBottomSheet(
                 viewModel = viewModel,
-                lyrics = lyrics,
+                lyrics = lyricsPresentation.lyrics,
                 lyricsSearchResults = lyricsSearchResults,
                 isLyricsSearchLoading = isLyricsSearchLoading,
                 lyricsScriptFilter = lyricsScriptFilter,

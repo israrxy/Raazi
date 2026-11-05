@@ -118,33 +118,6 @@ internal fun LyricsNowPlayingStrip(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            Surface(
-                onClick = onOpenLyricsBrowser,
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = cleanSourceLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.86f),
-                        fontSize = 11.sp
-                    )
-                    Icon(
-                        imageVector = Icons.Default.UnfoldMore,
-                        contentDescription = "Switch source",
-                        tint = Color.White.copy(alpha = 0.56f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-
             if (currentTrack != null) {
                 IconButton(
                     onClick = { onToggleFavorite(currentTrack) },
@@ -192,6 +165,34 @@ internal fun LyricsNowPlayingStrip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                onClick = onOpenLyricsBrowser,
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = cleanSourceLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.86f),
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                    Icon(
+                        imageVector = Icons.Default.UnfoldMore,
+                        contentDescription = "Switch source",
+                        tint = Color.White.copy(alpha = 0.56f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+
             if (availableVariants.size > 1) {
                 availableVariants.forEach { variant ->
                     val selected = selectedVariant == variant

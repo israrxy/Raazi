@@ -46,8 +46,12 @@ fun DownloadsScreen(
     val completedDownloads by viewModel.dbCompletedDownloads.collectAsState()
     val failedDownloads by viewModel.dbFailedDownloads.collectAsState()
 
-    val storageUsed = remember { viewModel.getDownloadStorageUsed() }
-    val storageAvailable = remember { viewModel.getAvailableStorage() }
+    val storageUsed = remember(activeDownloads, completedDownloads, failedDownloads) {
+        viewModel.getDownloadStorageUsed()
+    }
+    val storageAvailable = remember(activeDownloads, completedDownloads, failedDownloads) {
+        viewModel.getAvailableStorage()
+    }
 
     var showDeleteAllDialog by remember { mutableStateOf(false) }
 

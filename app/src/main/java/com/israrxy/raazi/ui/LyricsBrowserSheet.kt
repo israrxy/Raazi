@@ -79,7 +79,6 @@ internal fun LyricsBrowserBottomSheet(
     ModalBottomSheet(
         onDismissRequest = {
             onDismiss()
-            viewModel.clearLyricsSearchResults()
         },
         sheetState = sheetState,
         containerColor = Color(0xFF101012),
@@ -229,7 +228,7 @@ internal fun LyricsBrowserBottomSheet(
                                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                 onLanguageChange("All")
                                 selectedProvider = LyricsProviderFilter.ALL
-                                viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                                viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist, force = true)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
@@ -322,7 +321,7 @@ internal fun LyricsBrowserBottomSheet(
                                 onClick = {
                                     selectedProvider = LyricsProviderFilter.ALL
                                     onLanguageChange("All")
-                                    viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
+                                    viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist, force = true)
                                 }
                             ) {
                                 Text(

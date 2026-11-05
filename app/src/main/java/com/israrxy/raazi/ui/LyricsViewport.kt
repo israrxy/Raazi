@@ -9,7 +9,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -23,10 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -37,8 +34,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.israrxy.raazi.data.remote.Lyrics
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
-import com.israrxy.raazi.data.lyrics.LyricsTextVariants
-import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.Emerald400
 import com.israrxy.raazi.ui.theme.Emerald500
@@ -47,6 +42,7 @@ import kotlin.math.abs
 @Composable
 internal fun LyricsMainViewportContent(
     isLoading: Boolean,
+    isUnavailable: Boolean,
     lyrics: Lyrics?,
     isSynced: Boolean,
     syncedLines: List<LyricLine>,
@@ -56,9 +52,8 @@ internal fun LyricsMainViewportContent(
     listState: LazyListState,
     isUserScrolling: Boolean,
     onResetUserScrolling: () -> Unit,
-    selectedVariant: LyricsViewVariant,
+    plainLyrics: String?,
     translatedPlain: String?,
-    hideBrackets: Boolean = true,
     currentTrack: MusicItem?,
     onOpenLyricsBrowser: () -> Unit,
     onRetryLyricsFetch: () -> Unit,
@@ -72,11 +67,15 @@ internal fun LyricsMainViewportContent(
             LyricsLoadingPlaceholder()
         }
 
-        lyrics == null || (lyrics.syncedLyrics.isNullOrBlank() && lyrics.plainLyrics.isNullOrBlank()) -> {
+        isUnavailable -> {
             LyricsEmptyPlaceholder(
                 onSearchManually = onOpenLyricsBrowser,
                 onRetry = onRetryLyricsFetch
             )
+        }
+
+        lyrics == null || (lyrics.syncedLyrics.isNullOrBlank() && lyrics.plainLyrics.isNullOrBlank()) -> {
+            LyricsLoadingPlaceholder()
         }
 
         isSynced -> {
@@ -182,22 +181,6 @@ internal fun LyricsMainViewportContent(
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(96.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.34f),
-                                    Color.Black.copy(alpha = 0.66f)
-                                )
-                            )
-                        )
-                )
-
                 AnimatedVisibility(
                     visible = isUserScrolling && activeLineIndex >= 0,
                     enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }) + scaleIn(),
@@ -239,20 +222,7 @@ internal fun LyricsMainViewportContent(
         }
 
         else -> {
-            val basePlain = remember(lyrics.plainLyrics, hideBrackets) {
-                val raw = lyrics.plainLyrics.orEmpty()
-                if (hideBrackets && raw.isNotBlank()) {
-                    raw.lines()
-                        .map { cleanBracketedText(it) }
-                        .filter { it.isNotBlank() }
-                        .joinToString("\n")
-                } else {
-                    raw
-                }
-            }
-            val displayedPlain = remember(basePlain, selectedVariant) {
-                LyricsTextVariants.transform(basePlain, selectedVariant)
-            }
+            val displayedPlain = plainLyrics.orEmpty()
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier

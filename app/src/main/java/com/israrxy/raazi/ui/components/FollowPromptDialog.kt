@@ -64,7 +64,10 @@ private val InstagramGradient = Brush.linearGradient(
 )
 
 @Composable
-fun FollowPromptDialog(onDismiss: () -> Unit) {
+fun FollowPromptDialog(
+    onDismiss: () -> Unit,
+    onDontShowAgain: () -> Unit = onDismiss
+) {
     val context = LocalContext.current
 
     Dialog(
@@ -216,6 +219,20 @@ fun FollowPromptDialog(onDismiss: () -> Unit) {
                             text = "Close",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Persistent dismissal: the prompt never appears again.
+                    androidx.compose.material3.TextButton(
+                        onClick = onDontShowAgain,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Don't show again",
+                            fontWeight = FontWeight.Medium,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
