@@ -52,24 +52,20 @@ internal fun SpotifyYoutubeLyricItem(
     val targetAlpha = when {
         isCurrent -> 1f
         showTimestampBadge -> 0.72f
-        isPassed -> 0.28f
-        distance == 1 -> 0.55f
+        isPassed -> 0.24f
+        distance == 1 -> 0.52f
         distance == 2 -> 0.36f
-        else -> 0.22f
+        else -> 0.24f
     }
 
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = tween(
-            durationMillis = 280,
-            delayMillis = if (isCurrent) 0 else (distance * 35).coerceAtMost(140),
-            easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-        ),
+        animationSpec = tween(durationMillis = 280),
         label = "lyric_alpha"
     )
 
     val targetScale = when {
-        isCurrent -> 1.02f
+        isCurrent -> 1.01f
         distance == 1 -> 0.99f
         else -> 0.97f
     }
@@ -89,21 +85,6 @@ internal fun SpotifyYoutubeLyricItem(
         label = "lyric_bg_alpha"
     )
 
-    val blinkAnim = remember { Animatable(0f) }
-    LaunchedEffect(isCurrent) {
-        if (isCurrent) {
-            // TeleMusic line-change blink effect: pulse on transition and decay smoothly
-            blinkAnim.snapTo(0.24f)
-            blinkAnim.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
-            )
-        } else {
-            blinkAnim.snapTo(0f)
-        }
-    }
-
-    // Stable modifier chain: no dynamic blur, no conditional branches in modifiers
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -114,23 +95,7 @@ internal fun SpotifyYoutubeLyricItem(
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
             .clip(RoundedCornerShape(14.dp))
-            .drawBehind {
-                val bg = (containerAlpha + blinkAnim.value).coerceIn(0f, 1f)
-                if (bg > 0.001f) {
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = bg),
-                        cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx())
-                    )
-                }
-                val border = (blinkAnim.value * 1.5f).coerceIn(0f, 1f)
-                if (border > 0.01f) {
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = border),
-                        cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
-            }
+            .background(Color.White.copy(alpha = containerAlpha))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onShareLine

@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,16 +16,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 /**
- * Sleek, draw-phase driven lyrics timeline.
- * 3dp track (white 25%), grows to 6dp with thumb while dragging. Touch target >= 48dp.
- * Progress is drawn directly on Canvas from positionProvider.
- * Time labels update at most once per second with tabular numerals.
- * Scrubbing and seek release match PlayerScreen logic to prevent snap-back.
+ * Compact, sleek lyrics timeline.
+ * Horizontally aligned in a single row: [elapsed] ────●──────── [duration].
+ * 3dp track at rest (white 25%), expands to 5dp with thumb when dragging.
+ * Direct canvas draw-phase rendering with tabular timecodes and tap-to-seek.
  */
 @Composable
 internal fun LyricsSleekTimeline(
@@ -65,19 +66,43 @@ internal fun LyricsSleekTimeline(
     }
 
     val animatedTrackHeight by animateDpAsState(
-        targetValue = if (isDragging) 6.dp else 3.dp,
+        targetValue = if (isDragging) 5.dp else 3.dp,
         animationSpec = tween(140),
         label = "timeline_height"
     )
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        Text(
+            text = formatSecondsToTime(elapsedSeconds),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFeatureSettings = "tnum",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = Color.White.copy(alpha = 0.60f)
+        )
+
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp) // Minimum 48dp touch target
+                .weight(1f)
+                .height(28.dp)
+                .pointerInput(duration) {
+                    detectTapGestures { offset ->
+                        if (size.width > 0 && duration > 0L) {
+                            val fraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                            val seekPos = (fraction * duration).toLong().coerceIn(0L, duration)
+                            pendingSeekPositionMs = seekPos
+                            pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                            onSeek(seekPos)
+                        }
+                    }
+                }
                 .pointerInput(duration) {
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
@@ -117,14 +142,14 @@ internal fun LyricsSleekTimeline(
                 val trackHeight = size.height
                 val corner = CornerRadius(trackHeight / 2f, trackHeight / 2f)
 
-                // Background track: 3dp (or 6dp when dragging), white 25% alpha
+                // Background track
                 drawRoundRect(
-                    color = Color.White.copy(alpha = 0.25f),
+                    color = Color.White.copy(alpha = 0.22f),
                     size = size,
                     cornerRadius = corner
                 )
 
-                // Active progress: drawn in draw phase from positionProvider
+                // Active progress bar
                 val progressFraction = if (isDragging) {
                     dragFraction
                 } else if (pendingSeekPositionMs != null && duration > 0L) {
@@ -144,41 +169,26 @@ internal fun LyricsSleekTimeline(
                     )
                 }
 
-                // Thumb only visible while dragging
+                // Active scrubbing thumb
                 if (isDragging) {
                     drawCircle(
                         color = Color.White,
-                        radius = 7.dp.toPx(),
+                        radius = 6.dp.toPx(),
                         center = Offset(activeWidth, trackHeight / 2f)
                     )
                 }
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(y = (-8).dp)
-                .padding(horizontal = 2.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = formatSecondsToTime(elapsedSeconds),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFeatureSettings = "tnum",
-                    fontSize = 11.sp
-                ),
-                color = Color.White.copy(alpha = 0.60f)
-            )
-            Text(
-                text = formatSecondsToTime((duration / 1000L).coerceAtLeast(0L)),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFeatureSettings = "tnum",
-                    fontSize = 11.sp
-                ),
-                color = Color.White.copy(alpha = 0.60f)
-            )
-        }
+        Text(
+            text = formatSecondsToTime((duration / 1000L).coerceAtLeast(0L)),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFeatureSettings = "tnum",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = Color.White.copy(alpha = 0.60f)
+        )
     }
 }
 

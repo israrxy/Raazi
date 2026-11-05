@@ -183,12 +183,12 @@ internal fun LyricsNowPlayingStrip(
             }
         }
 
-        // Sleek Timeline under song name and artist
+        // Compact sleek timeline under track card
         LyricsSleekTimeline(
             duration = duration,
             positionProvider = positionProvider,
             onSeek = onSeek,
-            modifier = Modifier.padding(top = 2.dp)
+            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
         )
 
         Row(

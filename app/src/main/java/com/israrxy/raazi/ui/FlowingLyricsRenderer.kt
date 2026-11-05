@@ -53,19 +53,7 @@ internal fun FlowingLyricWord(
 ) {
     val duration = (word.endTimeMs - word.startTimeMs).coerceAtLeast(1L)
 
-    Box(
-        modifier = Modifier.graphicsLayer {
-            val currentPos = positionProvider()
-            val p = ((currentPos - word.startTimeMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-            val scale = if (p > 0f && p < 1f) {
-                1f + 0.035f * (1f - kotlin.math.abs(p - 0.5f) * 2f)
-            } else {
-                1f
-            }
-            scaleX = scale
-            scaleY = scale
-        }
-    ) {
+    Box {
         // Base dimmed text (white 35%)
         Text(
             text = word.displayText,

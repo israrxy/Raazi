@@ -169,19 +169,20 @@ fun LyricsScreen(
         parseLrcLines(lyrics?.syncedLyrics, hideBrackets = hideBrackets)
     }
 
-    // Fix 1: Precompute display text and warm up Transliterator in Dispatchers.Default
-    var syncedLines by remember { mutableStateOf<List<LyricLine>>(emptyList()) }
-    LaunchedEffect(parsedPairs, duration, translatedLines.toList(), showTranslation, selectedVariant) {
+    // Synchronous remember for instant display, with warmup of Transliterator off main thread
+    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation, selectedVariant) {
+        buildRichLyricLines(
+            rawPairs = parsedPairs,
+            durationMs = duration,
+            translations = translatedLines.toList(),
+            showTranslation = showTranslation,
+            variant = selectedVariant
+        )
+    }
+
+    LaunchedEffect(selectedVariant) {
         withContext(Dispatchers.Default) {
             LyricsTextVariants.transform("warmup", selectedVariant)
-            val built = buildRichLyricLines(
-                rawPairs = parsedPairs,
-                durationMs = duration,
-                translations = translatedLines.toList(),
-                showTranslation = showTranslation,
-                variant = selectedVariant
-            )
-            syncedLines = built
         }
     }
 
@@ -255,18 +256,18 @@ fun LyricsScreen(
         isUserScrolling = false
     }
 
-    // Fix 6: Safe auto-scroll with ~1/3 viewport target, animateScrollBy when close, scrollToItem when far
+    // Safe auto-scroll with ~1/3 viewport target, animateScrollBy when close, animateScrollToItem when far
     LaunchedEffect(activeLineIndex, isUserScrolling) {
         if (!isUserScrolling && activeLineIndex >= 0 && syncedLines.isNotEmpty()) {
             val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
             val headerOffset = if (firstLineTimestamp > 4000L) 1 else 0
             val targetLazyIndex = (activeLineIndex + headerOffset).coerceAtLeast(0)
 
-            if (listState.layoutInfo.totalItemsCount == 0) {
-                kotlinx.coroutines.yield()
-            }
+            runCatching {
+                if (listState.layoutInfo.totalItemsCount == 0) {
+                    kotlinx.coroutines.yield()
+                }
 
-            try {
                 val layoutInfo = listState.layoutInfo
                 val totalCount = layoutInfo.totalItemsCount
                 if (totalCount > 0) {
@@ -275,27 +276,22 @@ fun LyricsScreen(
                     val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
                     if (targetItem != null && viewportHeight > 0) {
-                        val desiredY = (viewportHeight * 0.33f).toInt()
+                        val desiredY = (viewportHeight * 0.35f).toInt()
                         val itemCenter = targetItem.offset + (targetItem.size / 2)
                         val diff = itemCenter - desiredY
-                        if (abs(diff) > 8) {
+                        if (abs(diff) > 10) {
                             listState.animateScrollBy(
                                 value = diff.toFloat(),
-                                animationSpec = tween(durationMillis = 480, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
                             )
                         }
                     } else {
-                        val anchorIndex = (safeTargetIndex - 1).coerceAtLeast(0)
-                        listState.scrollToItem(
-                            index = anchorIndex,
+                        listState.animateScrollToItem(
+                            index = safeTargetIndex,
                             scrollOffset = 0
                         )
                     }
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                android.util.Log.w("LyricsScreen", "Failed auto-scrolling lyrics to index $targetLazyIndex", e)
             }
         }
     }
@@ -450,6 +446,7 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     syncedLines = syncedLines,
                     activeLineIndex = activeLineIndex,
+                    currentPosition = currentPosition,
                     positionProvider = positionProvider,
                     duration = duration,
                     listState = listState,
