@@ -67,7 +67,7 @@ internal fun FlowingLyricWord(
             style = textStyle,
             color = Color.White,
             modifier = Modifier.drawWithContent {
-                val currentPos = positionProvider()
+                val currentPos = runCatching { positionProvider() }.getOrDefault(0L)
                 val p = ((currentPos - word.startTimeMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
                 if (p > 0f) {
                     clipRect(right = size.width * p) {

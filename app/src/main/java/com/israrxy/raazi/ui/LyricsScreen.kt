@@ -225,7 +225,9 @@ fun LyricsScreen(
     // Derived active line index with binary search: invalidates readers ONLY when line changes
     val activeLineIndex by remember(syncedLines) {
         derivedStateOf {
-            binarySearchActiveLine(syncedLines, positionProvider())
+            runCatching {
+                binarySearchActiveLine(syncedLines, positionProvider())
+            }.getOrDefault(-1)
         }
     }
 

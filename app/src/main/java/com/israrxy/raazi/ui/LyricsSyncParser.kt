@@ -64,14 +64,15 @@ fun cleanBracketedText(text: String): String {
  * Robust LRC & Enhanced LRC parser supporting [mm:ss], [mm:ss.xx], [mm:ss.xxx]
  * and inline word timestamps <mm:ss.xx>word (Musixmatch RichSync / Enhanced LRC).
  */
-fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pair<Long, String>> {
-    if (syncedLyrics.isNullOrBlank()) return emptyList()
+fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pair<Long, String>> = runCatching {
+    if (syncedLyrics.isNullOrBlank()) return@runCatching emptyList()
     val result = mutableListOf<Pair<Long, String>>()
 
     syncedLyrics.lines().forEach { rawLine ->
         val matches = LINE_TIMESTAMP_REGEX.findAll(rawLine).toList()
         if (matches.isNotEmpty()) {
-            val rawBody = rawLine.substring(matches.last().range.last + 1).trim()
+            val lastMatchEnd = matches.last().range.last + 1
+            val rawBody = if (lastMatchEnd < rawLine.length) rawLine.substring(lastMatchEnd).trim() else ""
             val processedBody = if (hideBrackets) cleanBracketedText(rawBody) else rawBody
             val cleanText = processedBody.replace(STRIP_WORD_TAGS_REGEX, "").trim()
             if (cleanText.isNotEmpty()) {
@@ -84,8 +85,8 @@ fun parseLrcLines(syncedLyrics: String?, hideBrackets: Boolean = false): List<Pa
             }
         }
     }
-    return result.sortedBy { it.first }
-}
+    result.sortedBy { it.first }
+}.getOrDefault(emptyList())
 
 fun buildRichLyricLines(
     rawPairs: List<Pair<Long, String>>,
@@ -93,9 +94,9 @@ fun buildRichLyricLines(
     translations: List<String>,
     showTranslation: Boolean,
     variant: LyricsViewVariant = LyricsViewVariant.ORIGINAL
-): List<LyricLine> {
-    if (rawPairs.isEmpty()) return emptyList()
-    return rawPairs.mapIndexed { idx, (lineStartMs, rawBody) ->
+): List<LyricLine> = runCatching {
+    if (rawPairs.isEmpty()) return@runCatching emptyList()
+    rawPairs.mapIndexed { idx, (lineStartMs, rawBody) ->
         val nextLineStartMs = rawPairs.getOrNull(idx + 1)?.first
             ?: durationMs.takeIf { it > lineStartMs }
             ?: (lineStartMs + 4000L)
@@ -166,11 +167,16 @@ fun buildRichLyricLines(
             translation = if (showTranslation && idx < translations.size) translations[idx] else null
         )
     }
+}.getOrElse {
+    rawPairs.map { (t, body) ->
+        val clean = body.replace(STRIP_WORD_TAGS_REGEX, "").trim()
+        LyricLine(timestamp = t, endTimestamp = t + 3000L, text = clean, displayText = clean)
+    }
 }
 
-fun withPrecomputedVariant(lines: List<LyricLine>, variant: LyricsViewVariant): List<LyricLine> {
-    if (lines.isEmpty()) return emptyList()
-    return lines.map { line ->
+fun withPrecomputedVariant(lines: List<LyricLine>, variant: LyricsViewVariant): List<LyricLine> = runCatching {
+    if (lines.isEmpty()) return@runCatching emptyList()
+    lines.map { line ->
         line.copy(
             displayText = LyricsTextVariants.transform(line.text, variant),
             words = line.words.map { w ->
@@ -178,7 +184,7 @@ fun withPrecomputedVariant(lines: List<LyricLine>, variant: LyricsViewVariant): 
             }
         )
     }
-}
+}.getOrDefault(lines)
 
 @Composable
 internal fun LyricsLoadingPlaceholder() {

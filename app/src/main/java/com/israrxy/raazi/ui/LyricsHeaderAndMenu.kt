@@ -159,26 +159,20 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
 
-            // Small play/pause button (about 40dp circle, white at 12% alpha, 22dp icon, crossfade)
+            // Small play/pause button (about 38dp circle, white at 12% alpha)
             Surface(
                 onClick = onPlayPause,
                 shape = CircleShape,
                 color = Color.White.copy(alpha = 0.12f),
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(38.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    AnimatedContent(
-                        targetState = isPlaying,
-                        transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
-                        label = "lyrics_play_pause_crossfade"
-                    ) { playing ->
-                        Icon(
-                            imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (playing) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

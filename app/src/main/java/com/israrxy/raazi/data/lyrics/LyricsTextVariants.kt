@@ -19,28 +19,28 @@ object LyricsTextVariants {
 
     private val nonAsciiLetterRegex = Regex("""[^\p{ASCII}]""")
 
-    fun availableVariants(text: String): List<LyricsViewVariant> {
+    fun availableVariants(text: String): List<LyricsViewVariant> = runCatching {
         val romanized = romanize(text)
-        return if ((romanized != text || nonAsciiLetterRegex.containsMatchIn(text)) && romanized.isNotBlank()) {
+        if ((romanized != text || nonAsciiLetterRegex.containsMatchIn(text)) && romanized.isNotBlank()) {
             listOf(LyricsViewVariant.ORIGINAL, LyricsViewVariant.ROMANIZED)
         } else {
             listOf(LyricsViewVariant.ORIGINAL)
         }
-    }
+    }.getOrDefault(listOf(LyricsViewVariant.ORIGINAL))
 
-    fun transform(text: String, variant: LyricsViewVariant): String {
-        return when (variant) {
+    fun transform(text: String, variant: LyricsViewVariant): String = runCatching {
+        when (variant) {
             LyricsViewVariant.ORIGINAL -> text
             LyricsViewVariant.ROMANIZED -> romanize(text)
         }
-    }
+    }.getOrDefault(text)
 
-    fun romanize(text: String): String {
-        if (text.isBlank()) return text
+    fun romanize(text: String): String = runCatching {
+        if (text.isBlank()) return@runCatching text
 
         // 1. Check Google Neural Romanization cache first (single-line or multi-line)
         LyricsTranslator.getCachedRomanization(text)?.let { cached ->
-            return if (BengaliRomanizer.containsBengali(text)) {
+            return@runCatching if (BengaliRomanizer.containsBengali(text)) {
                 BengaliRomanizer.sanitizeBengali(cached)
             } else {
                 HinglishRomanizer.sanitizeHinglish(cached)
@@ -50,7 +50,7 @@ object LyricsTextVariants {
             val lines = text.lines()
             val allCached = lines.all { it.isBlank() || LyricsTranslator.getCachedRomanization(it) != null }
             if (allCached) {
-                return lines.joinToString("\n") { line ->
+                return@runCatching lines.joinToString("\n") { line ->
                     if (line.isBlank()) line
                     else {
                         val cached = LyricsTranslator.getCachedRomanization(line) ?: line
@@ -63,11 +63,11 @@ object LyricsTextVariants {
 
         // 2. Handle Bengali separately without interfering with global logic
         if (BengaliRomanizer.containsBengali(text)) {
-            return BengaliRomanizer.romanize(text)
+            return@runCatching BengaliRomanizer.romanize(text)
         }
 
         // 3. Convert Devanagari words using dedicated Modern Hinglish phonological engine
-        var step = HinglishRomanizer.romanize(text)
+        var step = runCatching { HinglishRomanizer.romanize(text) }.getOrDefault(text)
 
         // 4. If non-ASCII characters remain (e.g. Gurmukhi, Arabic, CJK), transliterate
         if (nonAsciiLetterRegex.containsMatchIn(step)) {
@@ -84,8 +84,8 @@ object LyricsTextVariants {
             }
         }
 
-        return HinglishRomanizer.sanitizeHinglish(step)
-    }
+        HinglishRomanizer.sanitizeHinglish(step)
+    }.getOrDefault(text)
 
     /**
      * Converts ICU ISO-15919 diacritics (such as ṁ, ṃ, m̐, ś, ṣ) into modern Hinglish
