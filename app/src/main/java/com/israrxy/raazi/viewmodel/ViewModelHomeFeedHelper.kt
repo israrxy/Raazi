@@ -38,6 +38,36 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                 }
             }
 
+            // 1. Immediately hydrate Quick Picks from local Room storage (0 ms) so the user never sees blank space or generic picks
+            launch {
+                try {
+                    if (_quickPicks.value.isEmpty()) {
+                        val cached = (repository.quickPicks.first() + repository.favoriteTracks.first())
+                            .filter { it.id.isNotBlank() && it.id !in dismissedHomeItemIds }
+                            .distinctBy { it.id }
+                            .take(20)
+                        if (cached.isNotEmpty() && _quickPicks.value.isEmpty()) {
+                            _quickPicks.value = cached
+                            rebuildHomeFeedState()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.d("MusicVM", "Instant quick picks pre-hydration skipped: ${e.message}")
+                }
+
+                // 2. Launch personalized Quick Picks generation (parallel discovery blend)
+                try {
+                    val engine = QuickPicksEngine(repository, musicDao, musicExtractor)
+                    val generated = engine.generateQuickPicks(dismissedItemIds = dismissedHomeItemIds)
+                    if (generated.isNotEmpty()) {
+                        _quickPicks.value = generated
+                        rebuildHomeFeedState()
+                    }
+                } catch (e: Exception) {
+                    Log.e("MusicVM", "Error generating personalized Quick Picks on startup", e)
+                }
+            }
+
             try {
                 val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
                 val homeResult = withTimeoutOrNull(5000L) {
@@ -59,12 +89,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                         s.label?.contains("start radio", ignoreCase = true) == true
                     }
                     if (ytQuickPicks != null) {
-                        val songs = ytQuickPicks.items.mapNotNull { yt ->
-                            (yt as? SongItem)?.let { convertYTItemToMusicItem(it, MusicContentType.SONG) }
-                        }
-                        if (songs.isNotEmpty()) {
-                            _quickPicks.value = songs
-                        }
+                        // YouTube's generic quick picks are excluded to ensure only personalized/regional picks are shown
                         finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
                     }
                     _homePage.value = finalPage
@@ -73,18 +98,6 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
                 }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error loading InnerTube home", e)
-            }
-
-            if (_quickPicks.value.isEmpty()) {
-                try {
-                    val engine = QuickPicksEngine(repository, musicDao, musicExtractor)
-                    val generated = engine.generateQuickPicks(dismissedItemIds = dismissedHomeItemIds)
-                    if (generated.isNotEmpty()) {
-                        _quickPicks.value = generated
-                    }
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error generating Quick Picks", e)
-                }
             }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading home", e)
@@ -194,12 +207,7 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
                         s.label?.contains("start radio", ignoreCase = true) == true
                     }
                     if (ytQuickPicks != null) {
-                        val songs = ytQuickPicks.items.mapNotNull { yt ->
-                            (yt as? SongItem)?.let { convertYTItemToMusicItem(it, MusicContentType.SONG) }
-                        }
-                        if (songs.isNotEmpty()) {
-                            _quickPicks.value = songs
-                        }
+                        // YouTube's generic quick picks are excluded to ensure only personalized/regional picks are shown
                         finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
                     }
                     _homePage.value = finalPage

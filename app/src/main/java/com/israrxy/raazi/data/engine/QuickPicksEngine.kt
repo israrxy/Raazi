@@ -7,6 +7,9 @@ import com.israrxy.raazi.data.repository.MusicRepository
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -53,17 +56,21 @@ class QuickPicksEngine(
             }
 
             val discoveryTracks = mutableListOf<MusicItem>()
-            for (seed in seeds) {
-                try {
-                    val radioItems = withTimeoutOrNull(RADIO_TIMEOUT_MS) {
-                        musicExtractor.getUpNext(seed.id)
-                    }.orEmpty()
-
-                    val validRadio = radioItems
-                        .filter { it.id.isNotBlank() && it.id != seed.id && it.id !in dismissedItemIds }
+            coroutineScope {
+                val deferredList = seeds.map { seed ->
+                    async {
+                        try {
+                            withTimeoutOrNull(RADIO_TIMEOUT_MS) {
+                                musicExtractor.getUpNext(seed.id)
+                            }.orEmpty().filter { it.id.isNotBlank() && it.id != seed.id && it.id !in dismissedItemIds }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to get radio for seed ${seed.title}: ${e.message}")
+                            emptyList()
+                        }
+                    }
+                }
+                deferredList.awaitAll().forEach { validRadio ->
                     discoveryTracks.addAll(validRadio)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to get radio for seed ${seed.title}: ${e.message}")
                 }
             }
 

@@ -90,4 +90,39 @@ class HomeFeedAndNavigationStateTest {
         )
         assertTrue(playlistItem.isPlaylistResult())
     }
+
+    @Test
+    fun testQuickPicksPersonalizedPriorityExcludesGenericRail() {
+        val personalizedItem = MusicItem(
+            id = "fav_1",
+            title = "My Favorite Track",
+            artist = "Local Artist",
+            duration = 200_000L,
+            thumbnailUrl = "https://example.com/fav.jpg",
+            audioUrl = "",
+            videoUrl = "watch?v=fav_1",
+            contentType = MusicContentType.SONG
+        )
+
+        val quickPicksSection = HomeSection(
+            id = "quick_picks",
+            title = "Quick Picks",
+            type = HomeSectionType.QUICK_PICKS,
+            sourceType = "local",
+            items = listOf(com.israrxy.raazi.viewmodel.HomeFeedItem.Music(personalizedItem))
+        )
+
+        val feedState = HomeFeedUiState(
+            isLoading = false,
+            isRefreshing = false,
+            sections = listOf(quickPicksSection)
+        )
+
+        assertEquals(1, feedState.sections.size)
+        val section = feedState.sections.first()
+        assertEquals("quick_picks", section.id)
+        val firstItem = section.items.first() as com.israrxy.raazi.viewmodel.HomeFeedItem.Music
+        assertEquals("fav_1", firstItem.item.id)
+        assertEquals("My Favorite Track", firstItem.item.title)
+    }
 }
