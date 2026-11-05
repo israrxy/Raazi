@@ -8,9 +8,13 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 
-# OuterTune Dev Folder
+# Reference repositories
 /OuterTune-dev
 /OuterTune-dev/
+/TeleMusic
+/TeleMusic/
+/telemusic
+/telemusic/
 
 # OS specific
 .DS_Store
