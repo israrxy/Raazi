@@ -35,7 +35,7 @@ internal fun MusicPlayerViewModel.observeNetworkConnectivity() {
                     }
                     loadHomeContent()
                     _playbackState.value.currentTrack?.let { track ->
-                        if (_lyrics.value == null) fetchLyricsImpl(track)
+                        if (lyricsState.value !is com.israrxy.raazi.data.lyrics.LyricsUiState.Success) fetchLyricsImpl(track)
                         if (_autoPlayQueue.value.isEmpty()) fetchAutoPlayQueue(track)
                         if (_playbackState.value.playlist.size <= 1) {
                             playbackService?.let { service ->

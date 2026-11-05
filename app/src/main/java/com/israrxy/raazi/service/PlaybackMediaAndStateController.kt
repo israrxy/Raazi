@@ -127,6 +127,7 @@ internal fun MusicPlaybackService.createPlayerListenerImpl() = object : Player.L
                 Log.w(MusicPlaybackService.TAG, "Auto-skipping to next track after error")
                 next()
             } else {
+                notifyPlaybackError("Couldn't play ${currentTrack?.title ?: "this track"}. Please try again.")
                 notifyPlaybackState()
             }
         }

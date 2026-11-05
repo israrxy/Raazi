@@ -20,24 +20,7 @@ internal fun MusicPlayerViewModel.fetchLyricsImpl(track: MusicItem, forceRefresh
     } else {
         track
     }
-    lastLyricsTrack = resolvedTrack
-    lyricsFetchJob?.cancel()
-    _isLyricsLoading.value = true
-    _lyrics.value = null
-    lyricsFetchJob = viewModelScope.launch {
-        try {
-            val result = repository.getLyrics(
-                item = resolvedTrack,
-                preferredScript = _lyricsScriptFilter.value,
-                forceRefresh = forceRefresh
-            )
-            _lyrics.value = result
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            _isLyricsLoading.value = false
-        }
-    }
+    lyricsController.load(resolvedTrack, forceRefresh = forceRefresh)
 }
 
 internal fun MusicPlayerViewModel.fetchSongCreditsImpl(track: MusicItem) {
@@ -61,75 +44,27 @@ internal fun MusicPlayerViewModel.fetchSongCreditsImpl(track: MusicItem) {
 }
 
 internal fun MusicPlayerViewModel.retryLyricsFetchImpl() {
-    val state = playbackState.value
-    val track = state.currentTrack ?: lastLyricsTrack ?: return
-    val effectiveDuration = if (track.duration > 0L) track.duration else state.duration
-    val resolvedTrack = if (effectiveDuration > 0L && track.duration != effectiveDuration) {
-        track.copy(duration = effectiveDuration)
-    } else {
-        track
-    }
-    fetchLyricsImpl(resolvedTrack, forceRefresh = true)
+    lyricsController.retry(forceRefresh = true)
 }
 
 internal fun MusicPlayerViewModel.searchLyricsOptionsImpl(
     titleOverride: String? = null,
-    artistOverride: String? = null
+    artistOverride: String? = null,
+    force: Boolean = false
 ) {
-    val track = lastLyricsTrack ?: playbackState.value.currentTrack ?: return
-    viewModelScope.launch {
-        try {
-            _isLyricsSearchLoading.value = true
-            _lyricsSearchResults.value = repository.searchLyricsOptions(
-                item = track,
-                titleOverride = titleOverride ?: track.title,
-                artistOverride = artistOverride ?: track.artist,
-                preferredScript = _lyricsScriptFilter.value
-            )
-        } catch (e: Exception) {
-            Log.e("MusicVM", "Lyrics search failed", e)
-            _error.value = "Lyrics search failed: ${e.message}"
-        } finally {
-            _isLyricsSearchLoading.value = false
-        }
-    }
+    lyricsController.searchOptions(titleOverride, artistOverride, force = force)
 }
 
 internal fun MusicPlayerViewModel.saveLyricsSelectionImpl(result: LyricsSearchResult) {
-    val track = lastLyricsTrack ?: playbackState.value.currentTrack ?: return
-    viewModelScope.launch {
-        try {
-            repository.saveLyricsForTrack(track, result.lyrics)
-            _lyrics.value = result.lyrics.copy(source = "Saved ${result.lyrics.source}")
-        } catch (e: Exception) {
-            Log.e("MusicVM", "Saving lyrics failed", e)
-            _error.value = "Couldn't save lyrics: ${e.message}"
-        }
-    }
+    lyricsController.selectResult(result)
 }
 
 internal fun MusicPlayerViewModel.clearSavedLyricsSelectionImpl() {
-    val track = lastLyricsTrack ?: playbackState.value.currentTrack ?: return
-    viewModelScope.launch {
-        try {
-            repository.clearSavedLyricsForTrack(track)
-            fetchLyricsImpl(track)
-        } catch (e: Exception) {
-            Log.e("MusicVM", "Clearing saved lyrics failed", e)
-            _error.value = "Couldn't clear saved lyrics: ${e.message}"
-        }
-    }
+    lyricsController.clearSavedSelection()
 }
 
 internal fun MusicPlayerViewModel.setLyricsScriptFilterImpl(filter: LyricsScriptFilter) {
-    if (_lyricsScriptFilter.value == filter) return
-    _lyricsScriptFilter.value = filter
-
-    val track = lastLyricsTrack ?: playbackState.value.currentTrack ?: return
-    if (_lyrics.value?.source?.startsWith("Saved") == true) {
-        return
-    }
-    fetchLyricsImpl(track)
+    lyricsController.setScriptFilter(filter)
 }
 
 internal fun MusicPlayerViewModel.initLastFmScrobbling() {

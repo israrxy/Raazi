@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -201,14 +202,17 @@ fun SettingsSelectItem(
 
 @Composable
 fun SettingsActionItem(
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    iconPainter: androidx.compose.ui.graphics.painter.Painter? = null,
     title: String,
     subtitle: String? = null,
     onClick: () -> Unit,
-    isDestructive: Boolean = false
+    isDestructive: Boolean = false,
+    iconTint: Color? = null
 ) {
     val contentColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    val iconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val defaultIconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val resolvedIconTint = iconTint ?: (if (iconPainter != null) Color.Unspecified else defaultIconColor)
 
     Row(
         modifier = Modifier
@@ -217,12 +221,21 @@ fun SettingsActionItem(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(20.dp)
-        )
+        if (iconPainter != null) {
+            Icon(
+                painter = iconPainter,
+                contentDescription = null,
+                tint = resolvedIconTint,
+                modifier = Modifier.size(20.dp)
+            )
+        } else if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = resolvedIconTint,
+                modifier = Modifier.size(20.dp)
+            )
+        }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -291,7 +304,8 @@ fun SelectionDialog(
     options: List<String>,
     selectedOption: String,
     onOptionSelected: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    descriptions: Map<String, String> = emptyMap()
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -312,11 +326,20 @@ fun SelectionDialog(
                             onClick = { onOptionSelected(option) }
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = option,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = option,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            descriptions[option]?.takeIf { it.isNotBlank() }?.let { description ->
+                                Text(
+                                    text = description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }

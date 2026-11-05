@@ -85,6 +85,8 @@ class SettingsDataStore(private val context: Context) {
         val RAAZI_AUTO_SYNC_ENABLED_KEY = booleanPreferencesKey("raazi_auto_sync_enabled")
         val CONTENT_COUNTRY_KEY = stringPreferencesKey("content_country")
         val CONTENT_LANGUAGE_KEY = stringPreferencesKey("content_language")
+        val RESET_TO_ARTWORK_ON_TRACK_CHANGE_KEY = booleanPreferencesKey("reset_to_artwork_on_track_change")
+        val OPEN_PLAYER_ON_TRACK_SELECT_KEY = booleanPreferencesKey("open_player_on_track_select")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -129,6 +131,12 @@ class SettingsDataStore(private val context: Context) {
 
     val defaultPlayerScreen: Flow<String> = prefFlow(DEFAULT_PLAYER_SCREEN_KEY, "LAST_USED")
     suspend fun setDefaultPlayerScreen(screen: String) = setPref(DEFAULT_PLAYER_SCREEN_KEY, screen)
+
+    val resetToArtworkOnTrackChange: Flow<Boolean> = prefFlow(RESET_TO_ARTWORK_ON_TRACK_CHANGE_KEY, true)
+    suspend fun setResetToArtworkOnTrackChange(reset: Boolean) = setPref(RESET_TO_ARTWORK_ON_TRACK_CHANGE_KEY, reset)
+
+    val openPlayerOnTrackSelect: Flow<Boolean> = prefFlow(OPEN_PLAYER_ON_TRACK_SELECT_KEY, true)
+    suspend fun setOpenPlayerOnTrackSelect(open: Boolean) = setPref(OPEN_PLAYER_ON_TRACK_SELECT_KEY, open)
 
     val lyricsAutoScroll: Flow<Boolean> = prefFlow(LYRICS_AUTO_SCROLL_KEY, true)
     suspend fun setLyricsAutoScroll(enabled: Boolean) = setPref(LYRICS_AUTO_SCROLL_KEY, enabled)
@@ -208,6 +216,10 @@ class SettingsDataStore(private val context: Context) {
     val LAST_FOLLOW_PROMPT_KEY = stringPreferencesKey("last_follow_prompt_date")
     val lastFollowPromptDate: Flow<String?> = nullablePrefFlow(LAST_FOLLOW_PROMPT_KEY)
     suspend fun setLastFollowPromptDate(date: String) = setPref(LAST_FOLLOW_PROMPT_KEY, date)
+
+    val FOLLOW_PROMPT_DISMISSED_KEY = booleanPreferencesKey("follow_prompt_dismissed")
+    val followPromptDismissed: Flow<Boolean> = prefFlow(FOLLOW_PROMPT_DISMISSED_KEY, false)
+    suspend fun setFollowPromptDismissed(dismissed: Boolean) = setPref(FOLLOW_PROMPT_DISMISSED_KEY, dismissed)
 
     val themeMode: Flow<String> = prefFlow(THEME_MODE_KEY, "System")
     suspend fun setThemeMode(mode: String) = setPref(THEME_MODE_KEY, mode)

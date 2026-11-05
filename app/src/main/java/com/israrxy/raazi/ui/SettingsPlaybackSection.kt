@@ -26,7 +26,10 @@ internal fun LazyListScope.settingsPlaybackSection(
         val doubleTapSeekDuration by settingsDataStore.doubleTapSeekDuration.collectAsState(initial = "10")
         val keepScreenAwake by settingsDataStore.keepScreenAwake.collectAsState(initial = false)
         val pauseOnDisconnect by settingsDataStore.pauseOnDisconnect.collectAsState(initial = true)
+        val resetToArtworkOnTrackChange by settingsDataStore.resetToArtworkOnTrackChange.collectAsState(initial = true)
+        val openPlayerOnTrackSelect by settingsDataStore.openPlayerOnTrackSelect.collectAsState(initial = true)
         var showSeekDialog by remember { mutableStateOf(false) }
+        var showTrackSelectActionDialog by remember { mutableStateOf(false) }
 
         SettingsSection(title = "Audio Quality & Streaming") {
             SettingsSelectItem(
@@ -91,6 +94,40 @@ internal fun LazyListScope.settingsPlaybackSection(
                     scope.launch { settingsDataStore.setPauseOnDisconnect(enabled) }
                 }
             )
+            SettingsDivider()
+            SettingsSelectItem(
+                icon = Icons.Filled.OpenInFull,
+                title = "Track Selection Action",
+                value = if (openPlayerOnTrackSelect) "Open Full Player" else "Play in Mini Player",
+                onClick = { showTrackSelectActionDialog = true }
+            )
+            SettingsDivider()
+            SettingsSwitchItem(
+                icon = Icons.Filled.Image,
+                title = "Reset to Artwork on Song Change",
+                subtitle = "Automatically return to cover art view when a new track plays",
+                checked = resetToArtworkOnTrackChange,
+                onCheckedChange = { enabled ->
+                    scope.launch { settingsDataStore.setResetToArtworkOnTrackChange(enabled) }
+                }
+            )
+        }
+
+        if (showTrackSelectActionDialog) {
+            SelectionDialog(
+                title = "When Track Selected",
+                options = listOf("Open Full Player", "Play in Mini Player"),
+                selectedOption = if (openPlayerOnTrackSelect) "Open Full Player" else "Play in Mini Player",
+                descriptions = mapOf(
+                    "Open Full Player" to "Expand the full player when you pick a song from a list",
+                    "Play in Mini Player" to "Start playback without leaving the current screen"
+                ),
+                onOptionSelected = { selected ->
+                    scope.launch { settingsDataStore.setOpenPlayerOnTrackSelect(selected == "Open Full Player") }
+                    showTrackSelectActionDialog = false
+                },
+                onDismiss = { showTrackSelectActionDialog = false }
+            )
         }
 
         if (showSeekDialog) {
@@ -98,6 +135,12 @@ internal fun LazyListScope.settingsPlaybackSection(
                 title = "Double-Tap Seek Duration",
                 options = listOf("5", "10", "15", "30"),
                 selectedOption = doubleTapSeekDuration,
+                descriptions = mapOf(
+                    "5" to "Jump 5 seconds forward or back",
+                    "10" to "Balanced default for most songs",
+                    "15" to "Skip further with each double tap",
+                    "30" to "Large jumps for long tracks"
+                ),
                 onOptionSelected = { selected ->
                     scope.launch { settingsDataStore.setDoubleTapSeekDuration(selected) }
                     showSeekDialog = false

@@ -383,94 +383,31 @@ fun SettingsScreen(
         }
     }
 
-    // Dialogs
-    if (showAudioQualityDialog) {
-        SelectionDialog(
-            title = "Streaming Audio Quality",
-            options = listOf("Low", "Normal", "High", "Very High"),
-            selectedOption = audioQuality,
-            onOptionSelected = { selected -> scope.launch { settingsDataStore.setAudioQuality(selected) }; showAudioQualityDialog = false },
-            onDismiss = { showAudioQualityDialog = false }
-        )
-    }
-
-    if (showDownloadQualityDialog) {
-        SelectionDialog(
-            title = "Download Quality",
-            options = listOf("Low", "Normal", "High", "Very High"),
-            selectedOption = downloadQuality,
-            onOptionSelected = { selected -> scope.launch { settingsDataStore.setDownloadQuality(selected) }; showDownloadQualityDialog = false },
-            onDismiss = { showDownloadQualityDialog = false }
-        )
-    }
-
-    if (showThemeDialog) {
-        SelectionDialog(
-            title = "Theme Mode",
-            options = listOf("System", "Light", "Dark"),
-            selectedOption = appTheme,
-            onOptionSelected = { selected -> scope.launch { settingsDataStore.setThemeMode(selected) }; showThemeDialog = false },
-            onDismiss = { showThemeDialog = false }
-        )
-    }
-
-    if (showCrossfadeDialog) {
-        val options = listOf("Off", "2s", "4s", "6s", "8s", "10s", "12s")
-        SelectionDialog(
-            title = "Crossfade",
-            options = options,
-            selectedOption = crossfadeDuration,
-            onOptionSelected = { selected ->
-                scope.launch {
-                    settingsDataStore.setCrossfade(selected != "Off")
-                    settingsDataStore.setCrossfadeDuration(selected)
-                }
-                showCrossfadeDialog = false
-            },
-            onDismiss = { showCrossfadeDialog = false }
-        )
-    }
-
-    if (showConcurrentDownloadsDialog) {
-        val options = listOf("1", "2", "3", "4", "5")
-        SelectionDialog(
-            title = "Concurrent Downloads",
-            options = options,
-            selectedOption = maxConcurrentDownloads,
-            onOptionSelected = { selected ->
-                scope.launch { settingsDataStore.setMaxConcurrentDownloads(selected) }
-                showConcurrentDownloadsDialog = false
-            },
-            onDismiss = { showConcurrentDownloadsDialog = false }
-        )
-    }
-
-    if (showLanguageDialog) {
-        SelectionDialog(
-            title = "Target Language",
-            options = listOf("en", "es", "fr", "de", "hi", "ur", "ar", "ja", "ko", "pt", "ru", "tr"),
-            selectedOption = targetLanguage,
-            onOptionSelected = { selected ->
-                scope.launch { settingsDataStore.setLyricsTranslateLang(selected) }
-                showLanguageDialog = false
-            },
-            onDismiss = { showLanguageDialog = false }
-        )
-    }
-
-    if (showClearCacheDialog) {
-        SettingsClearCacheDialog(
-            context = context,
-            onDismiss = { showClearCacheDialog = false }
-        )
-    }
-
-    if (showResetSettingsDialog) {
-        SettingsResetDialog(
-            context = context,
-            scope = scope,
-            settingsDataStore = settingsDataStore,
-            onDismiss = { showResetSettingsDialog = false }
-        )
-    }
+    SettingsSelectionDialogsHost(
+        context = context,
+        scope = scope,
+        settingsDataStore = settingsDataStore,
+        showAudioQualityDialog = showAudioQualityDialog,
+        audioQuality = audioQuality,
+        onDismissAudioQuality = { showAudioQualityDialog = false },
+        showDownloadQualityDialog = showDownloadQualityDialog,
+        downloadQuality = downloadQuality,
+        onDismissDownloadQuality = { showDownloadQualityDialog = false },
+        showThemeDialog = showThemeDialog,
+        appTheme = appTheme,
+        onDismissTheme = { showThemeDialog = false },
+        showCrossfadeDialog = showCrossfadeDialog,
+        crossfadeDuration = crossfadeDuration,
+        onDismissCrossfade = { showCrossfadeDialog = false },
+        showConcurrentDownloadsDialog = showConcurrentDownloadsDialog,
+        maxConcurrentDownloads = maxConcurrentDownloads,
+        onDismissConcurrentDownloads = { showConcurrentDownloadsDialog = false },
+        showLanguageDialog = showLanguageDialog,
+        targetLanguage = targetLanguage,
+        onDismissLanguage = { showLanguageDialog = false },
+        showClearCacheDialog = showClearCacheDialog,
+        onDismissClearCache = { showClearCacheDialog = false },
+        showResetSettingsDialog = showResetSettingsDialog,
+        onDismissResetSettings = { showResetSettingsDialog = false }
+    )
 }

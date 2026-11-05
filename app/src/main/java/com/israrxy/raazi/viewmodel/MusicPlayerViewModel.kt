@@ -25,7 +25,7 @@ import com.israrxy.raazi.data.local.BluetoothDeviceManager
 import com.israrxy.raazi.data.local.SearchHistoryManager
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
-import com.israrxy.raazi.data.remote.Lyrics
+import com.israrxy.raazi.data.lyrics.LyricsUiState
 import com.israrxy.raazi.data.remote.LyricsSearchResult
 import com.israrxy.raazi.data.repository.MusicRepository
 import com.israrxy.raazi.model.MusicItem
@@ -88,6 +88,7 @@ class MusicPlayerViewModel(
     internal var playbackStateListener: ((PlaybackState) -> Unit)? = null
     internal var trackChangedListener: ((MusicItem) -> Unit)? = null
     internal var visualizerListener: ((ByteArray) -> Unit)? = null
+    internal var playbackErrorListener: ((String) -> Unit)? = null
     internal var playbackService: MusicPlaybackService? = null
     internal var isServiceBound = false
 
@@ -152,6 +153,8 @@ class MusicPlayerViewModel(
     val isSearchLoading: StateFlow<Boolean> = _isSearchLoading.asStateFlow()
     internal val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+    internal val _playbackError = MutableStateFlow<String?>(null)
+    val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
     internal val _downloadResult = MutableStateFlow<String?>(null)
     val downloadResult: StateFlow<String?> = _downloadResult.asStateFlow()
     internal val _isSyncingYouTubeLibrary = MutableStateFlow(false)
@@ -216,18 +219,11 @@ class MusicPlayerViewModel(
     val visualizerData: StateFlow<ByteArray?> = _visualizerData.asStateFlow()
     val connectedAudioDevice: StateFlow<BluetoothDeviceManager.AudioDevice?> =
         RaaziApplication.instance.bluetoothDeviceManager.connectedDevice
-    internal val _lyrics = MutableStateFlow<Lyrics?>(null)
-    val lyrics: StateFlow<Lyrics?> = _lyrics.asStateFlow()
-    internal val _isLyricsLoading = MutableStateFlow(false)
-    val isLyricsLoading: StateFlow<Boolean> = _isLyricsLoading.asStateFlow()
-    internal val _lyricsScriptFilter = MutableStateFlow(LyricsScriptFilter.ALL)
-    val lyricsScriptFilter: StateFlow<LyricsScriptFilter> = _lyricsScriptFilter.asStateFlow()
-    internal val _lyricsSearchResults = MutableStateFlow<List<LyricsSearchResult>>(emptyList())
-    val lyricsSearchResults: StateFlow<List<LyricsSearchResult>> = _lyricsSearchResults.asStateFlow()
-    internal val _isLyricsSearchLoading = MutableStateFlow(false)
-    val isLyricsSearchLoading: StateFlow<Boolean> = _isLyricsSearchLoading.asStateFlow()
-    internal var lyricsFetchJob: Job? = null
-    internal var lastLyricsTrack: MusicItem? = null
+    internal val lyricsController = LyricsController(repository, settingsDataStore, viewModelScope)
+    val lyricsState: StateFlow<LyricsUiState> = lyricsController.state
+    val lyricsScriptFilter: StateFlow<LyricsScriptFilter> = lyricsController.scriptFilter
+    val lyricsSearchResults: StateFlow<List<LyricsSearchResult>> = lyricsController.searchResults
+    val isLyricsSearchLoading: StateFlow<Boolean> = lyricsController.isSearchLoading
     internal val _songCredits = MutableStateFlow<String?>(null)
     val songCredits: StateFlow<String?> = _songCredits.asStateFlow()
     internal val _isSongCreditsLoading = MutableStateFlow(false)
@@ -415,12 +411,13 @@ class MusicPlayerViewModel(
     fun isSavedCollection(item: MusicItem): Boolean = item.toSavedCollectionItemOrNull()?.id in savedCollectionIds.value
     fun isSavedCollection(playlist: Playlist): Boolean = playlist.toSavedCollectionItem().id in savedCollectionIds.value
     fun retryLyricsFetch() = retryLyricsFetchImpl()
-    fun searchLyricsOptions(titleOverride: String? = null, artistOverride: String? = null) = searchLyricsOptionsImpl(titleOverride, artistOverride)
-    fun clearLyricsSearchResults() { _lyricsSearchResults.value = emptyList() }
+    fun searchLyricsOptions(titleOverride: String? = null, artistOverride: String? = null, force: Boolean = false) = searchLyricsOptionsImpl(titleOverride, artistOverride, force)
+    fun clearLyricsSearchResults() = lyricsController.clearSearchResults()
     fun saveLyricsSelection(result: LyricsSearchResult) = saveLyricsSelectionImpl(result)
     fun clearSavedLyricsSelection() = clearSavedLyricsSelectionImpl()
     fun setLyricsScriptFilter(filter: LyricsScriptFilter) = setLyricsScriptFilterImpl(filter)
     fun clearError() { _error.value = null }
+    fun clearPlaybackError() { _playbackError.value = null }
     fun clearSearchHistory() = searchHistoryManager.clearHistory()
     fun clearYouTubeSyncStatus() { _youTubeSyncStatus.value = null }
     fun syncYouTubeLibrary(isManual: Boolean = false) = syncYouTubeLibraryImpl(isManual)

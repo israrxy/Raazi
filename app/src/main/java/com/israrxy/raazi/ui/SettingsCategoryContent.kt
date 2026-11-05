@@ -329,8 +329,8 @@ internal fun SettingsCategoryDetailList(
                         SettingsDivider()
                         SettingsActionItem(
                             icon = Icons.Filled.Person,
-                            title = "Instagram",
-                            subtitle = "@israrxy",
+                            title = "Follow on Instagram",
+                            subtitle = "@israrxy • updates, feature drops & behind-the-scenes",
                             onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/israrxy/"))) }
                         )
                         SettingsDivider()

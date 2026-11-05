@@ -28,32 +28,23 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.israrxy.raazi.data.local.SettingsDataStore
-import com.israrxy.raazi.data.lyrics.LyricsTextVariants
-import com.israrxy.raazi.data.lyrics.LyricsViewVariant
-import com.israrxy.raazi.service.LyricsTranslator
 import com.israrxy.raazi.utils.BlurTransformation
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /**
  * Unified Spotify + YouTube Music + Musixmatch style Lyrics Screen.
- * Features:
- * - Precomputed text per variant
- * - Smooth position ticking for the active line without UI freezes
- * - Sleek, compact timeline under song info with play/pause button
- * - Extended list padding (bottom controls removed)
- * - Safe auto-scrolling with non-negative offsets
+ *
+ * All presentation state (variant, translation, brackets, processed lines) is
+ * supplied by a single [LyricsPresentation] shared with the mini player card.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LyricsScreen(
+internal fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
+    presentation: LyricsPresentation,
     onOpenLyricsBrowser: () -> Unit = {},
     topBar: @Composable () -> Unit = {}
 ) {
@@ -61,21 +52,27 @@ fun LyricsScreen(
     val view = LocalView.current
 
     val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
-    val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLyricsLoading.collectAsStateWithLifecycle()
     val lyricsScriptFilter by viewModel.lyricsScriptFilter.collectAsStateWithLifecycle()
     val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
+
+    val lyrics = presentation.lyrics
+    val isLoading = presentation.isLoading
+    val isUnavailable = presentation.isUnavailable
+    val syncedLines = presentation.syncedLines
+    val isSynced = presentation.isSynced
+    val hasWordSync = presentation.hasWordSync
+    val availableVariants = presentation.availableVariants
+    val selectedVariant = presentation.selectedVariant
+    val showTranslation = presentation.showTranslation
+    val isTranslating = presentation.isTranslating
+    val translateLang = presentation.translateLang
+    val hideBrackets = presentation.hideBrackets
+    val translatedPlain = presentation.translatedPlain
 
     val currentTrack = playbackState.currentTrack
     val currentPosition = playbackState.currentPosition
     val duration = playbackState.duration
     val isPlaying = playbackState.isPlaying
-
-    LaunchedEffect(currentTrack?.id) {
-        if (currentTrack != null && lyrics == null && !isLoading) {
-            viewModel.retryLyricsFetch()
-        }
-    }
 
     // Smooth position tracker for active lyric line and timeline
     var smoothPositionMs by remember { mutableLongStateOf(currentPosition) }
@@ -97,109 +94,8 @@ fun LyricsScreen(
         currentTrack != null && favoriteTracks.any { it.id == currentTrack.id }
     }
 
-    val settingsDataStore = remember { SettingsDataStore(context) }
-    val coroutineScope = rememberCoroutineScope()
-    val translateEnabledPref by settingsDataStore.lyricsTranslateEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val translateLang by settingsDataStore.lyricsTranslateLang.collectAsStateWithLifecycle(initialValue = "en")
-    val hideBracketsPref by settingsDataStore.lyricsHideBracketsEnabled.collectAsStateWithLifecycle(initialValue = true)
-    val preferredLyricsTypePref by settingsDataStore.preferredLyricsType.collectAsStateWithLifecycle(initialValue = "LAST_USED")
-    val lastSwitchedLyricsTypePref by settingsDataStore.lastSwitchedLyricsType.collectAsStateWithLifecycle(initialValue = "ROMANIZED")
-
-    var showTranslation by remember(translateEnabledPref) { mutableStateOf(translateEnabledPref) }
-    var hideBrackets by remember(hideBracketsPref) { mutableStateOf(hideBracketsPref) }
-    var isTranslating by remember { mutableStateOf(false) }
-    val translatedLines = remember { mutableStateListOf<String>() }
-    var translatedPlain by remember { mutableStateOf<String?>(null) }
-
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showTrackDetails by remember { mutableStateOf(false) }
-    var selectedVariant by remember { mutableStateOf(LyricsViewVariant.ORIGINAL) }
-
-    val rawSourceText = remember(lyrics) {
-        (lyrics?.syncedLyrics ?: lyrics?.plainLyrics.orEmpty()).replace(STRIP_WORD_TAGS_REGEX, "")
-    }
-    val availableVariants = remember(rawSourceText) {
-        LyricsTextVariants.availableVariants(rawSourceText)
-    }
-    LaunchedEffect(preferredLyricsTypePref, lastSwitchedLyricsTypePref, availableVariants) {
-        val effectiveType = if (preferredLyricsTypePref == "LAST_USED") {
-            lastSwitchedLyricsTypePref
-        } else {
-            preferredLyricsTypePref
-        }
-        val wantsRomanized = effectiveType == "ROMANIZED"
-        selectedVariant = if (wantsRomanized && LyricsViewVariant.ROMANIZED in availableVariants) {
-            LyricsViewVariant.ROMANIZED
-        } else {
-            LyricsViewVariant.ORIGINAL
-        }
-    }
-
-    val handleSelectVariant: (LyricsViewVariant) -> Unit = { variant ->
-        selectedVariant = variant
-        coroutineScope.launch {
-            settingsDataStore.setLastSwitchedLyricsType(variant.name)
-            if (preferredLyricsTypePref != "LAST_USED") {
-                settingsDataStore.setPreferredLyricsType(variant.name)
-            }
-        }
-    }
-
-    val parsedPairs = remember(lyrics?.syncedLyrics, hideBrackets) {
-        parseLrcLines(lyrics?.syncedLyrics, hideBrackets = hideBrackets)
-    }
-
-    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation, selectedVariant) {
-        buildRichLyricLines(
-            rawPairs = parsedPairs,
-            durationMs = duration,
-            translations = translatedLines.toList(),
-            showTranslation = showTranslation,
-            variant = selectedVariant
-        )
-    }
-
-    LaunchedEffect(selectedVariant) {
-        withContext(Dispatchers.Default) {
-            LyricsTextVariants.transform("warmup", selectedVariant)
-        }
-    }
-
-    val isSynced = remember(syncedLines) { syncedLines.isNotEmpty() }
-    val hasWordSync = remember(syncedLines) { syncedLines.any { it.hasExplicitWordSync } }
-
-    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, showTranslation, translateLang, hideBrackets) {
-        if (!showTranslation) {
-            translatedLines.clear()
-            translatedPlain = null
-            return@LaunchedEffect
-        }
-        val source = lyrics?.syncedLyrics ?: lyrics?.plainLyrics
-        if (source.isNullOrBlank()) return@LaunchedEffect
-
-        isTranslating = true
-        try {
-            withContext(Dispatchers.Default) {
-                if (parsedPairs.isNotEmpty()) {
-                    val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
-                    val translations = LyricsTranslator.translateLines(originalTexts, translateLang)
-                    withContext(Dispatchers.Main) {
-                        translatedLines.clear()
-                        translatedLines.addAll(translations)
-                    }
-                } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
-                    val plainLines = lyrics!!.plainLyrics!!.lines()
-                    val translations = LyricsTranslator.translateLines(plainLines, translateLang)
-                    withContext(Dispatchers.Main) {
-                        translatedPlain = translations.joinToString("\n")
-                    }
-                }
-            }
-        } catch (_: Exception) {
-        } finally {
-            isTranslating = false
-        }
-    }
 
     // Active line index using binary search
     val activeLineIndex = remember(smoothPositionMs, syncedLines) {
@@ -211,6 +107,7 @@ fun LyricsScreen(
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
     var isUserScrolling by remember { mutableStateOf(false) }
     var lastManualScrollTime by remember { mutableLongStateOf(0L) }
+    var hasPerformedInitialSnap by remember(lyrics?.syncedLyrics) { mutableStateOf(false) }
 
     LaunchedEffect(isDragged) {
         if (isDragged) {
@@ -229,18 +126,24 @@ fun LyricsScreen(
         isUserScrolling = false
     }
 
-    // Smooth auto-scroll to focus active lyric line
-    LaunchedEffect(activeLineIndex, isUserScrolling) {
+    // Snap instantly on first mount, then smoothly follow the active line.
+    LaunchedEffect(activeLineIndex, isUserScrolling, syncedLines) {
         if (!isUserScrolling && activeLineIndex >= 0 && syncedLines.isNotEmpty()) {
             val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
             val headerOffset = if (firstLineTimestamp > 4000L) 1 else 0
             val targetLazyIndex = (activeLineIndex + headerOffset).coerceAtLeast(0)
 
             try {
+                withFrameNanos { }
                 val layoutInfo = listState.layoutInfo
                 val totalCount = layoutInfo.totalItemsCount
                 if (totalCount > 0) {
                     val safeTargetIndex = targetLazyIndex.coerceIn(0, totalCount - 1)
+                    if (!hasPerformedInitialSnap) {
+                        listState.scrollToItem(safeTargetIndex)
+                        hasPerformedInitialSnap = true
+                        return@LaunchedEffect
+                    }
                     val targetItem = layoutInfo.visibleItemsInfo.find { it.index == safeTargetIndex }
                     val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
@@ -268,12 +171,12 @@ fun LyricsScreen(
         }
     }
 
-    val lyricsStatusBadge = remember(isLoading, lyrics, isSynced, hasWordSync) {
+    val lyricsStatusBadge = remember(isLoading, isUnavailable, lyrics, isSynced, hasWordSync) {
         val rawProvider = lyrics?.source?.removePrefix("Saved ")?.trim()?.uppercase().orEmpty()
         val isSaved = lyrics?.source?.startsWith("Saved") == true
         when {
             isLoading -> "SEARCHING..."
-            lyrics == null || (lyrics?.syncedLyrics.isNullOrBlank() && lyrics?.plainLyrics.isNullOrBlank()) -> "NO LYRICS"
+            isUnavailable || lyrics == null -> "NO LYRICS"
             hasWordSync -> buildString {
                 if (isSaved) append("PINNED • ")
                 if (rawProvider.isNotBlank()) append("$rawProvider • ")
@@ -346,12 +249,10 @@ fun LyricsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
             topBar()
 
-            // Header with Now Playing, sleek timeline, and play/pause button
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
                 lyricsSource = lyrics?.source,
@@ -369,16 +270,13 @@ fun LyricsScreen(
                 showOptionsMenu = showOptionsMenu,
                 availableVariants = availableVariants,
                 selectedVariant = selectedVariant,
-                onSelectVariant = handleSelectVariant,
+                onSelectVariant = presentation.onSelectVariant,
                 showTranslation = showTranslation,
                 isTranslating = isTranslating,
                 translateLang = translateLang,
-                onToggleTranslation = { showTranslation = !showTranslation },
+                onToggleTranslation = presentation.onToggleTranslation,
                 hideBrackets = hideBrackets,
-                onToggleHideBrackets = {
-                    hideBrackets = !hideBrackets
-                    coroutineScope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
-                },
+                onToggleHideBrackets = presentation.onToggleHideBrackets,
                 lyricsScriptFilter = lyricsScriptFilter,
                 onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
                 onOpenLyricsBrowser = onOpenLyricsBrowser,
@@ -394,16 +292,13 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     availableVariants = availableVariants,
                     selectedVariant = selectedVariant,
-                    onSelectVariant = handleSelectVariant,
+                    onSelectVariant = presentation.onSelectVariant,
                     hasTranslationSupport = true,
                     showTranslation = showTranslation,
                     translateLang = translateLang,
-                    onToggleTranslation = { showTranslation = !showTranslation },
+                    onToggleTranslation = presentation.onToggleTranslation,
                     hideBrackets = hideBrackets,
-                    onToggleHideBrackets = {
-                        hideBrackets = !hideBrackets
-                        coroutineScope.launch { settingsDataStore.setLyricsHideBracketsEnabled(hideBrackets) }
-                    },
+                    onToggleHideBrackets = presentation.onToggleHideBrackets,
                     lyricsScriptFilter = lyricsScriptFilter,
                     onDismiss = { showOptionsMenu = false },
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
@@ -414,6 +309,7 @@ fun LyricsScreen(
 
                 LyricsMainViewportContent(
                     isLoading = isLoading,
+                    isUnavailable = isUnavailable,
                     lyrics = lyrics,
                     isSynced = isSynced,
                     syncedLines = syncedLines,
@@ -423,9 +319,8 @@ fun LyricsScreen(
                     listState = listState,
                     isUserScrolling = isUserScrolling,
                     onResetUserScrolling = { isUserScrolling = false },
-                    selectedVariant = selectedVariant,
+                    plainLyrics = presentation.plainLyrics,
                     translatedPlain = translatedPlain,
-                    hideBrackets = hideBrackets,
                     currentTrack = currentTrack,
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
                     onRetryLyricsFetch = { viewModel.retryLyricsFetch() },

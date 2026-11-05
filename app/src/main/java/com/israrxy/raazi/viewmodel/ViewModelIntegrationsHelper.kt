@@ -46,7 +46,7 @@ internal fun MusicPlayerViewModel.createServiceConnection(): ServiceConnection =
                         fetchLyricsImpl(resolvedTrack)
                         fetchAutoPlayQueue(resolvedTrack)
                     }
-                } else if (oldState.duration <= 0L && state.duration > 0L && _lyrics.value == null && !_isLyricsLoading.value) {
+                } else if (oldState.duration <= 0L && state.duration > 0L && !lyricsController.hasResolvedOrIsLoading()) {
                     state.currentTrack?.let { track ->
                         fetchLyricsImpl(track.copy(duration = state.duration))
                     }
@@ -61,6 +61,10 @@ internal fun MusicPlayerViewModel.createServiceConnection(): ServiceConnection =
             }
             trackChangedListener = trackListener
             playbackService?.addTrackChangedListener(trackListener)
+
+            val errorListener: (String) -> Unit = { message -> _playbackError.value = message }
+            playbackErrorListener = errorListener
+            playbackService?.addPlaybackErrorListener(errorListener)
 
             _playbackState.value = playbackService?.getPlaybackState() ?: PlaybackState()
             _playbackState.value.currentTrack?.let { initialTrack ->
@@ -94,9 +98,11 @@ internal fun MusicPlayerViewModel.onClearedImpl() {
         if (isServiceBound) {
             playbackStateListener?.let { playbackService?.removePlaybackStateListener(it) }
             trackChangedListener?.let { playbackService?.removeTrackChangedListener(it) }
+            playbackErrorListener?.let { playbackService?.removePlaybackErrorListener(it) }
             visualizerListener?.let { playbackService?.removeVisualizerListener(it) }
             playbackStateListener = null
             trackChangedListener = null
+            playbackErrorListener = null
             visualizerListener = null
             runCatching { app.unbindService(serviceConnection) }
             isServiceBound = false

@@ -51,6 +51,7 @@ class MusicPlaybackService : Service() {
     internal var currentIndex = -1
     private val playbackStateListeners = CopyOnWriteArraySet<(PlaybackState) -> Unit>()
     private val trackChangedListeners = CopyOnWriteArraySet<(MusicItem) -> Unit>()
+    private val playbackErrorListeners = CopyOnWriteArraySet<(String) -> Unit>()
     internal var currentAlbumArt: Bitmap? = null
     internal var pendingNotificationTrackId: String? = null
     @Volatile internal var isDestroyed = false
@@ -366,6 +367,18 @@ class MusicPlaybackService : Service() {
         trackChangedListeners.remove(listener)
     }
 
+    fun addPlaybackErrorListener(listener: (String) -> Unit) {
+        playbackErrorListeners.add(listener)
+    }
+
+    fun removePlaybackErrorListener(listener: (String) -> Unit) {
+        playbackErrorListeners.remove(listener)
+    }
+
+    internal fun notifyPlaybackError(message: String) {
+        playbackErrorListeners.forEach { it(message) }
+    }
+
     internal fun notifyTrackChanged(track: MusicItem) {
         trackChangedListeners.forEach { it(track) }
     }
@@ -459,6 +472,7 @@ class MusicPlaybackService : Service() {
         audioEffectsController.release()
         playbackStateListeners.clear()
         trackChangedListeners.clear()
+        playbackErrorListeners.clear()
     }
 
     companion object {

@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
+import com.israrxy.raazi.R
 import com.israrxy.raazi.data.account.RaaziAccountManager
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.service.LastFmScrobbler
@@ -269,7 +271,7 @@ fun SettingsDualLoginSection(
             } else {
                 // Not signed in to Raazi
                 SettingsActionItem(
-                    icon = Icons.AutoMirrored.Filled.Login,
+                    iconPainter = painterResource(R.drawable.ic_google_logo),
                     title = "Sign in with Google",
                     subtitle = "1-Tap setup for private Google Drive backup & permanent Last.fm",
                     onClick = {
