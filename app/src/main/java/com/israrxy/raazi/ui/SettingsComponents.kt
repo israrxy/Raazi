@@ -201,14 +201,17 @@ fun SettingsSelectItem(
 
 @Composable
 fun SettingsActionItem(
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    iconPainter: androidx.compose.ui.graphics.painter.Painter? = null,
     title: String,
     subtitle: String? = null,
     onClick: () -> Unit,
-    isDestructive: Boolean = false
+    isDestructive: Boolean = false,
+    iconTint: Color? = null
 ) {
     val contentColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    val iconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val defaultIconColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val resolvedIconTint = iconTint ?: (if (iconPainter != null) Color.Unspecified else defaultIconColor)
 
     Row(
         modifier = Modifier
@@ -217,12 +220,21 @@ fun SettingsActionItem(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(20.dp)
-        )
+        if (iconPainter != null) {
+            Icon(
+                painter = iconPainter,
+                contentDescription = null,
+                tint = resolvedIconTint,
+                modifier = Modifier.size(20.dp)
+            )
+        } else if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = resolvedIconTint,
+                modifier = Modifier.size(20.dp)
+            )
+        }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

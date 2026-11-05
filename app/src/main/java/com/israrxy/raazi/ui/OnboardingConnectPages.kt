@@ -280,7 +280,12 @@ internal fun OnboardingAccountPage(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(com.israrxy.raazi.R.drawable.ic_google_logo),
+                                    contentDescription = null,
+                                    tint = androidx.compose.ui.graphics.Color.Unspecified,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text("Sign in with Google", fontWeight = FontWeight.Bold)
                             }

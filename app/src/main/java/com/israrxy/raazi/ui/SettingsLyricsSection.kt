@@ -43,6 +43,9 @@ internal fun LazyListScope.settingsLyricsSection(
         val lyricsAutoScroll by settingsDataStore.lyricsAutoScroll.collectAsState(initial = true)
         val defaultLyricsView by settingsDataStore.defaultLyricsView.collectAsState(initial = "KARAOKE")
         val lyricsSyncPriority by settingsDataStore.lyricsSyncPriority.collectAsState(initial = "WORD_SYNC_FIRST")
+        var showPlayerScreenDialog by remember { mutableStateOf(false) }
+        var showDefaultPresentationDialog by remember { mutableStateOf(false) }
+        var showSyncPriorityDialog by remember { mutableStateOf(false) }
 
         SettingsSection(title = "Lyrics Preferences & Script") {
             // Visual Preview Card
@@ -122,14 +125,7 @@ internal fun LazyListScope.settingsLyricsSection(
                     "PLAYER" -> "Album Cover"
                     else -> "As Last Left"
                 },
-                onClick = {
-                    val next = when (defaultPlayerScreen) {
-                        "LAST_USED" -> "LYRICS"
-                        "LYRICS" -> "PLAYER"
-                        else -> "LAST_USED"
-                    }
-                    scope.launch { settingsDataStore.setDefaultPlayerScreen(next) }
-                }
+                onClick = { showPlayerScreenDialog = true }
             )
 
             SettingsDivider()
@@ -139,10 +135,7 @@ internal fun LazyListScope.settingsLyricsSection(
                 icon = Icons.Filled.Mic,
                 title = "Default Presentation",
                 value = if (defaultLyricsView == "KARAOKE") "Synchronized Karaoke" else "Plain Text",
-                onClick = {
-                    val next = if (defaultLyricsView == "KARAOKE") "PLAIN" else "KARAOKE"
-                    scope.launch { settingsDataStore.setDefaultLyricsView(next) }
-                }
+                onClick = { showDefaultPresentationDialog = true }
             )
 
             SettingsDivider()
@@ -158,15 +151,7 @@ internal fun LazyListScope.settingsLyricsSection(
                     "PLAIN_FIRST" -> "Plain Text"
                     else -> "Word-Synced (Flowing)"
                 },
-                onClick = {
-                    val next = when (lyricsSyncPriority) {
-                        "WORD_SYNC_FIRST" -> "LINE_SYNC_FIRST"
-                        "LINE_SYNC_FIRST" -> "ANY_SYNC_FIRST"
-                        "ANY_SYNC_FIRST" -> "PLAIN_FIRST"
-                        else -> "WORD_SYNC_FIRST"
-                    }
-                    scope.launch { settingsDataStore.setLyricsSyncPriority(next) }
-                }
+                onClick = { showSyncPriorityDialog = true }
             )
 
             SettingsDivider()
@@ -204,6 +189,70 @@ internal fun LazyListScope.settingsLyricsSection(
                     onClick = onShowLanguageDialog
                 )
             }
+        }
+
+        if (showPlayerScreenDialog) {
+            val options = listOf("Album Cover", "Lyrics Screen", "As Last Left")
+            SelectionDialog(
+                title = "Player Screen on Open",
+                options = options,
+                selectedOption = when (defaultPlayerScreen) {
+                    "LYRICS" -> "Lyrics Screen"
+                    "PLAYER" -> "Album Cover"
+                    else -> "As Last Left"
+                },
+                onOptionSelected = { selected ->
+                    val value = when (selected) {
+                        "Lyrics Screen" -> "LYRICS"
+                        "Album Cover" -> "PLAYER"
+                        else -> "LAST_USED"
+                    }
+                    scope.launch { settingsDataStore.setDefaultPlayerScreen(value) }
+                    showPlayerScreenDialog = false
+                },
+                onDismiss = { showPlayerScreenDialog = false }
+            )
+        }
+
+        if (showDefaultPresentationDialog) {
+            val options = listOf("Synchronized Karaoke", "Plain Text")
+            SelectionDialog(
+                title = "Default Presentation",
+                options = options,
+                selectedOption = if (defaultLyricsView == "KARAOKE") "Synchronized Karaoke" else "Plain Text",
+                onOptionSelected = { selected ->
+                    val value = if (selected == "Synchronized Karaoke") "KARAOKE" else "PLAIN"
+                    scope.launch { settingsDataStore.setDefaultLyricsView(value) }
+                    showDefaultPresentationDialog = false
+                },
+                onDismiss = { showDefaultPresentationDialog = false }
+            )
+        }
+
+        if (showSyncPriorityDialog) {
+            val options = listOf("Word-Synced (Flowing)", "Line-Synced", "Any Synced", "Plain Text")
+            SelectionDialog(
+                title = "Lyrics Sync Priority",
+                options = options,
+                selectedOption = when (lyricsSyncPriority) {
+                    "WORD_SYNC_FIRST" -> "Word-Synced (Flowing)"
+                    "LINE_SYNC_FIRST" -> "Line-Synced"
+                    "ANY_SYNC_FIRST" -> "Any Synced"
+                    "PLAIN_FIRST" -> "Plain Text"
+                    else -> "Word-Synced (Flowing)"
+                },
+                onOptionSelected = { selected ->
+                    val value = when (selected) {
+                        "Line-Synced" -> "LINE_SYNC_FIRST"
+                        "Any Synced" -> "ANY_SYNC_FIRST"
+                        "Plain Text" -> "PLAIN_FIRST"
+                        else -> "WORD_SYNC_FIRST"
+                    }
+                    scope.launch { settingsDataStore.setLyricsSyncPriority(value) }
+                    showSyncPriorityDialog = false
+                },
+                onDismiss = { showSyncPriorityDialog = false }
+            )
         }
     }
 }

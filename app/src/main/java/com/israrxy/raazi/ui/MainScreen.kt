@@ -13,30 +13,13 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,6 +76,18 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
     var isExpanded by remember { mutableStateOf(false) }
     val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
+    val openPlayerOnTrackSelect by settingsDataStore.openPlayerOnTrackSelect.collectAsStateWithLifecycle(initialValue = true)
+    val resetToArtworkOnTrackChange by settingsDataStore.resetToArtworkOnTrackChange.collectAsStateWithLifecycle(initialValue = true)
+    var previousSongId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentTrack?.id) {
+        val id = currentTrack?.id
+        if (id != null && id != previousSongId) {
+            if (previousSongId != null && resetToArtworkOnTrackChange) {
+                isLyricsModeOpen = false
+            }
+            previousSongId = id
+        }
+    }
 
     val expandPlayer: () -> Unit = {
         playerTransition.captureOrigin()
@@ -103,6 +98,12 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             isLyricsModeOpen = false
         }
         scope.launch { playerExpansion.animateTo(1f, sheetSpringSpec) }
+    }
+
+    val onTrackSelectExpandPlayer: () -> Unit = {
+        if (openPlayerOnTrackSelect) {
+            expandPlayer()
+        }
     }
 
     val collapsePlayer: () -> Unit = {
@@ -128,18 +129,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val showMiniPlayerBar = currentTrack != null && (!isFloatingCollapsed || !microPlayerEnabled) && !isMiniPlayerSuppressed
     val showFloatingBubble = currentTrack != null && isFloatingCollapsed && microPlayerEnabled && !isMiniPlayerSuppressed
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val collapsedMiniPlayerBottomPadding =
-        if (showBottomBar) {
-            navigationBarInset + bottomBarBaseHeight
-        } else {
-            navigationBarInset + 8.dp
-        }
-    val contentBottomPadding =
-        if (showBottomBar) {
-            navigationBarInset + bottomBarBaseHeight + (if (showMiniPlayerBar) 66.dp else 0.dp)
-        } else {
-            if (showMiniPlayerBar) 74.dp else 0.dp
-        }
+    val collapsedMiniPlayerBottomPadding = if (showBottomBar) navigationBarInset + bottomBarBaseHeight else navigationBarInset + 8.dp
+    val contentBottomPadding = if (showBottomBar) navigationBarInset + bottomBarBaseHeight + (if (showMiniPlayerBar) 66.dp else 0.dp) else (if (showMiniPlayerBar) 74.dp else 0.dp)
 
     BackHandler(enabled = playerExpansion.value > 0.001f) {
         if (isLyricsModeOpen) {
@@ -252,7 +243,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     dismissDragJob = null
                     val elapsedMs = (SystemClock.uptimeMillis() - gestureStartMs).coerceAtLeast(1L)
                     val velocity = totalDragPx / (elapsedMs / 1000f)
-                    if (dragProgress < 0.70f || velocity > 500f) {
+                    if (totalDragPx > 0f && (dragProgress < 0.70f || velocity > 500f)) {
                         collapsePlayer()
                     } else {
                         expandPlayer()
@@ -264,6 +255,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     expandPlayer()
                 },
                 onVerticalDrag = { change, dragAmount ->
+                    if (dragProgress >= 0.999f && dragAmount < 0f) {
+                        return@detectVerticalDragGestures
+                    }
                     change.consume()
                     totalDragPx += dragAmount
                     dragProgress = (dragProgress - dragAmount / effectiveHeight).coerceIn(0f, 1f)
@@ -296,7 +290,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                 MainNavHost(
                     navController = navController,
                     viewModel = viewModel,
-                    openPlayerSheet = expandPlayer,
+                    openPlayerSheet = onTrackSelectExpandPlayer,
                     contentBottomPadding = contentBottomPadding,
                     modifier = Modifier
                         .fillMaxSize()
@@ -342,7 +336,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         val density = LocalDensity.current
         val miniHeightPx = with(density) { 68.dp.toPx() }
         val miniSidePx = with(density) { if (showBottomBar) 0f else 12.dp.toPx() }
-        val miniCornerPx = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
+        val miniCornerPx = with(density) { 16.dp.toPx() }
         val cornerTarget = with(density) { 24.dp.toPx() }
         val cardShadowPx = with(density) { 18.dp.toPx() }
         val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - miniHeightPx
