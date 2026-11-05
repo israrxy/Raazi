@@ -118,10 +118,17 @@ fun GraphicsLayerScope.flyFrom(
     startScale: Float? = null,
     cornerDp: Dp? = null
 ): Boolean {
-    if (from == null || progress >= 0.999f || restX.isNaN() || restY.isNaN() || size.width <= 0f || size.height <= 0f) {
+    if (from == null || restX.isNaN() || restY.isNaN() || size.width <= 0f || size.height <= 0f) {
+        alpha = if (progress < 0.999f) ((progress - 0.3f) / 0.7f).coerceIn(0f, 1f) else 1f
         scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
         return false
     }
+    if (progress >= 0.999f) {
+        alpha = 1f
+        scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
+        return false
+    }
+    alpha = 1f
     val flight = ((progress - 0.04f) / 0.96f).coerceIn(0f, 1f)
     val scaleXVal = lerpFloat(startScale ?: (from.width / size.width).coerceIn(0.01f, 1f), 1f, flight)
     val scaleYVal = lerpFloat(startScale ?: (from.height / size.height).coerceIn(0.01f, 1f), 1f, flight)
@@ -129,7 +136,7 @@ fun GraphicsLayerScope.flyFrom(
     scaleX = scaleXVal
     scaleY = scaleYVal
 
-    val riseBy = playerOrigin?.top ?: (from.top - 10f)
+    val riseBy = playerOrigin?.top ?: 0f
     val startX = from.left
     val currentX = lerpFloat(startX, restX, flight)
     translationX = currentX - restX

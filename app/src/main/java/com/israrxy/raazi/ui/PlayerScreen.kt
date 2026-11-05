@@ -171,6 +171,9 @@ fun PlayerScreen(
                     ) {
                         Box(
                             modifier = Modifier
+                                .graphicsLayer {
+                                    alpha = transition?.stage(0.70f, 1f) ?: 1f
+                                }
                                 .size(36.dp, 4.dp)
                                 .background(Color.White.copy(alpha = 0.35f), CircleShape)
                         )
@@ -186,7 +189,11 @@ fun PlayerScreen(
                         onShowOptionsSheet = { showOptionsSheet = true },
                         modifier = dismissModifier.then(
                             if (transition != null) {
-                                Modifier.graphicsLayer { alpha = easeOutCubic(transition.stage(0.18f, 1f)) }
+                                Modifier.graphicsLayer {
+                                    val shown = easeOutCubic(transition.stage(0.60f, 1f))
+                                    alpha = shown
+                                    translationY = -12.dp.toPx() * (1f - shown)
+                                }
                             } else Modifier
                         )
                     )

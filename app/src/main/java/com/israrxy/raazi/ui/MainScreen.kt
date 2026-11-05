@@ -432,12 +432,6 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             IntOffset.Zero
                         }
                     }
-                    .onPlaced { coordinates ->
-                        if (coordinates.isAttached) playerTransition.cardCoordinates = coordinates
-                    }
-                    .onGloballyPositioned { coordinates ->
-                        playerTransition.cardCoordinates = coordinates
-                    }
                     .graphicsLayer {
                         val progress = playerExpansion.value
                         val origin = playerTransition.origin?.player ?: playerTransition.dockPlayer
@@ -454,16 +448,27 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         shadowElevation = if (progress > 0.001f && progress < 0.999f) cardShadowPx else 0f
                     }
             ) {
-                PlayerScreen(
-                    viewModel = viewModel,
-                    navController = navController,
-                    onCollapse = collapsePlayer,
-                    isLyricsVisible = isLyricsModeOpen,
-                    onLyricsVisibilityChange = { isLyricsModeOpen = it },
-                    dismissModifier = dismissModifier,
-                    transition = playerTransition,
-                    cardTop = cardTop
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onPlaced { coordinates ->
+                            if (coordinates.isAttached) playerTransition.cardCoordinates = coordinates
+                        }
+                        .onGloballyPositioned { coordinates ->
+                            playerTransition.cardCoordinates = coordinates
+                        }
+                ) {
+                    PlayerScreen(
+                        viewModel = viewModel,
+                        navController = navController,
+                        onCollapse = collapsePlayer,
+                        isLyricsVisible = isLyricsModeOpen,
+                        onLyricsVisibilityChange = { isLyricsModeOpen = it },
+                        dismissModifier = dismissModifier,
+                        transition = playerTransition,
+                        cardTop = cardTop
+                    )
+                }
             }
         }
 
