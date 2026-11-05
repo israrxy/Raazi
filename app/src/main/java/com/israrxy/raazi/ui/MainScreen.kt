@@ -51,6 +51,9 @@ import androidx.navigation.compose.rememberNavController
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.player.FloatingMiniPlayer
 import com.israrxy.raazi.ui.player.MiniPlayer
+import com.israrxy.raazi.ui.player.PlayerTransition
+import com.israrxy.raazi.ui.player.RevealCardShape
+import com.israrxy.raazi.ui.player.lerpFloat
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -73,7 +76,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val playerExpansion = remember { Animatable(0f) }
+    val playerTransition = remember { PlayerTransition() }
+    val playerExpansion = playerTransition.expansion
     val sheetSpringSpec = remember {
         spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 550f)
     }
@@ -84,6 +88,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
 
     val expandPlayer: () -> Unit = {
+        playerTransition.captureOrigin()
         if (defaultPlayerScreen == "LYRICS") {
             isLyricsModeOpen = true
         } else if (defaultPlayerScreen == "PLAYER") {
@@ -139,6 +144,12 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         if (currentTrack == null) {
             isFloatingCollapsed = false
             collapsePlayer()
+        }
+    }
+
+    LaunchedEffect(playerExpansion.value) {
+        if (playerExpansion.value <= 0.001f) {
+            playerTransition.clearOrigin()
         }
     }
 
@@ -322,6 +333,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     }
                     .draggable(
                         state = rememberDraggableState { delta ->
+                            if (playerExpansion.value <= 0.001f) {
+                                playerTransition.captureOrigin()
+                            }
                             miniPlayerDownwardDelta += delta
                             scope.launch {
                                 val newProgress = (playerExpansion.value - delta / effectiveHeight).coerceIn(0f, 1f)
@@ -346,24 +360,35 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     onNavigateToPlayer = expandPlayer,
                     onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
                     isDocked = showBottomBar,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    transition = playerTransition
                 )
             }
         }
 
-        // Full-Screen Player Screen Overlay (with interactive Drag-Down-to-Dismiss)
-        if (currentTrack != null && playerExpansion.value > 0.001f) {
+        // Full-Screen Player Screen Overlay (with interactive morph and flight)
+        val origin = playerTransition.origin?.player ?: playerTransition.dockPlayer
+        val miniHeightPx = 68.dp.toPx()
+        val miniSidePx = if (showBottomBar) 0f else 12.dp.toPx()
+        val originHeight = origin?.height ?: miniHeightPx
+        val originCorner = if (showBottomBar) 0f else 16.dp.toPx()
+        val side = lerpFloat(origin?.left ?: miniSidePx, 0f, playerExpansion.value)
+        val right = lerpFloat(origin?.let { constraints.maxWidth - it.right } ?: miniSidePx, 0f, playerExpansion.value)
+        val cardHeight = lerpFloat(originHeight, parentHeightPx, playerExpansion.value)
+        val defaultCardTop = parentHeightPx - collapsedMiniPlayerBottomPadding.toPx() - originHeight
+        val cardTop = lerpFloat(origin?.top ?: defaultCardTop, 0f, playerExpansion.value)
+
+        if (currentTrack != null && (playerExpansion.value > 0.001f || playerTransition.origin != null)) {
             val progress = playerExpansion.value
-            val yOffset = ((1f - progress) * parentHeightPx).roundToInt()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(0, yOffset) }
+                    .offset {
+                        if (playerExpansion.value <= 0.001f) IntOffset(0, parentHeightPx.roundToInt() + 100) else IntOffset.Zero
+                    }
                     .graphicsLayer {
-                        shape = RoundedCornerShape(
-                            topStart = (24 * (1f - progress * 0.5f)).dp,
-                            topEnd = (24 * (1f - progress * 0.5f)).dp
-                        )
+                        translationY = cardTop
+                        shape = RevealCardShape(side, cardHeight, lerpFloat(originCorner, 24.dp.toPx(), progress), right)
                         clip = true
                         shadowElevation = 18.dp.toPx() * progress
                     }
@@ -374,7 +399,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     onCollapse = collapsePlayer,
                     isLyricsVisible = isLyricsModeOpen,
                     onLyricsVisibilityChange = { isLyricsModeOpen = it },
-                    dismissModifier = dismissModifier
+                    dismissModifier = dismissModifier,
+                    transition = playerTransition,
+                    cardTop = cardTop
                 )
             }
         }

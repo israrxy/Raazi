@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -42,6 +44,8 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.ui.components.shimmerEffect
+import com.israrxy.raazi.ui.player.PlayerTransition
+import com.israrxy.raazi.ui.player.flyArtwork
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.ui.theme.PureBlack
 import com.israrxy.raazi.ui.theme.Zinc800
@@ -270,7 +274,9 @@ internal fun PlayerTopModeHeader(
 internal fun ColumnScope.PlayerArtworkOrVideoSection(
     viewModel: MusicPlayerViewModel,
     playbackState: PlaybackState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    transition: PlayerTransition? = null,
+    cardTop: Float = 0f
 ) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     Box(
@@ -310,15 +316,8 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                 if (viewWidth <= 0f || viewHeight <= 0f || ratio <= 0f) return
 
                 val viewAspect = viewWidth / viewHeight
-                val scaleX: Float
-                val scaleY: Float
-                if (ratio > viewAspect) {
-                    scaleX = 1f
-                    scaleY = viewAspect / ratio
-                } else {
-                    scaleX = ratio / viewAspect
-                    scaleY = 1f
-                }
+                val scaleX = if (ratio > viewAspect) 1f else ratio / viewAspect
+                val scaleY = if (ratio > viewAspect) viewAspect / ratio else 1f
                 val matrix = android.graphics.Matrix()
                 matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
                 view.setTransform(matrix)
@@ -357,16 +356,7 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
             }
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .shadow(
-                        elevation = 20.dp,
-                        shape = RoundedCornerShape(18.dp),
-                        spotColor = Color.Black.copy(alpha = 0.45f)
-                    )
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.Black),
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).shadow(20.dp, RoundedCornerShape(18.dp), spotColor = Color.Black.copy(alpha = 0.45f)).clip(RoundedCornerShape(18.dp)).background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
                 val showVideoFrame = playbackState.isVideoAvailable && hasRenderedFrame
@@ -459,12 +449,23 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                 }
             }
         } else {
+            var restX by remember { mutableFloatStateOf(Float.NaN) }
+            var restY by remember { mutableFloatStateOf(Float.NaN) }
             AnimatedContent(
                 targetState = track,
                 transitionSpec = {
                     fadeIn(animationSpec = tween(350)) togetherWith fadeOut(animationSpec = tween(350))
                 },
-                label = "AlbumArtTransition"
+                label = "AlbumArtTransition",
+                modifier = Modifier
+                    .onGloballyPositioned { coordinates ->
+                        val bounds = coordinates.boundsInRoot()
+                        restX = bounds.left
+                        restY = bounds.top - cardTop
+                    }
+                    .graphicsLayer {
+                        flyArtwork(transition?.origin?.artwork, restX, restY, transition?.expansion?.value ?: 1f, cardTop)
+                    }
             ) { targetTrack ->
                 if (targetTrack != null) {
                     AsyncImage(

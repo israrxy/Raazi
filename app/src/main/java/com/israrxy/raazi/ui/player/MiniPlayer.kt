@@ -56,7 +56,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,7 +90,8 @@ fun MiniPlayer(
     onNavigateToPlayer: () -> Unit,
     onCollapseToFloating: (() -> Unit)? = null,
     isDocked: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    transition: PlayerTransition? = null
 ) {
     val miniPlayerUiStateFlow = remember(viewModel) {
         viewModel.playbackState
@@ -132,6 +136,12 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .height(cardHeight)
                 .clip(miniPlayerShape)
+                .onGloballyPositioned { coordinates ->
+                    transition?.dockPlayer = coordinates.boundsInRoot()
+                }
+                .graphicsLayer {
+                    alpha = if (transition?.origin != null) 1f - transition.stage(0.01f, 0.08f) else 1f
+                }
                 .clickable(
                     interactionSource = cardInteractionSource,
                     indication = LocalIndication.current
@@ -167,7 +177,16 @@ fun MiniPlayer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        modifier = Modifier.size(artworkSize),
+                        modifier = Modifier
+                            .size(artworkSize)
+                            .onGloballyPositioned { coordinates ->
+                                transition?.dockArtwork = coordinates.boundsInRoot()
+                            }
+                            .graphicsLayer {
+                                alpha = if (transition?.origin?.artwork != null) {
+                                    1f - transition.stage(0.01f, 0.05f)
+                                } else 1f
+                            },
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
@@ -185,6 +204,14 @@ fun MiniPlayer(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .onGloballyPositioned { coordinates ->
+                                transition?.dockTitle = coordinates.boundsInRoot()
+                            }
+                            .graphicsLayer {
+                                alpha = if (transition?.origin?.title != null) {
+                                    1f - transition.stage(0.01f, 0.05f)
+                                } else 1f
+                            }
                             .draggable(
                                 state = horizontalDragState,
                                 orientation = Orientation.Horizontal,

@@ -31,6 +31,8 @@ import com.israrxy.raazi.data.lyrics.LyricsMetadataSanitizer
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.savedCollectionId
+import com.israrxy.raazi.ui.player.PlayerTransition
+import com.israrxy.raazi.ui.player.easeOutCubic
 import com.israrxy.raazi.ui.theme.Zinc800
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -44,7 +46,9 @@ fun PlayerScreen(
     onCollapse: () -> Unit,
     isLyricsVisible: Boolean,
     onLyricsVisibilityChange: (Boolean) -> Unit,
-    dismissModifier: Modifier = Modifier
+    dismissModifier: Modifier = Modifier,
+    transition: PlayerTransition? = null,
+    cardTop: Float = 0f
 ) {
     val isExpanded = sheetState?.let {
         it.targetValue == SheetValue.Expanded || it.currentValue == SheetValue.Expanded
@@ -182,7 +186,11 @@ fun PlayerScreen(
                             onLyricsVisibilityChange = onLyricsVisibilityChange,
                             onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
                             onShowOptionsSheet = { showOptionsSheet = true },
-                            modifier = dismissModifier
+                            modifier = dismissModifier.then(
+                                if (transition != null) {
+                                    Modifier.graphicsLayer { alpha = easeOutCubic(transition.stage(0.18f, 1f)) }
+                                } else Modifier
+                            )
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -190,36 +198,50 @@ fun PlayerScreen(
                         PlayerArtworkOrVideoSection(
                             viewModel = viewModel,
                             playbackState = playbackState,
-                            modifier = if (!isLyricsVisible) dismissModifier else Modifier
+                            modifier = if (!isLyricsVisible) dismissModifier else Modifier,
+                            transition = transition,
+                            cardTop = cardTop
                         )
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                        PlayerControlsAndActionsSection(
-                            viewModel = viewModel,
-                            playbackState = playbackState,
-                            favoriteTracks = favoriteTracks,
-                            progress = progress,
-                            duration = duration,
-                            isDraggingSlider = isDraggingSlider,
-                            dragFraction = dragFraction,
-                            onSliderChange = { fraction ->
-                                isDraggingSlider = true
-                                dragFraction = fraction.coerceIn(0f, 1f)
-                            },
-                            onSliderFinished = {
-                                if (duration > 0L) {
-                                    val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
-                                    pendingSeekPositionMs = seekPosition
-                                    pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
-                                    viewModel.seekTo(seekPosition)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    if (transition != null) {
+                                        val shown = easeOutCubic(transition.stage(0.28f, 1f))
+                                        alpha = shown
+                                        translationY = 16.dp.toPx() * (1f - shown)
+                                    }
                                 }
-                                isDraggingSlider = false
-                            },
-                            hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                            onShowQueueSheet = { showPlayNextSheet = true },
-                            onShowSleepTimer = { showSleepTimer = true }
-                        )
+                        ) {
+                            PlayerControlsAndActionsSection(
+                                viewModel = viewModel,
+                                playbackState = playbackState,
+                                favoriteTracks = favoriteTracks,
+                                progress = progress,
+                                duration = duration,
+                                isDraggingSlider = isDraggingSlider,
+                                dragFraction = dragFraction,
+                                onSliderChange = { fraction ->
+                                    isDraggingSlider = true
+                                    dragFraction = fraction.coerceIn(0f, 1f)
+                                },
+                                onSliderFinished = {
+                                    if (duration > 0L) {
+                                        val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                                        pendingSeekPositionMs = seekPosition
+                                        pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                                        viewModel.seekTo(seekPosition)
+                                    }
+                                    isDraggingSlider = false
+                                },
+                                hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
+                                onShowQueueSheet = { showPlayNextSheet = true },
+                                onShowSleepTimer = { showSleepTimer = true }
+                            )
+                        }
                     }
 
                     // --- Extra content cards (scrollable below the player) ---
