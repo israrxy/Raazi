@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.ui.layout.LayoutCoordinates
+
 /**
  * Shared transition state for player expansion, morphing the MiniPlayer into full PlayerScreen.
  */
@@ -29,6 +31,8 @@ class PlayerTransition {
     var dockPlayer: Rect? = null
     var dockArtwork: Rect? = null
     var dockTitle: Rect? = null
+
+    var cardCoordinates by mutableStateOf<LayoutCoordinates?>(null)
 
     var origin by mutableStateOf<Origin?>(null)
         internal set
@@ -57,13 +61,22 @@ internal fun easeOutCubic(t: Float): Float {
 
 /**
  * Clips the player card overlay to expand from the MiniPlayer capsule into full screen.
+ * Reusable mutable shape to prevent per-frame allocations during drag.
  */
 class RevealCardShape(
-    private val side: Float,
-    private val height: Float,
-    private val radius: Float,
-    private val right: Float = side
+    var side: Float = 0f,
+    var height: Float = 0f,
+    var radius: Float = 0f,
+    var right: Float = side
 ) : Shape {
+    fun update(side: Float, height: Float, radius: Float, right: Float): RevealCardShape {
+        this.side = side
+        this.height = height
+        this.radius = radius
+        this.right = right
+        return this
+    }
+
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
         Outline.Rounded(
             RoundRect(
@@ -74,11 +87,15 @@ class RevealCardShape(
                 cornerRadius = CornerRadius(radius)
             )
         )
+
+    override fun equals(other: Any?): Boolean = false
+    override fun hashCode(): Int = System.identityHashCode(this)
 }
 
 /**
  * Morphs and flies the album artwork from the MiniPlayer's thumbnail position and scale
  * into its resting position inside the expanded PlayerScreen.
+ * Uses card-local resting coordinates and handles both width and height scaling.
  */
 fun GraphicsLayerScope.flyArtwork(
     from: Rect?,
@@ -89,24 +106,27 @@ fun GraphicsLayerScope.flyArtwork(
     startCornerDp: Dp = 10.dp,
     endCornerDp: Dp = 20.dp
 ): Boolean {
-    if (from == null || progress >= 0.999f || restX.isNaN() || size.width <= 0f) {
+    if (from == null || progress >= 0.999f || restX.isNaN() || restY.isNaN() || size.width <= 0f || size.height <= 0f) {
         scaleX = 1f
         scaleY = 1f
         translationX = 0f
         translationY = 0f
         return false
     }
-    val flight = ((progress - 0.02f) / 0.98f).coerceIn(0f, 1f)
-    val startScale = (from.width / size.width).coerceIn(0.01f, 1f)
-    val scale = lerpFloat(startScale, 1f, flight)
+    val flight = ((progress - 0.01f) / 0.99f).coerceIn(0f, 1f)
+    val startScaleX = (from.width / size.width).coerceIn(0.01f, 1f)
+    val startScaleY = (from.height / size.height).coerceIn(0.01f, 1f)
+    val scaleXVal = lerpFloat(startScaleX, 1f, flight)
+    val scaleYVal = lerpFloat(startScaleY, 1f, flight)
     transformOrigin = TransformOrigin(0f, 0f)
-    scaleX = scale
-    scaleY = scale
-    translationX = lerpFloat(from.left, restX, flight) - restX
-    translationY = lerpFloat(from.top - cardTop, restY, flight) - restY
-    shape = androidx.compose.foundation.shape.RoundedCornerShape(
-        lerpFloat(startCornerDp.toPx(), endCornerDp.toPx(), flight) / scale
-    )
+    scaleX = scaleXVal
+    scaleY = scaleYVal
+    val startX = from.left
+    val startY = from.top - cardTop
+    translationX = lerpFloat(startX, restX, flight) - restX
+    translationY = lerpFloat(startY, restY, flight) - restY
+    val cornerProgress = lerpFloat(startCornerDp.toPx(), endCornerDp.toPx(), flight)
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerProgress / scaleXVal)
     clip = true
     return true
 }

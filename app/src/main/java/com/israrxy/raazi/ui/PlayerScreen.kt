@@ -49,7 +49,7 @@ fun PlayerScreen(
     onLyricsVisibilityChange: (Boolean) -> Unit,
     dismissModifier: Modifier = Modifier,
     transition: PlayerTransition? = null,
-    cardTop: Float = 0f
+    cardTop: () -> Float = { 0f }
 ) {
     val isExpanded = sheetState?.let {
         it.targetValue == SheetValue.Expanded || it.currentValue == SheetValue.Expanded

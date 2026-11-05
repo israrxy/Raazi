@@ -32,10 +32,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -277,7 +278,7 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
     playbackState: PlaybackState,
     modifier: Modifier = Modifier,
     transition: PlayerTransition? = null,
-    cardTop: Float = 0f
+    cardTop: () -> Float = { 0f }
 ) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     Box(
@@ -436,22 +437,25 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
 
                 if (playbackState.isLoading || playbackState.isBuffering) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = if (showVideoFrame) 0.22f else 0.35f)),
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (showVideoFrame) 0.22f else 0.35f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(34.dp),
-                            strokeWidth = 2.5.dp
-                        )
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(34.dp), strokeWidth = 2.5.dp)
                     }
                 }
             }
         } else {
             var restX by remember { mutableFloatStateOf(Float.NaN) }
             var restY by remember { mutableFloatStateOf(Float.NaN) }
+            var artCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            fun updateRest(art: LayoutCoordinates? = artCoords) {
+                val card = transition?.cardCoordinates
+                if (card != null && card.isAttached && art != null && art.isAttached) {
+                    val local = card.localPositionOf(art, Offset.Zero)
+                    restX = local.x; restY = local.y
+                }
+            }
+            LaunchedEffect(transition?.cardCoordinates) { updateRest() }
             AnimatedContent(
                 targetState = track,
                 transitionSpec = {
@@ -460,12 +464,11 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                 label = "AlbumArtTransition",
                 modifier = Modifier
                     .onGloballyPositioned { coordinates ->
-                        val bounds = coordinates.boundsInRoot()
-                        restX = bounds.left
-                        restY = bounds.top - cardTop
+                        artCoords = coordinates
+                        updateRest(coordinates)
                     }
                     .graphicsLayer {
-                        flyArtwork(transition?.origin?.artwork, restX, restY, transition?.expansion?.value ?: 1f, cardTop)
+                        flyArtwork(transition?.origin?.artwork, restX, restY, transition?.expansion?.value ?: 1f, cardTop())
                     }
             ) { targetTrack ->
                 if (targetTrack != null) {

@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -56,6 +57,7 @@ import com.israrxy.raazi.ui.player.PlayerTransition
 import com.israrxy.raazi.ui.player.RevealCardShape
 import com.israrxy.raazi.ui.player.lerpFloat
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -224,6 +226,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         val parentHeightPx = constraints.maxHeight.toFloat()
         val effectiveHeight = parentHeightPx.coerceAtLeast(1f)
         var miniPlayerDownwardDelta by remember { mutableFloatStateOf(0f) }
+        val dragChannel = remember { Channel<Float>(Channel.CONFLATED) }
+        var isDraggingPlayer by remember { mutableStateOf(false) }
+        var dragProgress by remember { mutableFloatStateOf(0f) }
+
+        LaunchedEffect(effectiveHeight) {
+            for (target in dragChannel) {
+                playerExpansion.snapTo(target)
+            }
+        }
 
         val dismissModifier = Modifier.pointerInput(parentHeightPx) {
             var gestureStartMs = 0L
@@ -232,8 +243,11 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                 onDragStart = {
                     gestureStartMs = SystemClock.uptimeMillis()
                     totalDragPx = 0f
+                    isDraggingPlayer = true
+                    dragProgress = playerExpansion.value
                 },
                 onDragEnd = {
+                    isDraggingPlayer = false
                     val elapsedMs = (SystemClock.uptimeMillis() - gestureStartMs).coerceAtLeast(1L)
                     val velocity = totalDragPx / (elapsedMs / 1000f)
                     if (playerExpansion.value < 0.65f || velocity > 500f) {
@@ -242,14 +256,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         expandPlayer()
                     }
                 },
-                onDragCancel = { expandPlayer() },
+                onDragCancel = {
+                    isDraggingPlayer = false
+                    expandPlayer()
+                },
                 onVerticalDrag = { change, dragAmount ->
                     change.consume()
                     totalDragPx += dragAmount
-                    scope.launch {
-                        val newProgress = (playerExpansion.value - dragAmount / effectiveHeight).coerceIn(0f, 1f)
-                        playerExpansion.snapTo(newProgress)
-                    }
+                    dragProgress = (dragProgress - dragAmount / effectiveHeight).coerceIn(0f, 1f)
+                    dragChannel.trySend(dragProgress)
                 }
             )
         }
@@ -319,7 +334,6 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
 
         // MiniPlayer (with interactive Drag-Up gesture)
         if (showMiniPlayerBar && playerExpansion.value < 0.99f) {
-            val progress = playerExpansion.value
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -327,6 +341,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
                     .padding(bottom = collapsedMiniPlayerBottomPadding)
                     .graphicsLayer {
+                        val progress = playerExpansion.value
                         translationY = -progress * 24.dp.toPx()
                         alpha = (1f - progress * 2.2f).coerceIn(0f, 1f)
                         scaleX = 1f - (0.03f * progress)
@@ -334,17 +349,27 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     }
                     .draggable(
                         state = rememberDraggableState { delta ->
+                            if (!isDraggingPlayer) {
+                                isDraggingPlayer = true
+                                dragProgress = playerExpansion.value
+                                if (playerExpansion.value <= 0.001f) {
+                                    playerTransition.captureOrigin()
+                                }
+                            }
+                            miniPlayerDownwardDelta += delta
+                            dragProgress = (dragProgress - delta / effectiveHeight).coerceIn(0f, 1f)
+                            dragChannel.trySend(dragProgress)
+                        },
+                        orientation = Orientation.Vertical,
+                        onDragStarted = {
+                            isDraggingPlayer = true
+                            dragProgress = playerExpansion.value
                             if (playerExpansion.value <= 0.001f) {
                                 playerTransition.captureOrigin()
                             }
-                            miniPlayerDownwardDelta += delta
-                            scope.launch {
-                                val newProgress = (playerExpansion.value - delta / effectiveHeight).coerceIn(0f, 1f)
-                                playerExpansion.snapTo(newProgress)
-                            }
                         },
-                        orientation = Orientation.Vertical,
                         onDragStopped = { velocity ->
+                            isDraggingPlayer = false
                             if (miniPlayerDownwardDelta > 36f && microPlayerEnabled && playerExpansion.value < 0.05f) {
                                 isFloatingCollapsed = true
                             } else if (velocity < -500f || playerExpansion.value > 0.25f) {
@@ -369,31 +394,52 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
 
         // Full-Screen Player Screen Overlay (with interactive morph and flight)
         val density = LocalDensity.current
-        val origin = playerTransition.origin?.player ?: playerTransition.dockPlayer
         val miniHeightPx = with(density) { 68.dp.toPx() }
         val miniSidePx = with(density) { if (showBottomBar) 0f else 12.dp.toPx() }
-        val originHeight = origin?.height ?: miniHeightPx
-        val originCorner = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
+        val miniCornerPx = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
         val cornerTarget = with(density) { 24.dp.toPx() }
-        val side = lerpFloat(origin?.left ?: miniSidePx, 0f, playerExpansion.value)
-        val right = lerpFloat(origin?.let { constraints.maxWidth - it.right } ?: miniSidePx, 0f, playerExpansion.value)
-        val cardHeight = lerpFloat(originHeight, parentHeightPx, playerExpansion.value)
-        val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - originHeight
-        val cardTop = lerpFloat(origin?.top ?: defaultCardTop, 0f, playerExpansion.value)
+        val cardShadowPx = with(density) { 18.dp.toPx() }
+        val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - miniHeightPx
 
-        if (currentTrack != null && (playerExpansion.value > 0.001f || playerTransition.origin != null)) {
-            val progress = playerExpansion.value
+        val cardTop: () -> Float = {
+            lerpFloat(
+                playerTransition.origin?.player?.top ?: playerTransition.dockPlayer?.top ?: defaultCardTop,
+                0f,
+                playerExpansion.value
+            )
+        }
+        val revealShapeA = remember { RevealCardShape() }
+        val revealShapeB = remember { RevealCardShape() }
+        val shapeToggle = remember { booleanArrayOf(false) }
+
+        if (currentTrack != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset {
-                        if (playerExpansion.value <= 0.001f) IntOffset(0, parentHeightPx.roundToInt() + 100) else IntOffset.Zero
+                        if (playerExpansion.value <= 0.001f) {
+                            IntOffset(0, parentHeightPx.roundToInt() + 100)
+                        } else {
+                            IntOffset.Zero
+                        }
+                    }
+                    .onGloballyPositioned { coordinates ->
+                        playerTransition.cardCoordinates = coordinates
                     }
                     .graphicsLayer {
-                        translationY = cardTop
-                        shape = RevealCardShape(side, cardHeight, lerpFloat(originCorner, cornerTarget, progress), right)
+                        val progress = playerExpansion.value
+                        val origin = playerTransition.origin?.player ?: playerTransition.dockPlayer
+                        val originHeight = origin?.height ?: miniHeightPx
+                        val originCorner = if (origin != null) originHeight / 2f else miniCornerPx
+                        val side = lerpFloat(origin?.left ?: miniSidePx, 0f, progress)
+                        val right = lerpFloat(origin?.let { size.width - it.right } ?: miniSidePx, 0f, progress)
+                        val cardHeight = lerpFloat(originHeight, size.height, progress)
+                        translationY = cardTop()
+                        val currentShape = if (shapeToggle[0]) revealShapeA else revealShapeB
+                        shapeToggle[0] = !shapeToggle[0]
+                        shape = currentShape.update(side, cardHeight, lerpFloat(originCorner, cornerTarget, progress), right)
                         clip = true
-                        shadowElevation = 18.dp.toPx() * progress
+                        shadowElevation = if (progress > 0.001f && progress < 0.999f) cardShadowPx else 0f
                     }
             ) {
                 PlayerScreen(

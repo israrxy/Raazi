@@ -140,7 +140,7 @@ fun MiniPlayer(
                     transition?.dockPlayer = coordinates.boundsInRoot()
                 }
                 .graphicsLayer {
-                    alpha = if (transition?.origin != null) 1f - transition.stage(0.01f, 0.08f) else 1f
+                    alpha = if (transition?.origin != null) 1f - transition.stage(0.01f, 0.15f) else 1f
                 }
                 .clickable(
                     interactionSource = cardInteractionSource,
@@ -184,7 +184,7 @@ fun MiniPlayer(
                             }
                             .graphicsLayer {
                                 alpha = if (transition?.origin?.artwork != null) {
-                                    1f - transition.stage(0.01f, 0.05f)
+                                    1f - transition.stage(0.01f, 0.15f)
                                 } else 1f
                             },
                         shape = RoundedCornerShape(10.dp),
@@ -209,7 +209,7 @@ fun MiniPlayer(
                             }
                             .graphicsLayer {
                                 alpha = if (transition?.origin?.title != null) {
-                                    1f - transition.stage(0.01f, 0.05f)
+                                    1f - transition.stage(0.01f, 0.15f)
                                 } else 1f
                             }
                             .draggable(
