@@ -1,10 +1,12 @@
 package com.israrxy.raazi.ui
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -19,13 +21,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.israrxy.raazi.data.lyrics.LyricsMetadataSanitizer
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.savedCollectionId
 import com.israrxy.raazi.ui.player.PlayerTransition
 import com.israrxy.raazi.ui.player.easeOutCubic
-import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
+import com.israrxy.raazi.ui.theme.Zinc800
+import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -125,137 +135,119 @@ fun PlayerScreen(
             .fillMaxSize()
             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
     ) {
-        val songAccentColor = rememberPlaylistDominantColor(
-            coverUrl = currentTrack?.thumbnailUrl.orEmpty(),
-            fallbackColor = MaterialTheme.colorScheme.primary
-        )
-
         PlayerBlurredBackground(
             currentTrack = currentTrack,
             isLoading = isLoading
         )
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val screenHeight = maxHeight
-            val screenWidth = maxWidth
-            val contentWidth = screenWidth - 48.dp
-            val artworkSize = if (screenHeight <= 660.dp) {
-                minOf(contentWidth, 350.dp, (screenHeight - 440.dp).coerceIn(160.dp, 350.dp))
-            } else {
-                minOf(contentWidth, 350.dp, (screenHeight - 510.dp).coerceIn(180.dp, 350.dp))
-            }
-
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn(tween(300)),
-                exit = fadeOut(tween(300))
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(300)),
+            exit = fadeOut(tween(300))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp)
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 24.dp)
+                            .height(26.dp)
+                            .then(dismissModifier)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onCollapse
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(26.dp)
-                                .then(dismissModifier)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onCollapse
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .graphicsLayer {
-                                        alpha = transition?.stage(0.70f, 1f) ?: 1f
-                                    }
-                                    .size(36.dp, 4.dp)
-                                    .background(Color.White.copy(alpha = 0.35f), CircleShape)
-                            )
-                        }
-
-                        PlayerTopModeHeader(
-                            playbackState = playbackState,
-                            isLyricsVisible = isLyricsVisible,
-                            sleepTimerActive = sleepTimerActive,
-                            onCollapse = onCollapse,
-                            onLyricsVisibilityChange = onLyricsVisibilityChange,
-                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                            onShowOptionsSheet = { showOptionsSheet = true },
-                            modifier = dismissModifier.then(
-                                if (transition != null) {
-                                    Modifier.graphicsLayer {
-                                        val shown = easeOutCubic(transition.stage(0.60f, 1f))
-                                        alpha = shown
-                                        translationY = -12.dp.toPx() * (1f - shown)
-                                    }
-                                } else Modifier
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        PlayerArtworkOrVideoSection(
-                            viewModel = viewModel,
-                            playbackState = playbackState,
-                            modifier = Modifier,
-                            transition = transition,
-                            cardTop = cardTop,
-                            artworkSize = artworkSize,
-                            dominantColor = songAccentColor
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        PlayerControlsAndActionsSection(
-                            viewModel = viewModel,
-                            playbackState = playbackState,
-                            favoriteTracks = favoriteTracks,
-                            progress = progress,
-                            duration = duration,
-                            isDraggingSlider = isDraggingSlider,
-                            dragFraction = dragFraction,
-                            onSliderChange = { fraction ->
-                                isDraggingSlider = true
-                                dragFraction = fraction.coerceIn(0f, 1f)
-                            },
-                            onSliderFinished = {
-                                if (duration > 0L) {
-                                    val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
-                                    pendingSeekPositionMs = seekPosition
-                                    pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
-                                    viewModel.seekTo(seekPosition)
+                                .graphicsLayer {
+                                    alpha = transition?.stage(0.70f, 1f) ?: 1f
                                 }
-                                isDraggingSlider = false
-                            },
-                            hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                            onShowQueueSheet = { showPlayNextSheet = true },
-                            onShowSleepTimer = { showSleepTimer = true },
-                            sleepTimerActive = sleepTimerActive,
-                            transition = transition,
-                            cardTop = cardTop
+                                .size(36.dp, 4.dp)
+                                .background(Color.White.copy(alpha = 0.35f), CircleShape)
                         )
                     }
+
+                    PlayerTopModeHeader(
+                        playbackState = playbackState,
+                        isLyricsVisible = isLyricsVisible,
+                        sleepTimerActive = sleepTimerActive,
+                        onCollapse = onCollapse,
+                        onLyricsVisibilityChange = onLyricsVisibilityChange,
+                        onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                        onShowOptionsSheet = { showOptionsSheet = true },
+                        modifier = dismissModifier.then(
+                            if (transition != null) {
+                                Modifier.graphicsLayer {
+                                    val shown = easeOutCubic(transition.stage(0.60f, 1f))
+                                    alpha = shown
+                                    translationY = -12.dp.toPx() * (1f - shown)
+                                }
+                            } else Modifier
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PlayerArtworkOrVideoSection(
+                        viewModel = viewModel,
+                        playbackState = playbackState,
+                        modifier = Modifier,
+                        transition = transition,
+                        cardTop = cardTop
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    PlayerControlsAndActionsSection(
+                        viewModel = viewModel,
+                        playbackState = playbackState,
+                        favoriteTracks = favoriteTracks,
+                        progress = progress,
+                        duration = duration,
+                        isDraggingSlider = isDraggingSlider,
+                        dragFraction = dragFraction,
+                        onSliderChange = { fraction ->
+                            isDraggingSlider = true
+                            dragFraction = fraction.coerceIn(0f, 1f)
+                        },
+                        onSliderFinished = {
+                            if (duration > 0L) {
+                                val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                                pendingSeekPositionMs = seekPosition
+                                pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                                viewModel.seekTo(seekPosition)
+                            }
+                            isDraggingSlider = false
+                        },
+                        hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
+                        onShowQueueSheet = { showPlayNextSheet = true },
+                        onShowSleepTimer = { showSleepTimer = true },
+                        transition = transition,
+                        cardTop = cardTop
+                    )
+                }
 
                     // --- Extra content cards (scrollable below the player) ---
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
-                            .padding(bottom = 24.dp)
+                            .padding(bottom = 32.dp)
                             .navigationBarsPadding()
                     ) {
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                         SpotifyLyricsPreviewCard(
                             syncedLines = parsedSyncedLines,
                             plainLyrics = lyrics?.plainLyrics,
@@ -289,7 +281,6 @@ fun PlayerScreen(
                         )
                     }
                 }
-            }
         }
 
         // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY
@@ -402,5 +393,88 @@ fun PlayerScreen(
             showCreditsSheet = showCreditsSheet,
             onDismissCreditsSheet = { showCreditsSheet = false }
         )
+    }
+}
+
+@Composable
+internal fun PlayerAboutArtistCard(
+    currentTrack: MusicItem?,
+    currentArtistSongs: List<MusicItem>,
+    savedCollectionIds: Set<String>,
+    onNavigateToArtist: (String) -> Unit,
+    onToggleSavedArtist: (artistId: String, artistName: String, thumbnailUrl: String) -> Unit
+) {
+    val artistId = currentTrack?.artistId?.ifBlank { null } ?: currentTrack?.artist.orEmpty()
+    val artistName = currentTrack?.artist ?: "Unknown Artist"
+    val normalizedArtistId = remember(artistId, artistName) { artistId.ifBlank { artistName } }
+    val savedArtistId = remember(normalizedArtistId) { savedCollectionId(MusicContentType.ARTIST, normalizedArtistId) }
+    val isSavedArtist = savedArtistId in savedCollectionIds
+    val artistThumbnail = currentArtistSongs.firstOrNull()?.thumbnailUrl ?: currentTrack?.thumbnailUrl ?: ""
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onNavigateToArtist("artist/${Uri.encode(normalizedArtistId)}?name=${Uri.encode(artistName)}") },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                text = "ABOUT THE ARTIST",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.6f),
+                letterSpacing = 1.sp
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AsyncImage(
+                    model = ThumbnailUtils.getHighQualityThumbnail(artistThumbnail),
+                    contentDescription = artistName,
+                    modifier = Modifier.size(70.dp).clip(CircleShape).background(Zinc800),
+                    contentScale = ContentScale.Crop
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = artistName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isSavedArtist) "Saved to Library" else "Tap to view profile",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .then(
+                            if (isSavedArtist) {
+                                Modifier.border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
+                            } else {
+                                Modifier.background(Color.White)
+                            }
+                        )
+                        .clickable { onToggleSavedArtist(normalizedArtistId, artistName, artistThumbnail) }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isSavedArtist) "Following" else "Follow",
+                        color = if (isSavedArtist) Color.White else Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
     }
 }
