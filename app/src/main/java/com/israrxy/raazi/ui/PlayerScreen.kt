@@ -203,44 +203,34 @@ fun PlayerScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                if (transition != null) {
-                                    val shown = easeOutCubic(transition.stage(0.28f, 1f))
-                                    alpha = shown
-                                    translationY = 16.dp.toPx() * (1f - shown)
-                                }
+                    PlayerControlsAndActionsSection(
+                        viewModel = viewModel,
+                        playbackState = playbackState,
+                        favoriteTracks = favoriteTracks,
+                        progress = progress,
+                        duration = duration,
+                        isDraggingSlider = isDraggingSlider,
+                        dragFraction = dragFraction,
+                        onSliderChange = { fraction ->
+                            isDraggingSlider = true
+                            dragFraction = fraction.coerceIn(0f, 1f)
+                        },
+                        onSliderFinished = {
+                            if (duration > 0L) {
+                                val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                                pendingSeekPositionMs = seekPosition
+                                pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                                viewModel.seekTo(seekPosition)
                             }
-                    ) {
-                        PlayerControlsAndActionsSection(
-                                viewModel = viewModel,
-                                playbackState = playbackState,
-                                favoriteTracks = favoriteTracks,
-                                progress = progress,
-                                duration = duration,
-                                isDraggingSlider = isDraggingSlider,
-                                dragFraction = dragFraction,
-                                onSliderChange = { fraction ->
-                                    isDraggingSlider = true
-                                    dragFraction = fraction.coerceIn(0f, 1f)
-                                },
-                                onSliderFinished = {
-                                    if (duration > 0L) {
-                                        val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
-                                        pendingSeekPositionMs = seekPosition
-                                        pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
-                                        viewModel.seekTo(seekPosition)
-                                    }
-                                    isDraggingSlider = false
-                                },
-                                hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                                onShowQueueSheet = { showPlayNextSheet = true },
-                                onShowSleepTimer = { showSleepTimer = true }
-                            )
-                        }
-                    }
+                            isDraggingSlider = false
+                        },
+                        hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
+                        onShowQueueSheet = { showPlayNextSheet = true },
+                        onShowSleepTimer = { showSleepTimer = true },
+                        transition = transition,
+                        cardTop = cardTop
+                    )
+                }
 
                     // --- Extra content cards (scrollable below the player) ---
                     Column(

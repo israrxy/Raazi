@@ -36,12 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -88,10 +91,12 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val scope = rememberCoroutineScope()
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
     val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
 
     val expandPlayer: () -> Unit = {
         playerTransition.captureOrigin()
+        isExpanded = true
         if (defaultPlayerScreen == "LYRICS") {
             isLyricsModeOpen = true
         } else if (defaultPlayerScreen == "PLAYER") {
@@ -101,6 +106,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     val collapsePlayer: () -> Unit = {
+        isExpanded = false
         scope.launch {
             playerExpansion.animateTo(0f, sheetSpringSpec)
         }
@@ -150,8 +156,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
     }
 
-    LaunchedEffect(playerExpansion.value) {
-        if (playerExpansion.value <= 0.001f) {
+    LaunchedEffect(isExpanded) {
+        if (!isExpanded) {
+            snapshotFlow { playerExpansion.value }.first { it <= 0.001f }
             playerTransition.clearOrigin()
         }
     }
@@ -358,10 +365,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         state = rememberDraggableState { delta ->
                             if (!isDraggingPlayer) {
                                 isDraggingPlayer = true
+                                isExpanded = true
                                 dragProgress = playerExpansion.value
-                                if (playerExpansion.value <= 0.001f) {
-                                    playerTransition.captureOrigin()
-                                }
+                                playerTransition.captureOrigin()
                             }
                             miniPlayerDownwardDelta += delta
                             dragProgress = (dragProgress - delta / effectiveHeight).coerceIn(0f, 1f)
@@ -373,10 +379,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         orientation = Orientation.Vertical,
                         onDragStarted = {
                             isDraggingPlayer = true
+                            isExpanded = true
                             dragProgress = playerExpansion.value
-                            if (playerExpansion.value <= 0.001f) {
-                                playerTransition.captureOrigin()
-                            }
+                            playerTransition.captureOrigin()
                         },
                         onDragStopped = { velocity ->
                             isDraggingPlayer = false
@@ -426,6 +431,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         } else {
                             IntOffset.Zero
                         }
+                    }
+                    .onPlaced { coordinates ->
+                        if (coordinates.isAttached) playerTransition.cardCoordinates = coordinates
                     }
                     .onGloballyPositioned { coordinates ->
                         playerTransition.cardCoordinates = coordinates

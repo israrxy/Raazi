@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -136,6 +137,7 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .height(cardHeight)
                 .clip(miniPlayerShape)
+                .onPlaced { if (it.isAttached) transition?.dockPlayer = it.boundsInRoot() }
                 .onGloballyPositioned { coordinates ->
                     transition?.dockPlayer = coordinates.boundsInRoot()
                 }
@@ -179,6 +181,7 @@ fun MiniPlayer(
                     Surface(
                         modifier = Modifier
                             .size(artworkSize)
+                            .onPlaced { if (it.isAttached) transition?.dockArtwork = it.boundsInRoot() }
                             .onGloballyPositioned { coordinates ->
                                 transition?.dockArtwork = coordinates.boundsInRoot()
                             }
@@ -204,12 +207,13 @@ fun MiniPlayer(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .onPlaced { if (it.isAttached) transition?.dockTitle = it.boundsInRoot() }
                             .onGloballyPositioned { coordinates ->
                                 transition?.dockTitle = coordinates.boundsInRoot()
                             }
                             .graphicsLayer {
                                 alpha = if (transition?.origin?.title != null) {
-                                    1f - transition.stage(0.01f, 0.05f)
+                                    1f - transition.stage(0.01f, 0.04f)
                                 } else 1f
                             }
                             .draggable(

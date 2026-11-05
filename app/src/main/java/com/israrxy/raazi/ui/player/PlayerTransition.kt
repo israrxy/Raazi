@@ -40,7 +40,14 @@ class PlayerTransition {
     class Origin(val player: Rect?, val artwork: Rect?, val title: Rect?)
 
     fun captureOrigin() {
-        if (origin == null) origin = Origin(dockPlayer, dockArtwork, dockTitle)
+        if (origin == null || origin?.artwork == null) {
+            val p = dockPlayer
+            val a = dockArtwork
+            val t = dockTitle
+            if (p != null || a != null) {
+                origin = Origin(p, a, t)
+            }
+        }
     }
 
     fun clearOrigin() {
@@ -97,28 +104,27 @@ class RevealCardShape(
  * into its resting position inside the expanded PlayerScreen.
  * Uses card-local resting coordinates and handles both width and height scaling.
  */
-fun GraphicsLayerScope.flyArtwork(
+/**
+ * Morphs and flies a layer (artwork or title) from the MiniPlayer's position and scale
+ * into its resting position inside the expanded PlayerScreen.
+ */
+fun GraphicsLayerScope.flyFrom(
     from: Rect?,
     playerOrigin: Rect?,
     restX: Float,
     restY: Float,
     progress: Float,
     cardTop: Float,
-    startCornerDp: Dp = 10.dp,
-    endCornerDp: Dp = 20.dp
+    startScale: Float? = null,
+    cornerDp: Dp? = null
 ): Boolean {
     if (from == null || progress >= 0.999f || restX.isNaN() || restY.isNaN() || size.width <= 0f || size.height <= 0f) {
-        scaleX = 1f
-        scaleY = 1f
-        translationX = 0f
-        translationY = 0f
+        scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
         return false
     }
     val flight = ((progress - 0.04f) / 0.96f).coerceIn(0f, 1f)
-    val startScaleX = (from.width / size.width).coerceIn(0.01f, 1f)
-    val startScaleY = (from.height / size.height).coerceIn(0.01f, 1f)
-    val scaleXVal = lerpFloat(startScaleX, 1f, flight)
-    val scaleYVal = lerpFloat(startScaleY, 1f, flight)
+    val scaleXVal = lerpFloat(startScale ?: (from.width / size.width).coerceIn(0.01f, 1f), 1f, flight)
+    val scaleYVal = lerpFloat(startScale ?: (from.height / size.height).coerceIn(0.01f, 1f), 1f, flight)
     transformOrigin = TransformOrigin(0f, 0f)
     scaleX = scaleXVal
     scaleY = scaleYVal
@@ -132,8 +138,31 @@ fun GraphicsLayerScope.flyArtwork(
     val currentY = lerpFloat(startY, restY, flight)
     translationY = currentY - restY
 
-    val cornerProgress = lerpFloat(startCornerDp.toPx(), endCornerDp.toPx(), flight)
-    shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerProgress / scaleXVal)
-    clip = true
+    if (cornerDp != null) {
+        val cornerProgress = lerpFloat(10.dp.toPx(), cornerDp.toPx(), flight)
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerProgress / scaleXVal)
+        clip = true
+    }
     return true
 }
+
+fun GraphicsLayerScope.flyArtwork(
+    from: Rect?,
+    playerOrigin: Rect?,
+    restX: Float,
+    restY: Float,
+    progress: Float,
+    cardTop: Float,
+    startCornerDp: Dp = 10.dp,
+    endCornerDp: Dp = 20.dp
+): Boolean = flyFrom(from, playerOrigin, restX, restY, progress, cardTop, null, endCornerDp)
+
+fun GraphicsLayerScope.flyTitle(
+    from: Rect?,
+    playerOrigin: Rect?,
+    restX: Float,
+    restY: Float,
+    progress: Float,
+    cardTop: Float,
+    startScale: Float = 14f / 22f
+): Boolean = flyFrom(from, playerOrigin, restX, restY, progress, cardTop, startScale, null)

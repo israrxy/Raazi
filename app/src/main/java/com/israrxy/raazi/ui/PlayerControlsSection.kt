@@ -22,7 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +40,9 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.model.RepeatMode
+import com.israrxy.raazi.ui.player.PlayerTransition
+import com.israrxy.raazi.ui.player.easeOutCubic
+import com.israrxy.raazi.ui.player.flyTitle
 import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.ui.theme.Zinc500
@@ -53,7 +61,9 @@ internal fun PlayerControlsAndActionsSection(
     onSliderFinished: () -> Unit,
     hasQueueOrRelated: Boolean,
     onShowQueueSheet: () -> Unit,
-    onShowSleepTimer: () -> Unit = {}
+    onShowSleepTimer: () -> Unit = {},
+    transition: PlayerTransition? = null,
+    cardTop: () -> Float = { 0f }
 ) {
     val context = LocalContext.current
     val currentTrack = playbackState.currentTrack
@@ -62,6 +72,15 @@ internal fun PlayerControlsAndActionsSection(
         fallbackColor = MaterialTheme.colorScheme.primary
     )
     val isPlaying = playbackState.isPlaying
+
+    val titleRest = remember { floatArrayOf(Float.NaN, Float.NaN) }
+    fun updateTitleRest(coords: LayoutCoordinates) {
+        val card = transition?.cardCoordinates
+        if (card != null && card.isAttached && coords.isAttached) {
+            val local = card.localPositionOf(coords, Offset.Zero)
+            titleRest[0] = local.x; titleRest[1] = local.y
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         AnimatedContent(
@@ -78,7 +97,22 @@ internal fun PlayerControlsAndActionsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onPlaced { if (it.isAttached) updateTitleRest(it) }
+                        .onGloballyPositioned { updateTitleRest(it) }
+                        .graphicsLayer {
+                            if (transition != null) {
+                                flyTitle(
+                                    from = transition.origin?.title,
+                                    playerOrigin = transition.origin?.player,
+                                    restX = titleRest[0],
+                                    restY = titleRest[1],
+                                    progress = transition.expansion.value,
+                                    cardTop = cardTop()
+                                )
+                            }
+                        },
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
@@ -101,7 +135,14 @@ internal fun PlayerControlsAndActionsSection(
 
                 val isLiked = track?.let { t -> favoriteTracks.any { it.id == t.id } } == true
 
-                IconButton(onClick = { track?.let { viewModel.toggleFavorite(it) } }) {
+                IconButton(
+                    onClick = { track?.let { viewModel.toggleFavorite(it) } },
+                    modifier = Modifier.graphicsLayer {
+                        if (transition != null) {
+                            alpha = easeOutCubic(transition.stage(0.28f, 1f))
+                        }
+                    }
+                ) {
                     Icon(
                         imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = if (isLiked) "Unlike" else "Like",
@@ -113,7 +154,18 @@ internal fun PlayerControlsAndActionsSection(
         }
     }
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                if (transition != null) {
+                    val shown = easeOutCubic(transition.stage(0.25f, 1f))
+                    alpha = shown
+                    translationY = 16.dp.toPx() * (1f - shown)
+                }
+            }
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
 
     Column(modifier = Modifier.fillMaxWidth()) {
         val sliderFraction = when {
@@ -378,6 +430,7 @@ internal fun PlayerControlsAndActionsSection(
         }
 
         // Sleep timer and share actions are available from the player options menu.
+    }
     }
 }
 

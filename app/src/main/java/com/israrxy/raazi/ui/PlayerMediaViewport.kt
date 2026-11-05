@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -444,17 +445,14 @@ internal fun PlayerArtworkOrVideoSection(
                 }
             }
         } else {
-            var restX by remember { mutableFloatStateOf(Float.NaN) }
-            var restY by remember { mutableFloatStateOf(Float.NaN) }
-            var artCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-            fun updateRest(art: LayoutCoordinates? = artCoords) {
+            val coverRest = remember { floatArrayOf(Float.NaN, Float.NaN) }
+            fun updateRest(coords: LayoutCoordinates) {
                 val card = transition?.cardCoordinates
-                if (card != null && card.isAttached && art != null && art.isAttached) {
-                    val local = card.localPositionOf(art, Offset.Zero)
-                    restX = local.x; restY = local.y
+                if (card != null && card.isAttached && coords.isAttached) {
+                    val local = card.localPositionOf(coords, Offset.Zero)
+                    coverRest[0] = local.x; coverRest[1] = local.y
                 }
             }
-            LaunchedEffect(transition?.cardCoordinates) { updateRest() }
             AnimatedContent(
                 targetState = track,
                 transitionSpec = {
@@ -462,12 +460,10 @@ internal fun PlayerArtworkOrVideoSection(
                 },
                 label = "AlbumArtTransition",
                 modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        artCoords = coordinates
-                        updateRest(coordinates)
-                    }
+                    .onPlaced { if (it.isAttached) updateRest(it) }
+                    .onGloballyPositioned { updateRest(it) }
                     .graphicsLayer {
-                        flyArtwork(transition?.origin?.artwork, transition?.origin?.player, restX, restY, transition?.expansion?.value ?: 1f, cardTop())
+                        flyArtwork(transition?.origin?.artwork, transition?.origin?.player, coverRest[0], coverRest[1], transition?.expansion?.value ?: 1f, cardTop())
                     }
             ) { targetTrack ->
                 if (targetTrack != null) {
