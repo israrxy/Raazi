@@ -4,9 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.israrxy.raazi.data.db.AppDatabase
-import com.israrxy.raazi.data.db.PlaylistEntity
-import com.israrxy.raazi.data.db.PlaylistTrackCrossRef
-import com.israrxy.raazi.data.db.TrackEntity
 import com.israrxy.raazi.data.local.SettingsDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -100,64 +97,31 @@ object GoogleDriveSyncManager {
             } else null
 
             // 2. Restore remote data into local Room if available
-            val lastFmKey = settingsDataStore.lastfmSessionKey.first()
-            val lastFmUser = settingsDataStore.lastfmUsername.first()
-
+            var restoreSummary: GoogleDriveSyncPayload.RestoreSummary? = null
             if (remoteJson != null) {
-                restoreRemoteState(remoteJson, database, settingsDataStore, lastFmKey)
+                val lastFmKey = settingsDataStore.lastfmSessionKey.first()
+                restoreSummary = GoogleDriveSyncPayload.restoreUnifiedState(
+                    remoteJson = remoteJson,
+                    database = database,
+                    settingsDataStore = settingsDataStore,
+                    currentLastFmKey = lastFmKey
+                )
             }
 
-            // 3. Serialize unified local state to compressed GZIP
-            val localFavorites = database.musicDao().getAllTracks().first()
-            val favoritesJson = JSONArray()
-            for (f in localFavorites) {
-                favoritesJson.put(JSONObject().apply {
-                    put("id", f.id)
-                    put("title", f.title)
-                    put("artist", f.artist)
-                    put("duration", f.duration)
-                    put("thumbnailUrl", f.thumbnailUrl)
-                    put("audioUrl", f.audioUrl)
-                    put("videoUrl", f.videoUrl)
-                    put("isLive", f.isLive)
-                })
-            }
-
+            // 3. Serialize unified local state to compressed GZIP (Version 2)
+            val localFavorites = database.musicDao().getAllTracks().first().filter { it.isFavorite }
             val localPlaylistsWithTracks = database.musicDao().getAllPlaylistsWithTracks().first()
-            val playlistsJson = JSONArray()
-            for (p in localPlaylistsWithTracks) {
-                val pObj = JSONObject().apply {
-                    put("id", p.playlist.id)
-                    put("title", p.playlist.title)
-                    put("description", p.playlist.description)
-                    put("thumbnailUrl", p.playlist.thumbnailUrl)
-                    put("customTitle", p.playlist.customTitle ?: "")
-                    val tracksJson = JSONArray()
-                    for (t in p.tracks) {
-                        tracksJson.put(JSONObject().apply {
-                            put("id", t.id)
-                            put("title", t.title)
-                            put("artist", t.artist)
-                            put("duration", t.duration)
-                            put("thumbnailUrl", t.thumbnailUrl)
-                            put("audioUrl", t.audioUrl)
-                            put("videoUrl", t.videoUrl)
-                            put("isLive", t.isLive)
-                        })
-                    }
-                    put("tracks", tracksJson)
-                }
-                playlistsJson.put(pObj)
-            }
+            val localHistory = database.musicDao().getAllPlaybackHistoryDirect()
+            val localCollections = database.musicDao().getAllSavedCollectionsDirect()
 
-            val unifiedState = JSONObject().apply {
-                put("version", 1)
-                put("updatedAt", System.currentTimeMillis())
-                put("lastfmSessionKey", settingsDataStore.lastfmSessionKey.first() ?: "")
-                put("lastfmUsername", settingsDataStore.lastfmUsername.first() ?: "")
-                put("favorites", favoritesJson)
-                put("playlists", playlistsJson)
-            }
+            val unifiedState = GoogleDriveSyncPayload.buildUnifiedStateJson(
+                favorites = localFavorites,
+                playlistsWithTracks = localPlaylistsWithTracks,
+                history = localHistory,
+                savedCollections = localCollections,
+                lastfmSessionKey = settingsDataStore.lastfmSessionKey.first(),
+                lastfmUsername = settingsDataStore.lastfmUsername.first()
+            )
 
             val rawBytes = unifiedState.toString().toByteArray(Charsets.UTF_8)
             val gzippedBytes = compressGzip(rawBytes)
@@ -170,7 +134,12 @@ object GoogleDriveSyncManager {
             }
 
             settingsDataStore.setRaaziLastSync(System.currentTimeMillis())
-            Result.success("Sync completed successfully via Google Drive")
+            val msg = if (restoreSummary != null && (restoreSummary.historyRestored > 0 || restoreSummary.favoritesRestored > 0)) {
+                "Restored ${restoreSummary.favoritesRestored} favorites, ${restoreSummary.playlistsRestored} playlists, and ${restoreSummary.historyRestored} history items!"
+            } else {
+                "Library & history synced with Google Drive"
+            }
+            Result.success(msg)
         } catch (e: Exception) {
             Log.e(TAG, "Google Drive sync error", e)
             Result.failure(e)
@@ -254,101 +223,6 @@ object GoogleDriveSyncManager {
         if (!response.isSuccessful) {
             val err = response.body?.string().orEmpty()
             throw Exception("Failed to update file in appDataFolder: HTTP ${response.code} $err")
-        }
-    }
-
-    private suspend fun restoreRemoteState(
-        remoteJson: JSONObject,
-        database: AppDatabase,
-        settingsDataStore: SettingsDataStore,
-        currentLastFmKey: String?
-    ) {
-        // 1. Last.fm restore
-        val remoteLastFmKey = remoteJson.optString("lastfmSessionKey")
-        val remoteLastFmUser = remoteJson.optString("lastfmUsername")
-        if (remoteLastFmKey.isNotBlank() && currentLastFmKey.isNullOrBlank()) {
-            settingsDataStore.setLastfmSession(remoteLastFmKey, remoteLastFmUser.ifBlank { null })
-            settingsDataStore.setLastfmScrobbleEnabled(true)
-        }
-
-        // 2. Favorites restore
-        val remoteFavorites = remoteJson.optJSONArray("favorites")
-        if (remoteFavorites != null) {
-            for (i in 0 until remoteFavorites.length()) {
-                val fObj = remoteFavorites.optJSONObject(i) ?: continue
-                val fId = fObj.optString("id")
-                if (fId.isBlank()) continue
-
-                val existing = database.musicDao().getTrack(fId)
-                val entity = TrackEntity(
-                    id = fId,
-                    title = fObj.optString("title").ifBlank { existing?.title ?: "Track" },
-                    artist = fObj.optString("artist").ifBlank { existing?.artist ?: "Unknown Artist" },
-                    duration = fObj.optLong("duration", 0L).takeIf { it > 0 } ?: existing?.duration ?: 0L,
-                    thumbnailUrl = fObj.optString("thumbnailUrl").ifBlank { existing?.thumbnailUrl ?: "" },
-                    audioUrl = fObj.optString("audioUrl").ifBlank { existing?.audioUrl ?: "" },
-                    videoUrl = fObj.optString("videoUrl").ifBlank { existing?.videoUrl ?: "" },
-                    isLive = fObj.optBoolean("isLive", false),
-                    localPath = existing?.localPath,
-                    isFavorite = true,
-                    favoriteSyncState = TrackEntity.FAVORITE_SYNCED
-                )
-                database.musicDao().insertTrack(entity)
-            }
-        }
-
-        // 3. Playlists restore
-        val remotePlaylists = remoteJson.optJSONArray("playlists")
-        if (remotePlaylists != null) {
-            val existingIds = database.musicDao().getAllPlaylists().first().map { it.id }.toSet()
-            for (i in 0 until remotePlaylists.length()) {
-                val pObj = remotePlaylists.optJSONObject(i) ?: continue
-                val pId = pObj.optString("id")
-                val pTitle = pObj.optString("title")
-                val pDesc = pObj.optString("description")
-                val pThumb = pObj.optString("thumbnailUrl")
-                val pCustom = pObj.optString("customTitle")
-
-                if (pId.isNotBlank() && pTitle.isNotBlank() && pId !in existingIds) {
-                    database.musicDao().insertPlaylist(
-                        PlaylistEntity(
-                            id = pId,
-                            title = pTitle,
-                            description = pDesc.ifBlank { "Cloud playlist" },
-                            thumbnailUrl = pThumb,
-                            customTitle = pCustom.ifBlank { null }
-                        )
-                    )
-
-                    val tracksArray = pObj.optJSONArray("tracks")
-                    if (tracksArray != null) {
-                        for (j in 0 until tracksArray.length()) {
-                            val tObj = tracksArray.optJSONObject(j) ?: continue
-                            val tId = tObj.optString("id")
-                            if (tId.isNotBlank()) {
-                                val existing = database.musicDao().getTrack(tId)
-                                val entity = TrackEntity(
-                                    id = tId,
-                                    title = tObj.optString("title").ifBlank { existing?.title ?: "Track" },
-                                    artist = tObj.optString("artist").ifBlank { existing?.artist ?: "Unknown Artist" },
-                                    duration = tObj.optLong("duration", 0L),
-                                    thumbnailUrl = tObj.optString("thumbnailUrl").ifBlank { existing?.thumbnailUrl ?: "" },
-                                    audioUrl = tObj.optString("audioUrl").ifBlank { existing?.audioUrl ?: "" },
-                                    videoUrl = tObj.optString("videoUrl").ifBlank { existing?.videoUrl ?: "" },
-                                    isLive = tObj.optBoolean("isLive", false),
-                                    localPath = existing?.localPath,
-                                    isFavorite = existing?.isFavorite ?: false,
-                                    favoriteSyncState = existing?.favoriteSyncState ?: TrackEntity.FAVORITE_SYNCED
-                                )
-                                database.musicDao().insertTrack(entity)
-                                database.musicDao().insertPlaylistTrackCrossRef(
-                                    PlaylistTrackCrossRef(playlistId = pId, trackId = tId, position = j)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 

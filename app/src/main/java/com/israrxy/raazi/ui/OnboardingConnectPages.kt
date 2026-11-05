@@ -32,6 +32,7 @@ import com.israrxy.raazi.data.account.RaaziAccountManager
 import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.theme.Emerald500
+import com.israrxy.raazi.viewmodel.FeedRecoveryEngine
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.launch
@@ -72,6 +73,9 @@ internal fun OnboardingAccountPage(
             res.fold(
                 onSuccess = { name ->
                     Toast.makeText(context, "Welcome, $name! Google Drive connected.", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                    }
                 },
                 onFailure = {
                     if (it.message != "Sign-in cancelled") {

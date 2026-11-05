@@ -24,6 +24,7 @@ import com.israrxy.raazi.data.account.RaaziAccountManager
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.service.LastFmScrobbler
 import com.israrxy.raazi.ui.*
+import com.israrxy.raazi.viewmodel.FeedRecoveryEngine
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.launch
 
@@ -55,6 +56,9 @@ fun SettingsDualLoginSection(
             res.fold(
                 onSuccess = { name ->
                     Toast.makeText(context, "Welcome to Raazi, $name! Google Drive connected.", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                    }
                 },
                 onFailure = {
                     if (it.message != "Sign-in cancelled") {
@@ -165,7 +169,12 @@ fun SettingsDualLoginSection(
                                 )
                                 isRaaziSyncing = false
                                 result.fold(
-                                    onSuccess = { Toast.makeText(context, "Google Drive sync complete!", Toast.LENGTH_SHORT).show() },
+                                    onSuccess = { msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                                        }
+                                    },
                                     onFailure = { Toast.makeText(context, "Sync failed: ${it.message}", Toast.LENGTH_SHORT).show() }
                                 )
                             }

@@ -43,6 +43,7 @@ import com.israrxy.raazi.data.db.PlaylistEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.downloads.toMusicItem
+import com.israrxy.raazi.viewmodel.FeedRecoveryEngine
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.launch
 
@@ -170,7 +171,12 @@ fun LibraryScreen(
                             )
                             isRaaziSyncing = false
                             res.fold(
-                                onSuccess = { Toast.makeText(context, "Google Drive & YouTube synced!", Toast.LENGTH_SHORT).show() },
+                                onSuccess = { msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                                    }
+                                },
                                 onFailure = { Toast.makeText(context, "Drive sync: ${it.message}", Toast.LENGTH_SHORT).show() }
                             )
                         }
@@ -187,7 +193,12 @@ fun LibraryScreen(
                             )
                             isRaaziSyncing = false
                             res.fold(
-                                onSuccess = { Toast.makeText(context, "Google Drive sync complete!", Toast.LENGTH_SHORT).show() },
+                                onSuccess = { msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                                    }
+                                },
                                 onFailure = { Toast.makeText(context, "Drive sync: ${it.message}", Toast.LENGTH_SHORT).show() }
                             )
                         }
@@ -316,11 +327,14 @@ fun LibraryScreen(
             }
             if (isRaaziLoggedIn) {
                 scope.launch {
-                    RaaziAccountManager.syncWithDrive(
+                    val res = RaaziAccountManager.syncWithDrive(
                         context = context,
                         settingsDataStore = viewModel.settingsDataStore,
                         database = RaaziApplication.instance.database
                     )
+                    if (res.isSuccess) {
+                        FeedRecoveryEngine.recoverPersonalizedFeed(viewModel, context, showFeedback = false)
+                    }
                 }
             }
         }

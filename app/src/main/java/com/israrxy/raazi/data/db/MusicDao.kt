@@ -46,6 +46,9 @@ interface MusicDao {
     @Query("SELECT * FROM saved_collections ORDER BY timestamp DESC")
     fun getSavedCollections(): Flow<List<SavedCollectionEntity>>
 
+    @Query("SELECT * FROM saved_collections ORDER BY timestamp DESC")
+    fun getAllSavedCollectionsDirect(): List<SavedCollectionEntity>
+
     @Query("SELECT * FROM saved_collections WHERE id = :savedCollectionId LIMIT 1")
     fun getSavedCollectionById(savedCollectionId: String): SavedCollectionEntity?
 
@@ -54,6 +57,9 @@ interface MusicDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertSavedCollection(savedCollection: SavedCollectionEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertSavedCollections(savedCollections: List<SavedCollectionEntity>): List<Long>
 
     @Query("SELECT * FROM playlists WHERE id = :playlistId LIMIT 1")
     fun getPlaylistById(playlistId: String): PlaylistEntity?
@@ -100,6 +106,15 @@ interface MusicDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaybackHistory(history: PlaybackHistoryEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertPlaybackHistories(histories: List<PlaybackHistoryEntity>): List<Long>
+
+    @Query("SELECT * FROM playback_history WHERE id = :id LIMIT 1")
+    fun getPlaybackHistoryItem(id: String): PlaybackHistoryEntity?
+
+    @Query("SELECT * FROM playback_history ORDER BY timestamp DESC")
+    fun getAllPlaybackHistoryDirect(): List<PlaybackHistoryEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertRelatedSongs(relatedSongs: List<RelatedSongEntity>): List<Long>
