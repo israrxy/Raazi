@@ -331,6 +331,15 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             }
         }
 
+        // Overlay & MiniPlayer dimensions
+        val density = LocalDensity.current
+        val miniHeightPx = with(density) { 68.dp.toPx() }
+        val miniSidePx = with(density) { if (showBottomBar) 0f else 12.dp.toPx() }
+        val miniCornerPx = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
+        val cornerTarget = with(density) { 24.dp.toPx() }
+        val cardShadowPx = with(density) { 18.dp.toPx() }
+        val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - miniHeightPx
+
         // MiniPlayer (with interactive Drag-Up gesture)
         if (showMiniPlayerBar && playerExpansion.value < 0.99f) {
             Box(
@@ -396,14 +405,6 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         }
 
         // Full-Screen Player Screen Overlay (with interactive morph and flight)
-        val density = LocalDensity.current
-        val miniHeightPx = with(density) { 68.dp.toPx() }
-        val miniSidePx = with(density) { if (showBottomBar) 0f else 12.dp.toPx() }
-        val miniCornerPx = with(density) { if (showBottomBar) 0f else 16.dp.toPx() }
-        val cornerTarget = with(density) { 24.dp.toPx() }
-        val cardShadowPx = with(density) { 18.dp.toPx() }
-        val defaultCardTop = parentHeightPx - with(density) { collapsedMiniPlayerBottomPadding.toPx() } - miniHeightPx
-
         val cardTop: () -> Float = {
             lerpFloat(
                 playerTransition.origin?.player?.top ?: playerTransition.dockPlayer?.top ?: defaultCardTop,
