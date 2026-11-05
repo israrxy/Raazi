@@ -57,7 +57,7 @@ import com.israrxy.raazi.ui.player.PlayerTransition
 import com.israrxy.raazi.ui.player.RevealCardShape
 import com.israrxy.raazi.ui.player.lerpFloat
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -226,45 +226,44 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         val parentHeightPx = constraints.maxHeight.toFloat()
         val effectiveHeight = parentHeightPx.coerceAtLeast(1f)
         var miniPlayerDownwardDelta by remember { mutableFloatStateOf(0f) }
-        val dragChannel = remember { Channel<Float>(Channel.CONFLATED) }
         var isDraggingPlayer by remember { mutableStateOf(false) }
         var dragProgress by remember { mutableFloatStateOf(0f) }
-
-        LaunchedEffect(effectiveHeight) {
-            for (target in dragChannel) {
-                playerExpansion.snapTo(target)
-            }
-        }
+        var dragJob by remember { mutableStateOf<Job?>(null) }
 
         val dismissModifier = Modifier.pointerInput(parentHeightPx) {
             var gestureStartMs = 0L
             var totalDragPx = 0f
+            var dismissDragJob: Job? = null
             detectVerticalDragGestures(
                 onDragStart = {
                     gestureStartMs = SystemClock.uptimeMillis()
                     totalDragPx = 0f
-                    isDraggingPlayer = true
                     dragProgress = playerExpansion.value
                 },
                 onDragEnd = {
-                    isDraggingPlayer = false
+                    dismissDragJob?.cancel()
+                    dismissDragJob = null
                     val elapsedMs = (SystemClock.uptimeMillis() - gestureStartMs).coerceAtLeast(1L)
                     val velocity = totalDragPx / (elapsedMs / 1000f)
-                    if (playerExpansion.value < 0.65f || velocity > 500f) {
+                    if (dragProgress < 0.70f || velocity > 500f) {
                         collapsePlayer()
                     } else {
                         expandPlayer()
                     }
                 },
                 onDragCancel = {
-                    isDraggingPlayer = false
+                    dismissDragJob?.cancel()
+                    dismissDragJob = null
                     expandPlayer()
                 },
                 onVerticalDrag = { change, dragAmount ->
                     change.consume()
                     totalDragPx += dragAmount
                     dragProgress = (dragProgress - dragAmount / effectiveHeight).coerceIn(0f, 1f)
-                    dragChannel.trySend(dragProgress)
+                    dismissDragJob?.cancel()
+                    dismissDragJob = scope.launch {
+                        playerExpansion.snapTo(dragProgress)
+                    }
                 }
             )
         }
@@ -342,10 +341,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                     .padding(bottom = collapsedMiniPlayerBottomPadding)
                     .graphicsLayer {
                         val progress = playerExpansion.value
-                        translationY = -progress * 24.dp.toPx()
-                        alpha = (1f - progress * 2.2f).coerceIn(0f, 1f)
-                        scaleX = 1f - (0.03f * progress)
-                        scaleY = 1f - (0.03f * progress)
+                        val originTop = playerTransition.origin?.player?.top ?: defaultCardTop
+                        translationY = -originTop * progress
+                        alpha = (1f - playerTransition.stage(0.01f, 0.08f)).coerceIn(0f, 1f)
                     }
                     .draggable(
                         state = rememberDraggableState { delta ->
@@ -358,7 +356,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                             }
                             miniPlayerDownwardDelta += delta
                             dragProgress = (dragProgress - delta / effectiveHeight).coerceIn(0f, 1f)
-                            dragChannel.trySend(dragProgress)
+                            dragJob?.cancel()
+                            dragJob = scope.launch {
+                                playerExpansion.snapTo(dragProgress)
+                            }
                         },
                         orientation = Orientation.Vertical,
                         onDragStarted = {
@@ -370,9 +371,11 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         },
                         onDragStopped = { velocity ->
                             isDraggingPlayer = false
+                            dragJob?.cancel()
+                            dragJob = null
                             if (miniPlayerDownwardDelta > 36f && microPlayerEnabled && playerExpansion.value < 0.05f) {
                                 isFloatingCollapsed = true
-                            } else if (velocity < -500f || playerExpansion.value > 0.25f) {
+                            } else if (velocity < -500f || dragProgress > 0.25f) {
                                 expandPlayer()
                             } else {
                                 collapsePlayer()

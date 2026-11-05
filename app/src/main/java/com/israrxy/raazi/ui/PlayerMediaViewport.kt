@@ -468,7 +468,7 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                         updateRest(coordinates)
                     }
                     .graphicsLayer {
-                        flyArtwork(transition?.origin?.artwork, restX, restY, transition?.expansion?.value ?: 1f, cardTop())
+                        flyArtwork(transition?.origin?.artwork, transition?.origin?.player, restX, restY, transition?.expansion?.value ?: 1f, cardTop())
                     }
             ) { targetTrack ->
                 if (targetTrack != null) {

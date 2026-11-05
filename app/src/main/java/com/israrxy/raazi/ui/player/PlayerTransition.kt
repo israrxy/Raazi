@@ -99,6 +99,7 @@ class RevealCardShape(
  */
 fun GraphicsLayerScope.flyArtwork(
     from: Rect?,
+    playerOrigin: Rect?,
     restX: Float,
     restY: Float,
     progress: Float,
@@ -113,7 +114,7 @@ fun GraphicsLayerScope.flyArtwork(
         translationY = 0f
         return false
     }
-    val flight = ((progress - 0.01f) / 0.99f).coerceIn(0f, 1f)
+    val flight = ((progress - 0.02f) / 0.98f).coerceIn(0f, 1f)
     val startScaleX = (from.width / size.width).coerceIn(0.01f, 1f)
     val startScaleY = (from.height / size.height).coerceIn(0.01f, 1f)
     val scaleXVal = lerpFloat(startScaleX, 1f, flight)
@@ -121,8 +122,9 @@ fun GraphicsLayerScope.flyArtwork(
     transformOrigin = TransformOrigin(0f, 0f)
     scaleX = scaleXVal
     scaleY = scaleYVal
+    val originPlayerTop = playerOrigin?.top ?: (from.top - 10f)
     val startX = from.left
-    val startY = from.top - cardTop
+    val startY = from.top - originPlayerTop
     translationX = lerpFloat(startX, restX, flight) - restX
     translationY = lerpFloat(startY, restY, flight) - restY
     val cornerProgress = lerpFloat(startCornerDp.toPx(), endCornerDp.toPx(), flight)

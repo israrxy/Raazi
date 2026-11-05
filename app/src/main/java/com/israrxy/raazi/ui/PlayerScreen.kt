@@ -199,7 +199,7 @@ fun PlayerScreen(
                         PlayerArtworkOrVideoSection(
                             viewModel = viewModel,
                             playbackState = playbackState,
-                            modifier = if (!isLyricsVisible) dismissModifier else Modifier,
+                            modifier = Modifier,
                             transition = transition,
                             cardTop = cardTop
                         )
