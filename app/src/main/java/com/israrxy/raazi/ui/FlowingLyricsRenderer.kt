@@ -95,7 +95,7 @@ internal fun FlowingLyricWord(
 
             Text(
                 text = transformed,
-                style = textStyle.copy(brush = flowingBrush, color = Color.Unspecified),
+                style = textStyle.copy(brush = flowingBrush),
                 modifier = Modifier.graphicsLayer {
                     val scale = 1f + 0.035f * (1f - kotlin.math.abs(progress - 0.5f) * 2f)
                     scaleX = scale
