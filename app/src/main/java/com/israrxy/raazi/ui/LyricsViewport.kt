@@ -51,7 +51,7 @@ internal fun LyricsMainViewportContent(
     isSynced: Boolean,
     syncedLines: List<LyricLine>,
     activeLineIndex: Int,
-    currentPosition: Long = 0L,
+    currentPosition: Long,
     duration: Long,
     listState: LazyListState,
     isUserScrolling: Boolean,
@@ -88,8 +88,8 @@ internal fun LyricsMainViewportContent(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = 16.dp,
-                        bottom = 120.dp,
+                        top = 56.dp,
+                        bottom = 160.dp,
                         start = 20.dp,
                         end = 20.dp
                     ),
@@ -126,12 +126,18 @@ internal fun LyricsMainViewportContent(
                             (currentPosition - line.timestamp) > 3500L &&
                             currentPosition < nextTimestamp - 500L
 
+                        val displayLineText = remember(line.text, selectedVariant) {
+                            LyricsTextVariants.transform(line.text, selectedVariant)
+                        }
+
                         SpotifyYoutubeLyricItem(
-                            text = line.displayText,
+                            text = displayLineText,
                             translation = line.translation,
                             timestampMs = line.timestamp,
+                            lineEndTimestampMs = line.endTimestamp,
                             words = line.words,
-                            currentPositionMs = if (isCurrent) currentPosition else 0L,
+                            currentPositionMs = currentPosition,
+                            selectedVariant = selectedVariant,
                             isCurrent = isCurrent,
                             isPassed = isPassed,
                             distance = distance,
@@ -144,7 +150,7 @@ internal fun LyricsMainViewportContent(
                             onShareLine = {
                                 shareOrCopyLyricLine(
                                     context = context,
-                                    lyricText = line.displayText,
+                                    lyricText = displayLineText,
                                     trackTitle = currentTrack?.title,
                                     artistName = currentTrack?.artist
                                 )
@@ -181,22 +187,6 @@ internal fun LyricsMainViewportContent(
                         }
                     }
                 }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.62f),
-                                    Color.Black.copy(alpha = 0.20f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
 
                 Box(
                     modifier = Modifier

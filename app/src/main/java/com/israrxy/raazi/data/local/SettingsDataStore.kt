@@ -51,7 +51,6 @@ class SettingsDataStore(private val context: Context) {
         val LYRICS_TRANSLATE_ENABLED_KEY = booleanPreferencesKey("lyrics_translate_enabled")
         val LYRICS_TRANSLATE_LANG_KEY = stringPreferencesKey("lyrics_translate_lang")
         val LYRICS_HIDE_BRACKETS_KEY = booleanPreferencesKey("lyrics_hide_brackets")
-        val LYRICS_SYNC_PRIORITY_KEY = stringPreferencesKey("lyrics_sync_priority")
         val LASTFM_SCROBBLE_ENABLED_KEY = booleanPreferencesKey("lastfm_scrobble_enabled")
         val LASTFM_SESSION_KEY = stringPreferencesKey("lastfm_session_key")
         val LASTFM_USERNAME_KEY = stringPreferencesKey("lastfm_username")
@@ -135,9 +134,6 @@ class SettingsDataStore(private val context: Context) {
 
     val defaultLyricsView: Flow<String> = prefFlow(DEFAULT_LYRICS_VIEW_KEY, "KARAOKE")
     suspend fun setDefaultLyricsView(view: String) = setPref(DEFAULT_LYRICS_VIEW_KEY, view)
-
-    val lyricsSyncPriority: Flow<String> = prefFlow(LYRICS_SYNC_PRIORITY_KEY, "WORD_SYNC_FIRST")
-    suspend fun setLyricsSyncPriority(priority: String) = setPref(LYRICS_SYNC_PRIORITY_KEY, priority)
 
     val doubleTapSeekDuration: Flow<String> = prefFlow(DOUBLE_TAP_SEEK_DURATION_KEY, "10")
     suspend fun setDoubleTapSeekDuration(duration: String) = setPref(DOUBLE_TAP_SEEK_DURATION_KEY, duration)
