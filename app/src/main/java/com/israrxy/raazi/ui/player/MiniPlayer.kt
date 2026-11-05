@@ -193,11 +193,11 @@ fun MiniPlayer(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        AsyncImage(
-                            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
+                        PlayerArtworkImage(
+                            thumbnailUrl = track.thumbnailUrl,
                             contentDescription = track.title,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
 

@@ -28,7 +28,7 @@ object ThumbnailUtils {
             val videoId = url.substringAfter("ytimg.com/vi/").substringBefore("/")
             if (videoId.isNotBlank() && videoId != url) {
                 return if (width >= 400) {
-                    "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg"
                 } else {
                     "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
                 }
@@ -36,6 +36,25 @@ object ThumbnailUtils {
         }
         
         return url
+    }
+    
+    /**
+     * Get candidate fallback URLs for video thumbnails in priority order:
+     * maxresdefault.jpg -> hq720.jpg -> mqdefault.jpg
+     */
+    fun getVideoThumbnailCandidates(url: String?): List<String> {
+        if (url.isNullOrEmpty()) return emptyList()
+        if (url.contains("ytimg.com/vi/")) {
+            val videoId = url.substringAfter("ytimg.com/vi/").substringBefore("/")
+            if (videoId.isNotBlank() && videoId != url) {
+                return listOf(
+                    "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg",
+                    "https://i.ytimg.com/vi/$videoId/hq720.jpg",
+                    "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
+                )
+            }
+        }
+        return listOf(getHighQualityThumbnail(url))
     }
     
     /**

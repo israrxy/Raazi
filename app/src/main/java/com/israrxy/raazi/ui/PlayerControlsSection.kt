@@ -1,8 +1,11 @@
 package com.israrxy.raazi.ui
 
-import android.content.Intent
-import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,7 +13,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -35,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.israrxy.raazi.data.db.DownloadEntity
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackMediaMode
 import com.israrxy.raazi.model.PlaybackState
@@ -47,6 +53,16 @@ import com.israrxy.raazi.ui.playlist.rememberPlaylistDominantColor
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.ui.theme.Zinc500
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+
+@Composable
+private fun rememberPressScale(interactionSource: MutableInteractionSource): State<Float> {
+    val isPressed by interactionSource.collectIsPressedAsState()
+    return animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "pressScale"
+    )
+}
 
 @Composable
 internal fun PlayerControlsAndActionsSection(
@@ -62,6 +78,7 @@ internal fun PlayerControlsAndActionsSection(
     hasQueueOrRelated: Boolean,
     onShowQueueSheet: () -> Unit,
     onShowSleepTimer: () -> Unit = {},
+    sleepTimerActive: Boolean = false,
     transition: PlayerTransition? = null,
     cardTop: () -> Float = { 0f }
 ) {
@@ -121,7 +138,7 @@ internal fun PlayerControlsAndActionsSection(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -165,7 +182,7 @@ internal fun PlayerControlsAndActionsSection(
                 }
             }
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
     Column(modifier = Modifier.fillMaxWidth()) {
         val sliderFraction = when {
@@ -173,15 +190,31 @@ internal fun PlayerControlsAndActionsSection(
             duration > 0L -> (progress.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
             else -> 0f
         }
+        val sliderInteractionSource = remember { MutableInteractionSource() }
         Slider(
             value = sliderFraction,
             onValueChange = onSliderChange,
             onValueChangeFinished = onSliderFinished,
+            interactionSource = sliderInteractionSource,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
-                activeTrackColor = Color.White,
+                activeTrackColor = songAccentColor,
                 inactiveTrackColor = Color.White.copy(alpha = 0.2f)
             ),
+            thumb = {
+                val thumbSize by animateDpAsState(
+                    targetValue = if (isDraggingSlider) 16.dp else 10.dp,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "thumbSize"
+                )
+                Box(
+                    modifier = Modifier
+                        .size(thumbSize)
+                        .shadow(4.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(20.dp)
@@ -193,12 +226,18 @@ internal fun PlayerControlsAndActionsSection(
         ) {
             Text(
                 text = formatPlayerTime(progress),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontFeatureSettings = "tnum"
+                ),
                 color = Zinc500
             )
             Text(
                 text = formatPlayerTime(duration),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontFeatureSettings = "tnum"
+                ),
                 color = Zinc500
             )
         }
@@ -239,12 +278,12 @@ internal fun PlayerControlsAndActionsSection(
     Spacer(modifier = Modifier.height(24.dp))
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val shuffleEnabled = playbackState.isShuffleEnabled
+        val shuffleInteraction = remember { MutableInteractionSource() }
+        val shuffleScale by rememberPressScale(shuffleInteraction)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -253,16 +292,39 @@ internal fun PlayerControlsAndActionsSection(
         ) {
             IconButton(
                 onClick = { viewModel.toggleShuffle() },
-                modifier = Modifier.size(44.dp)
+                interactionSource = shuffleInteraction,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer {
+                        scaleX = shuffleScale
+                        scaleY = shuffleScale
+                    }
             ) {
-                Icon(
-                    imageVector = Icons.Default.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (shuffleEnabled) songAccentColor else Color.White.copy(alpha = 0.78f),
-                    modifier = Modifier.size(24.dp)
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (shuffleEnabled) songAccentColor else Color.White.copy(alpha = 0.78f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    if (shuffleEnabled) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(songAccentColor)
+                        )
+                    }
+                }
             }
         }
+
+        val prevInteraction = remember { MutableInteractionSource() }
+        val prevScale by rememberPressScale(prevInteraction)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -271,15 +333,28 @@ internal fun PlayerControlsAndActionsSection(
         ) {
             IconButton(
                 onClick = { viewModel.previous() },
-                modifier = Modifier.size(44.dp)
+                interactionSource = prevInteraction,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer {
+                        scaleX = prevScale
+                        scaleY = prevScale
+                    }
             ) {
-                Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(34.dp))
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(34.dp))
             }
         }
 
         val isTrackBusy = (playbackState.isLoading || playbackState.isBuffering) && !isPlaying
+        val playInteraction = remember { MutableInteractionSource() }
+        val playScale by rememberPressScale(playInteraction)
         Box(
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier
+                .size(72.dp)
+                .graphicsLayer {
+                    scaleX = playScale
+                    scaleY = playScale
+                },
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -288,7 +363,11 @@ internal fun PlayerControlsAndActionsSection(
                     .shadow(16.dp, CircleShape)
                     .clip(CircleShape)
                     .background(Color.White)
-                    .clickable {
+                    .border(1.5.dp, songAccentColor.copy(alpha = 0.5f), CircleShape)
+                    .clickable(
+                        interactionSource = playInteraction,
+                        indication = null
+                    ) {
                         if (isPlaying) viewModel.pause() else viewModel.resume()
                     },
                 contentAlignment = Alignment.Center
@@ -300,16 +379,24 @@ internal fun PlayerControlsAndActionsSection(
                         strokeWidth = 2.5.dp
                     )
                 } else {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.Black,
-                        modifier = Modifier.size(32.dp)
-                    )
+                    Crossfade(
+                        targetState = isPlaying,
+                        animationSpec = tween(200),
+                        label = "PlayPauseCrossfade"
+                    ) { playing ->
+                        Icon(
+                            imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (playing) "Pause" else "Play",
+                            tint = Color.Black,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
             }
         }
 
+        val nextInteraction = remember { MutableInteractionSource() }
+        val nextScale by rememberPressScale(nextInteraction)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -318,12 +405,22 @@ internal fun PlayerControlsAndActionsSection(
         ) {
             IconButton(
                 onClick = { viewModel.next() },
-                modifier = Modifier.size(44.dp)
+                interactionSource = nextInteraction,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer {
+                        scaleX = nextScale
+                        scaleY = nextScale
+                    }
             ) {
-                Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(34.dp))
+                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(34.dp))
             }
         }
 
+        val repeatInteraction = remember { MutableInteractionSource() }
+        val repeatScale by rememberPressScale(repeatInteraction)
+        val isRepeatActive = playbackState.repeatMode != RepeatMode.OFF
+        val isRepeatOne = playbackState.repeatMode == RepeatMode.ONE
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -332,105 +429,48 @@ internal fun PlayerControlsAndActionsSection(
         ) {
             IconButton(
                 onClick = { viewModel.toggleRepeat() },
-                modifier = Modifier.size(44.dp)
-            ) {
-                Icon(
-                    imageVector = when (playbackState.repeatMode) {
-                        RepeatMode.ONE -> Icons.Default.RepeatOne
-                        else -> Icons.Default.Repeat
-                    },
-                    contentDescription = "Repeat",
-                    tint = when (playbackState.repeatMode) {
-                        RepeatMode.OFF -> Color.White.copy(alpha = 0.78f)
-                        else -> songAccentColor
-                    },
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-    }
-
-    Spacer(modifier = Modifier.height(32.dp))
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 32.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val allDownloads by viewModel.dbAllDownloads.collectAsStateWithLifecycle()
-        val downloadState = currentTrack?.let { track ->
-            allDownloads.find { it.trackId == track.id }
-        }
-        val downloadIcon = when (downloadState?.status) {
-            DownloadEntity.STATUS_COMPLETED -> Icons.Default.CheckCircle
-            DownloadEntity.STATUS_DOWNLOADING,
-            DownloadEntity.STATUS_PENDING -> Icons.Default.Downloading
-            DownloadEntity.STATUS_FAILED -> Icons.Default.ErrorOutline
-            else -> Icons.Default.Download
-        }
-        val isDownloaded = downloadState?.status == DownloadEntity.STATUS_COMPLETED
-        val isFailed = downloadState?.status == DownloadEntity.STATUS_FAILED
-
-        val dlAccent = when {
-            isDownloaded -> Emerald500
-            isFailed -> Color(0xFFFF5252)
-            else -> Color.White.copy(alpha = 0.9f)
-        }
-
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .clickable {
-                    currentTrack?.let { track ->
-                        when (downloadState?.status) {
-                            DownloadEntity.STATUS_COMPLETED -> {
-                                Toast.makeText(context, "Already downloaded", Toast.LENGTH_SHORT).show()
-                            }
-                            DownloadEntity.STATUS_DOWNLOADING,
-                            DownloadEntity.STATUS_PENDING -> {
-                                Toast.makeText(context, "Download in progress", Toast.LENGTH_SHORT).show()
-                            }
-                            DownloadEntity.STATUS_FAILED -> {
-                                viewModel.retryDownload(track.id)
-                            }
-                            else -> {
-                                viewModel.downloadTrack(track)
-                            }
-                        }
+                interactionSource = repeatInteraction,
+                modifier = Modifier
+                    .size(48.dp)
+                    .graphicsLayer {
+                        scaleX = repeatScale
+                        scaleY = repeatScale
                     }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            if (downloadState?.status == DownloadEntity.STATUS_DOWNLOADING) {
-                CircularProgressIndicator(
-                    progress = downloadState.progress / 100f,
-                    modifier = Modifier.size(50.dp),
-                    color = Emerald500,
-                    strokeWidth = 2.dp,
-                    trackColor = Color.Transparent
-                )
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (isRepeatOne) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        contentDescription = "Repeat",
+                        tint = if (isRepeatActive) songAccentColor else Color.White.copy(alpha = 0.78f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    if (isRepeatActive) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(songAccentColor)
+                        )
+                    }
+                }
             }
-            Icon(downloadIcon, null, tint = dlAccent, modifier = Modifier.size(24.dp))
         }
-
-        Spacer(modifier = Modifier.width(24.dp))
-
-        val playNextAccent = if (hasQueueOrRelated) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.5f)
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onShowQueueSheet),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.QueueMusic, contentDescription = "Queue", tint = playNextAccent, modifier = Modifier.size(24.dp))
-        }
-
-        // Sleep timer and share actions are available from the player options menu.
     }
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    PlayerActionRow(
+        viewModel = viewModel,
+        currentTrack = currentTrack,
+        hasQueueOrRelated = hasQueueOrRelated,
+        sleepTimerActive = sleepTimerActive,
+        onShowQueueSheet = onShowQueueSheet,
+        onShowSleepTimer = onShowSleepTimer
+    )
     }
 }
 
