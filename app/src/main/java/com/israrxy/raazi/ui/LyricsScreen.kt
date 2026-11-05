@@ -3,7 +3,7 @@ package com.israrxy.raazi.ui
 import android.os.Build
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
