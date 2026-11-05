@@ -114,7 +114,7 @@ fun GraphicsLayerScope.flyArtwork(
         translationY = 0f
         return false
     }
-    val flight = ((progress - 0.02f) / 0.98f).coerceIn(0f, 1f)
+    val flight = ((progress - 0.04f) / 0.96f).coerceIn(0f, 1f)
     val startScaleX = (from.width / size.width).coerceIn(0.01f, 1f)
     val startScaleY = (from.height / size.height).coerceIn(0.01f, 1f)
     val scaleXVal = lerpFloat(startScaleX, 1f, flight)
@@ -122,11 +122,16 @@ fun GraphicsLayerScope.flyArtwork(
     transformOrigin = TransformOrigin(0f, 0f)
     scaleX = scaleXVal
     scaleY = scaleYVal
-    val originPlayerTop = playerOrigin?.top ?: (from.top - 10f)
+
+    val riseBy = playerOrigin?.top ?: (from.top - 10f)
     val startX = from.left
-    val startY = from.top - originPlayerTop
-    translationX = lerpFloat(startX, restX, flight) - restX
-    translationY = lerpFloat(startY, restY, flight) - restY
+    val currentX = lerpFloat(startX, restX, flight)
+    translationX = currentX - restX
+
+    val startY = from.top - riseBy * progress - cardTop
+    val currentY = lerpFloat(startY, restY, flight)
+    translationY = currentY - restY
+
     val cornerProgress = lerpFloat(startCornerDp.toPx(), endCornerDp.toPx(), flight)
     shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerProgress / scaleXVal)
     clip = true

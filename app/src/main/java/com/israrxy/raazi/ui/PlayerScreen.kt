@@ -145,79 +145,76 @@ fun PlayerScreen(
             enter = fadeIn(tween(300)),
             exit = fadeOut(tween(300))
         ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val screenHeight = maxHeight
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp)
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 0.dp, max = screenHeight)
-                            .statusBarsPadding()
-                            .padding(horizontal = 24.dp)
+                            .height(26.dp)
+                            .then(dismissModifier)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onCollapse
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(26.dp)
-                                .then(dismissModifier)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onCollapse
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp, 4.dp)
-                                    .background(Color.White.copy(alpha = 0.35f), CircleShape)
-                            )
-                        }
+                                .size(36.dp, 4.dp)
+                                .background(Color.White.copy(alpha = 0.35f), CircleShape)
+                        )
+                    }
 
-                        PlayerTopModeHeader(
-                            playbackState = playbackState,
-                            isLyricsVisible = isLyricsVisible,
-                            sleepTimerActive = sleepTimerActive,
-                            onCollapse = onCollapse,
-                            onLyricsVisibilityChange = onLyricsVisibilityChange,
-                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                            onShowOptionsSheet = { showOptionsSheet = true },
-                            modifier = dismissModifier.then(
+                    PlayerTopModeHeader(
+                        playbackState = playbackState,
+                        isLyricsVisible = isLyricsVisible,
+                        sleepTimerActive = sleepTimerActive,
+                        onCollapse = onCollapse,
+                        onLyricsVisibilityChange = onLyricsVisibilityChange,
+                        onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                        onShowOptionsSheet = { showOptionsSheet = true },
+                        modifier = dismissModifier.then(
+                            if (transition != null) {
+                                Modifier.graphicsLayer { alpha = easeOutCubic(transition.stage(0.18f, 1f)) }
+                            } else Modifier
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PlayerArtworkOrVideoSection(
+                        viewModel = viewModel,
+                        playbackState = playbackState,
+                        modifier = Modifier,
+                        transition = transition,
+                        cardTop = cardTop
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
                                 if (transition != null) {
-                                    Modifier.graphicsLayer { alpha = easeOutCubic(transition.stage(0.18f, 1f)) }
-                                } else Modifier
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        PlayerArtworkOrVideoSection(
-                            viewModel = viewModel,
-                            playbackState = playbackState,
-                            modifier = Modifier,
-                            transition = transition,
-                            cardTop = cardTop
-                        )
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    if (transition != null) {
-                                        val shown = easeOutCubic(transition.stage(0.28f, 1f))
-                                        alpha = shown
-                                        translationY = 16.dp.toPx() * (1f - shown)
-                                    }
+                                    val shown = easeOutCubic(transition.stage(0.28f, 1f))
+                                    alpha = shown
+                                    translationY = 16.dp.toPx() * (1f - shown)
                                 }
-                        ) {
-                            PlayerControlsAndActionsSection(
+                            }
+                    ) {
+                        PlayerControlsAndActionsSection(
                                 viewModel = viewModel,
                                 playbackState = playbackState,
                                 favoriteTracks = favoriteTracks,
@@ -287,7 +284,6 @@ fun PlayerScreen(
                         )
                     }
                 }
-            }
         }
 
         // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY

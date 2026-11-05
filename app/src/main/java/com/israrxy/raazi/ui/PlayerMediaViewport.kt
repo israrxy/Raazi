@@ -273,7 +273,7 @@ internal fun PlayerTopModeHeader(
 }
 
 @Composable
-internal fun ColumnScope.PlayerArtworkOrVideoSection(
+internal fun PlayerArtworkOrVideoSection(
     viewModel: MusicPlayerViewModel,
     playbackState: PlaybackState,
     modifier: Modifier = Modifier,
@@ -283,9 +283,8 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = Modifier
-            .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 10.dp)
             .then(modifier)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
@@ -475,12 +474,14 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                     AsyncImage(
                         model = ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl),
                         contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxWidth(0.88f).aspectRatio(1f).shadow(20.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(Zinc800),
+                        modifier = Modifier.sizeIn(maxWidth = 350.dp, maxHeight = 350.dp).fillMaxWidth(0.85f).aspectRatio(1f)
+                            .shadow(20.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(Zinc800),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxWidth(0.88f).aspectRatio(1f).clip(RoundedCornerShape(20.dp)).shimmerEffect()
+                        modifier = Modifier.sizeIn(maxWidth = 350.dp, maxHeight = 350.dp).fillMaxWidth(0.85f).aspectRatio(1f)
+                            .clip(RoundedCornerShape(20.dp)).shimmerEffect()
                     )
                 }
             }

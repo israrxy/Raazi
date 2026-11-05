@@ -184,7 +184,7 @@ fun MiniPlayer(
                             }
                             .graphicsLayer {
                                 alpha = if (transition?.origin?.artwork != null) {
-                                    1f - transition.stage(0.01f, 0.05f)
+                                    1f - transition.stage(0.01f, 0.04f)
                                 } else 1f
                             },
                         shape = RoundedCornerShape(10.dp),
