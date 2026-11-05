@@ -57,77 +57,6 @@ import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
 @Composable
-internal fun PlayerBlurredBackground(
-    currentTrack: MusicItem?,
-    isLoading: Boolean
-) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn(tween(500)),
-        exit = fadeOut(tween(250))
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AnimatedContent(
-                targetState = currentTrack,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(700)) togetherWith fadeOut(animationSpec = tween(700))
-                },
-                label = "BackgroundTransition"
-            ) { track ->
-                if (track != null) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        val isAndroid12 = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-
-                        AsyncImage(
-                            model = if (isAndroid12) {
-                                track.thumbnailUrl
-                            } else {
-                                coil.request.ImageRequest.Builder(LocalContext.current)
-                                    .data(track.thumbnailUrl)
-                                    .transformations(
-                                        com.israrxy.raazi.utils.BlurTransformation(LocalContext.current, radius = 25, sampling = 6f)
-                                    )
-                                    .build()
-                            },
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(if (isAndroid12) Modifier.blur(radius = 60.dp) else Modifier),
-                            contentScale = ContentScale.Crop
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.6f))
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(Zinc900, PureBlack)
-                                )
-                            )
-                    )
-                }
-            }
-
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                ) {
-                    com.israrxy.raazi.ui.components.SkeletonPlayer()
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun PlayerTopModeHeader(
     playbackState: PlaybackState,
     isLyricsVisible: Boolean,
@@ -467,17 +396,67 @@ internal fun PlayerArtworkOrVideoSection(
                     }
             ) { targetTrack ->
                 if (targetTrack != null) {
-                    AsyncImage(
-                        model = ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl),
-                        contentDescription = "Album Art",
-                        modifier = Modifier.sizeIn(maxWidth = 350.dp, maxHeight = 350.dp).fillMaxWidth(0.85f).aspectRatio(1f)
-                            .shadow(20.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(Zinc800),
-                        contentScale = ContentScale.Crop
-                    )
+                    val isVideoTrack = targetTrack.thumbnailUrl?.contains("ytimg.com/vi/") == true
+                    var thumbUrl by remember(targetTrack.thumbnailUrl) {
+                        mutableStateOf(ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .sizeIn(maxWidth = 350.dp, maxHeight = 350.dp)
+                            .fillMaxWidth(0.85f)
+                            .aspectRatio(1f)
+                            .shadow(20.dp, RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Zinc800),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isVideoTrack) {
+                            val isAndroid12 = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                            AsyncImage(
+                                model = thumbUrl,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { scaleX = 1.35f; scaleY = 1.35f }
+                                    .then(if (isAndroid12) Modifier.blur(20.dp) else Modifier),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.35f))
+                            )
+                            AsyncImage(
+                                model = thumbUrl,
+                                contentDescription = "Album Art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit,
+                                onError = {
+                                    val fallback = ThumbnailUtils.getMediumQualityThumbnail(targetTrack.thumbnailUrl)
+                                    if (thumbUrl != fallback) thumbUrl = fallback
+                                }
+                            )
+                        } else {
+                            AsyncImage(
+                                model = thumbUrl,
+                                contentDescription = "Album Art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                onError = {
+                                    val fallback = ThumbnailUtils.getMediumQualityThumbnail(targetTrack.thumbnailUrl)
+                                    if (thumbUrl != fallback) thumbUrl = fallback
+                                }
+                            )
+                        }
+                    }
                 } else {
                     Box(
-                        modifier = Modifier.sizeIn(maxWidth = 350.dp, maxHeight = 350.dp).fillMaxWidth(0.85f).aspectRatio(1f)
-                            .clip(RoundedCornerShape(20.dp)).shimmerEffect()
+                        modifier = Modifier
+                            .sizeIn(maxWidth = 350.dp, maxHeight = 350.dp)
+                            .fillMaxWidth(0.85f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(20.dp))
+                            .shimmerEffect()
                     )
                 }
             }

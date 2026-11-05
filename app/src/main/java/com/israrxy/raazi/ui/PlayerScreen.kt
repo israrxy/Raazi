@@ -145,99 +145,81 @@ fun PlayerScreen(
             enter = fadeIn(tween(300)),
             exit = fadeOut(tween(300))
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
-            ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val screenHeight = maxHeight
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 24.dp)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(26.dp)
-                            .then(dismissModifier)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onCollapse
-                            ),
-                        contentAlignment = Alignment.Center
+                            .defaultMinSize(minHeight = screenHeight)
+                            .statusBarsPadding()
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 16.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .graphicsLayer {
-                                    alpha = transition?.stage(0.70f, 1f) ?: 1f
+                        PlayerTopModeHeader(
+                            playbackState = playbackState,
+                            isLyricsVisible = isLyricsVisible,
+                            sleepTimerActive = sleepTimerActive,
+                            onCollapse = onCollapse,
+                            onLyricsVisibilityChange = onLyricsVisibilityChange,
+                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                            onShowOptionsSheet = { showOptionsSheet = true },
+                            modifier = dismissModifier.then(
+                                if (transition != null) {
+                                    Modifier.graphicsLayer {
+                                        val shown = easeOutCubic(transition.stage(0.60f, 1f))
+                                        alpha = shown
+                                        translationY = -12.dp.toPx() * (1f - shown)
+                                    }
+                                } else Modifier
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        PlayerArtworkOrVideoSection(
+                            viewModel = viewModel,
+                            playbackState = playbackState,
+                            modifier = dismissModifier,
+                            transition = transition,
+                            cardTop = cardTop
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        PlayerControlsAndActionsSection(
+                            viewModel = viewModel,
+                            playbackState = playbackState,
+                            favoriteTracks = favoriteTracks,
+                            progress = progress,
+                            duration = duration,
+                            isDraggingSlider = isDraggingSlider,
+                            dragFraction = dragFraction,
+                            onSliderChange = { fraction ->
+                                isDraggingSlider = true
+                                dragFraction = fraction.coerceIn(0f, 1f)
+                            },
+                            onSliderFinished = {
+                                if (duration > 0L) {
+                                    val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
+                                    pendingSeekPositionMs = seekPosition
+                                    pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
+                                    viewModel.seekTo(seekPosition)
                                 }
-                                .size(36.dp, 4.dp)
-                                .background(Color.White.copy(alpha = 0.35f), CircleShape)
+                                isDraggingSlider = false
+                            },
+                            hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
+                            onShowQueueSheet = { showPlayNextSheet = true },
+                            onShowSleepTimer = { showSleepTimer = true },
+                            transition = transition,
+                            cardTop = cardTop
                         )
                     }
-
-                    PlayerTopModeHeader(
-                        playbackState = playbackState,
-                        isLyricsVisible = isLyricsVisible,
-                        sleepTimerActive = sleepTimerActive,
-                        onCollapse = onCollapse,
-                        onLyricsVisibilityChange = onLyricsVisibilityChange,
-                        onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                        onShowOptionsSheet = { showOptionsSheet = true },
-                        modifier = dismissModifier.then(
-                            if (transition != null) {
-                                Modifier.graphicsLayer {
-                                    val shown = easeOutCubic(transition.stage(0.60f, 1f))
-                                    alpha = shown
-                                    translationY = -12.dp.toPx() * (1f - shown)
-                                }
-                            } else Modifier
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    PlayerArtworkOrVideoSection(
-                        viewModel = viewModel,
-                        playbackState = playbackState,
-                        modifier = Modifier,
-                        transition = transition,
-                        cardTop = cardTop
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    PlayerControlsAndActionsSection(
-                        viewModel = viewModel,
-                        playbackState = playbackState,
-                        favoriteTracks = favoriteTracks,
-                        progress = progress,
-                        duration = duration,
-                        isDraggingSlider = isDraggingSlider,
-                        dragFraction = dragFraction,
-                        onSliderChange = { fraction ->
-                            isDraggingSlider = true
-                            dragFraction = fraction.coerceIn(0f, 1f)
-                        },
-                        onSliderFinished = {
-                            if (duration > 0L) {
-                                val seekPosition = (dragFraction * duration).toLong().coerceIn(0L, duration)
-                                pendingSeekPositionMs = seekPosition
-                                pendingSeekTimestampMs = android.os.SystemClock.elapsedRealtime()
-                                viewModel.seekTo(seekPosition)
-                            }
-                            isDraggingSlider = false
-                        },
-                        hasQueueOrRelated = playbackState.playlist.isNotEmpty() || playNextItems.isNotEmpty(),
-                        onShowQueueSheet = { showPlayNextSheet = true },
-                        onShowSleepTimer = { showSleepTimer = true },
-                        transition = transition,
-                        cardTop = cardTop
-                    )
-                }
 
                     // --- Extra content cards (scrollable below the player) ---
                     Column(
@@ -281,6 +263,7 @@ fun PlayerScreen(
                         )
                     }
                 }
+            }
         }
 
         // UNIFIED SPOTIFY + YOUTUBE MUSIC LYRICS SCREEN OVERLAY
@@ -302,26 +285,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(26.dp)
-                                    .then(dismissModifier)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = onCollapse
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp, 4.dp)
-                                        .background(Color.White.copy(alpha = 0.35f), CircleShape)
-                                )
-                            }
-
+                        Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
                             PlayerTopModeHeader(
                                 playbackState = playbackState,
                                 isLyricsVisible = true,

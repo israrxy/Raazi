@@ -28,7 +28,7 @@ object ThumbnailUtils {
             val videoId = url.substringAfter("ytimg.com/vi/").substringBefore("/")
             if (videoId.isNotBlank() && videoId != url) {
                 return if (width >= 400) {
-                    "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                    "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg"
                 } else {
                     "https://i.ytimg.com/vi/$videoId/mqdefault.jpg"
                 }
