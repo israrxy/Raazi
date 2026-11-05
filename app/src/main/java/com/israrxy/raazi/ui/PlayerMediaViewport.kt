@@ -26,7 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -203,7 +202,7 @@ internal fun PlayerTopModeHeader(
 }
 
 @Composable
-internal fun PlayerArtworkOrVideoSection(
+internal fun ColumnScope.PlayerArtworkOrVideoSection(
     viewModel: MusicPlayerViewModel,
     playbackState: PlaybackState,
     modifier: Modifier = Modifier,
@@ -212,10 +211,10 @@ internal fun PlayerArtworkOrVideoSection(
 ) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     Box(
-        modifier = Modifier
+        modifier = modifier
+            .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = 10.dp)
-            .then(modifier)
+            .padding(vertical = 12.dp)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
@@ -396,64 +395,30 @@ internal fun PlayerArtworkOrVideoSection(
                     }
             ) { targetTrack ->
                 if (targetTrack != null) {
-                    val isVideoTrack = targetTrack.thumbnailUrl?.contains("ytimg.com/vi/") == true
                     var thumbUrl by remember(targetTrack.thumbnailUrl) {
                         mutableStateOf(ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl))
                     }
-                    Box(
+                    AsyncImage(
+                        model = thumbUrl,
+                        contentDescription = "Album Art",
                         modifier = Modifier
                             .sizeIn(maxWidth = 350.dp, maxHeight = 350.dp)
-                            .fillMaxWidth(0.85f)
+                            .fillMaxWidth(0.88f)
                             .aspectRatio(1f)
                             .shadow(20.dp, RoundedCornerShape(20.dp))
                             .clip(RoundedCornerShape(20.dp))
                             .background(Zinc800),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isVideoTrack) {
-                            val isAndroid12 = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-                            AsyncImage(
-                                model = thumbUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { scaleX = 1.35f; scaleY = 1.35f }
-                                    .then(if (isAndroid12) Modifier.blur(20.dp) else Modifier),
-                                contentScale = ContentScale.Crop
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.35f))
-                            )
-                            AsyncImage(
-                                model = thumbUrl,
-                                contentDescription = "Album Art",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit,
-                                onError = {
-                                    val fallback = ThumbnailUtils.getMediumQualityThumbnail(targetTrack.thumbnailUrl)
-                                    if (thumbUrl != fallback) thumbUrl = fallback
-                                }
-                            )
-                        } else {
-                            AsyncImage(
-                                model = thumbUrl,
-                                contentDescription = "Album Art",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                                onError = {
-                                    val fallback = ThumbnailUtils.getMediumQualityThumbnail(targetTrack.thumbnailUrl)
-                                    if (thumbUrl != fallback) thumbUrl = fallback
-                                }
-                            )
+                        contentScale = ContentScale.Crop,
+                        onError = {
+                            val fallback = ThumbnailUtils.getMediumQualityThumbnail(targetTrack.thumbnailUrl)
+                            if (thumbUrl != fallback) thumbUrl = fallback
                         }
-                    }
+                    )
                 } else {
                     Box(
                         modifier = Modifier
                             .sizeIn(maxWidth = 350.dp, maxHeight = 350.dp)
-                            .fillMaxWidth(0.85f)
+                            .fillMaxWidth(0.88f)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(20.dp))
                             .shimmerEffect()

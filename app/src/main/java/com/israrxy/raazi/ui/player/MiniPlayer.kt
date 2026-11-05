@@ -54,7 +54,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -194,39 +193,12 @@ fun MiniPlayer(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        val isVideoThumbnail = track.thumbnailUrl?.contains("ytimg.com/vi/") == true
-                        if (isVideoThumbnail) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                val isAndroid12 = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-                                AsyncImage(
-                                    model = track.thumbnailUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer { scaleX = 1.35f; scaleY = 1.35f }
-                                        .then(if (isAndroid12) Modifier.blur(10.dp) else Modifier),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.3f))
-                                )
-                                AsyncImage(
-                                    model = track.thumbnailUrl,
-                                    contentDescription = track.title,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        } else {
-                            AsyncImage(
-                                model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
-                                contentDescription = track.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
+                        AsyncImage(
+                            model = ThumbnailUtils.getHighQualityThumbnail(track.thumbnailUrl),
+                            contentDescription = track.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(if (compactLayout) 10.dp else 12.dp))

@@ -156,10 +156,9 @@ fun PlayerScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .defaultMinSize(minHeight = screenHeight)
+                            .height(screenHeight)
                             .statusBarsPadding()
                             .padding(horizontal = 24.dp)
-                            .padding(bottom = 16.dp)
                     ) {
                         PlayerTopModeHeader(
                             playbackState = playbackState,
@@ -180,7 +179,7 @@ fun PlayerScreen(
                             )
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
                         PlayerArtworkOrVideoSection(
                             viewModel = viewModel,
@@ -190,7 +189,7 @@ fun PlayerScreen(
                             cardTop = cardTop
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
 
                         PlayerControlsAndActionsSection(
                             viewModel = viewModel,
