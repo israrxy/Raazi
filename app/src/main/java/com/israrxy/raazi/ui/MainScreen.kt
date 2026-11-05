@@ -1,32 +1,36 @@
 package com.israrxy.raazi.ui
 
 import android.net.Uri
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,7 +40,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -49,6 +55,7 @@ import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,29 +73,29 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
-    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
-    val isPlayerExpanded = sheetState.targetValue == SheetValue.Expanded || sheetState.currentValue == SheetValue.Expanded
-    val expansionProgress by animateFloatAsState(
-        targetValue = if (isPlayerExpanded) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = 0.88f,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "player_expansion_progress"
-    )
+    val playerExpansion = remember { Animatable(0f) }
+    val sheetSpringSpec = remember {
+        spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 550f)
+    }
+
     val scope = rememberCoroutineScope()
     var restoredTopLevelRoute by rememberSaveable { mutableStateOf(false) }
     var isLyricsModeOpen by rememberSaveable { mutableStateOf(false) }
     val defaultPlayerScreen by settingsDataStore.defaultPlayerScreen.collectAsStateWithLifecycle(initialValue = "LAST_USED")
 
-    val openPlayerSheet: () -> Unit = {
+    val expandPlayer: () -> Unit = {
         if (defaultPlayerScreen == "LYRICS") {
             isLyricsModeOpen = true
         } else if (defaultPlayerScreen == "PLAYER") {
             isLyricsModeOpen = false
         }
-        scope.launch { sheetState.expand() }
+        scope.launch { playerExpansion.animateTo(1f, sheetSpringSpec) }
+    }
+
+    val collapsePlayer: () -> Unit = {
+        scope.launch {
+            playerExpansion.animateTo(0f, sheetSpringSpec)
+        }
     }
 
     val isYouTubeLoggedIn by viewModel.isYouTubeLoggedIn.collectAsStateWithLifecycle()
@@ -120,27 +127,18 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             if (showMiniPlayerBar) 74.dp else 0.dp
         }
 
-    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-    DisposableEffect(sheetState.currentValue, backDispatcher, isLyricsModeOpen) {
-        val callback = object : OnBackPressedCallback(sheetState.currentValue == SheetValue.Expanded) {
-            override fun handleOnBackPressed() {
-                if (isLyricsModeOpen) {
-                    isLyricsModeOpen = false
-                } else {
-                    scope.launch { sheetState.partialExpand() }
-                }
-            }
+    BackHandler(enabled = playerExpansion.value > 0.001f) {
+        if (isLyricsModeOpen) {
+            isLyricsModeOpen = false
+        } else {
+            collapsePlayer()
         }
-        backDispatcher?.addCallback(callback)
-        onDispose { callback.remove() }
     }
 
     LaunchedEffect(currentTrack) {
         if (currentTrack == null) {
             isFloatingCollapsed = false
-            if (sheetState.currentValue == SheetValue.Expanded) {
-                sheetState.partialExpand()
-            }
+            collapsePlayer()
         }
     }
 
@@ -172,26 +170,17 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         when (val event = pendingDeepLinkEvent) {
             is MusicPlayerViewModel.DeepLinkEvent.ExpandPlayer -> {
                 if (currentTrack != null) {
-                    if (defaultPlayerScreen == "LYRICS") {
-                        isLyricsModeOpen = true
-                    } else if (defaultPlayerScreen == "PLAYER") {
-                        isLyricsModeOpen = false
-                    }
-                    scope.launch { sheetState.expand() }
+                    expandPlayer()
                     viewModel.consumeDeepLinkEvent()
                 }
             }
             is MusicPlayerViewModel.DeepLinkEvent.OpenPlaylist -> {
-                if (sheetState.currentValue == SheetValue.Expanded) {
-                    scope.launch { sheetState.partialExpand() }
-                }
+                collapsePlayer()
                 navController.navigateToPlaylist(event.playlistId)
                 viewModel.consumeDeepLinkEvent()
             }
             is MusicPlayerViewModel.DeepLinkEvent.OpenArtist -> {
-                if (sheetState.currentValue == SheetValue.Expanded) {
-                    scope.launch { sheetState.partialExpand() }
-                }
+                collapsePlayer()
                 val encodedId = Uri.encode(event.artistId)
                 val encodedName = Uri.encode(event.artistName ?: event.artistId)
                 navController.navigate("artist/$encodedId?name=$encodedName")
@@ -209,123 +198,184 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
             navController.navigate("ringtone_trimmer") {
                 launchSingleTop = true
             }
-            scope.launch { sheetState.partialExpand() }
+            collapsePlayer()
         } else if (isIdle && currentRoute == "ringtone_trimmer") {
             navController.popBackStack()
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        BottomSheetScaffold(
-            scaffoldState = scaffoldState,
-            sheetContent = {
-                if (currentTrack != null) {
-                    PlayerScreen(
-                        viewModel = viewModel,
-                        navController = navController,
-                        sheetState = sheetState,
-                        onCollapse = { scope.launch { sheetState.partialExpand() } },
-                        isLyricsVisible = isLyricsModeOpen,
-                        onLyricsVisibilityChange = { isLyricsModeOpen = it }
-                    )
-                } else {
-                    Box(modifier = Modifier.height(0.dp))
+        val parentHeightPx = constraints.maxHeight.toFloat()
+        val effectiveHeight = parentHeightPx.coerceAtLeast(1f)
+        var miniPlayerDownwardDelta by remember { mutableFloatStateOf(0f) }
+
+        val dismissModifier = Modifier.pointerInput(parentHeightPx) {
+            var gestureStartMs = 0L
+            var totalDragPx = 0f
+            detectVerticalDragGestures(
+                onDragStart = {
+                    gestureStartMs = SystemClock.uptimeMillis()
+                    totalDragPx = 0f
+                },
+                onDragEnd = {
+                    val elapsedMs = (SystemClock.uptimeMillis() - gestureStartMs).coerceAtLeast(1L)
+                    val velocity = totalDragPx / (elapsedMs / 1000f)
+                    if (playerExpansion.value < 0.65f || velocity > 500f) {
+                        collapsePlayer()
+                    } else {
+                        expandPlayer()
+                    }
+                },
+                onDragCancel = { expandPlayer() },
+                onVerticalDrag = { change, dragAmount ->
+                    change.consume()
+                    totalDragPx += dragAmount
+                    scope.launch {
+                        val newProgress = (playerExpansion.value - dragAmount / effectiveHeight).coerceIn(0f, 1f)
+                        playerExpansion.snapTo(newProgress)
+                    }
                 }
-            },
-            sheetPeekHeight = 0.dp,
-            sheetContainerColor = Color.Transparent,
-            sheetContentColor = MaterialTheme.colorScheme.onBackground,
-            sheetTonalElevation = 0.dp,
-            sheetShadowElevation = 0.dp,
-            sheetDragHandle = null,
-            sheetSwipeEnabled = currentTrack != null
+            )
+        }
+
+        // Background App Surface (scaled back & dimmed as player expands)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val progress = playerExpansion.value
+                    val scale = 1f - (0.045f * progress)
+                    scaleX = scale
+                    scaleY = scale
+                    clip = progress > 0.01f
+                    shape = RoundedCornerShape((20 * progress).dp)
+                }
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0)
+            ) { innerPadding ->
+                MainNavHost(
+                    navController = navController,
+                    viewModel = viewModel,
+                    openPlayerSheet = expandPlayer,
+                    contentBottomPadding = contentBottomPadding,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                )
+            }
+
+            if (playerExpansion.value > 0.005f) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer {
-                            val scale = 1f - (0.045f * expansionProgress)
-                            scaleX = scale
-                            scaleY = scale
-                            clip = expansionProgress > 0.01f
-                            shape = RoundedCornerShape((20 * expansionProgress).dp)
+                        .background(Color.Black.copy(alpha = 0.45f * playerExpansion.value))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = collapsePlayer
+                        )
+                )
+            }
+        }
+
+        // Bottom Navigation Bar (sinks down and fades out)
+        if (showBottomBar) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer {
+                        val progress = playerExpansion.value
+                        translationY = 80.dp.toPx() * progress
+                        alpha = (1f - progress * 1.5f).coerceIn(0f, 1f)
+                    }
+            ) {
+                SimpleBottomNavBar(
+                    navController = navController,
+                    currentDestination = currentDestination,
+                    hasMiniPlayerAbove = showMiniPlayerBar
+                )
+            }
+        }
+
+        // MiniPlayer (with interactive Drag-Up gesture)
+        if (showMiniPlayerBar && playerExpansion.value < 0.99f) {
+            val progress = playerExpansion.value
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
+                    .padding(bottom = collapsedMiniPlayerBottomPadding)
+                    .graphicsLayer {
+                        translationY = -progress * 24.dp.toPx()
+                        alpha = (1f - progress * 2.2f).coerceIn(0f, 1f)
+                        scaleX = 1f - (0.03f * progress)
+                        scaleY = 1f - (0.03f * progress)
+                    }
+                    .draggable(
+                        state = rememberDraggableState { delta ->
+                            miniPlayerDownwardDelta += delta
+                            scope.launch {
+                                val newProgress = (playerExpansion.value - delta / effectiveHeight).coerceIn(0f, 1f)
+                                playerExpansion.snapTo(newProgress)
+                            }
+                        },
+                        orientation = Orientation.Vertical,
+                        onDragStopped = { velocity ->
+                            if (miniPlayerDownwardDelta > 36f && microPlayerEnabled && playerExpansion.value < 0.05f) {
+                                isFloatingCollapsed = true
+                            } else if (velocity < -500f || playerExpansion.value > 0.25f) {
+                                expandPlayer()
+                            } else {
+                                collapsePlayer()
+                            }
+                            miniPlayerDownwardDelta = 0f
                         }
-                ) {
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                        containerColor = Color.Transparent,
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0)
-                    ) { innerPadding ->
-                        MainNavHost(
-                            navController = navController,
-                            viewModel = viewModel,
-                            openPlayerSheet = openPlayerSheet,
-                            contentBottomPadding = contentBottomPadding,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        )
-                    }
+                    )
+            ) {
+                MiniPlayer(
+                    viewModel = viewModel,
+                    onNavigateToPlayer = expandPlayer,
+                    onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
+                    isDocked = showBottomBar,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
 
-                    if (expansionProgress > 0.005f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.40f * expansionProgress))
+        // Full-Screen Player Screen Overlay (with interactive Drag-Down-to-Dismiss)
+        if (currentTrack != null && playerExpansion.value > 0.001f) {
+            val progress = playerExpansion.value
+            val yOffset = ((1f - progress) * parentHeightPx).roundToInt()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset(0, yOffset) }
+                    .graphicsLayer {
+                        shape = RoundedCornerShape(
+                            topStart = (24 * (1f - progress * 0.5f)).dp,
+                            topEnd = (24 * (1f - progress * 0.5f)).dp
                         )
+                        clip = true
+                        shadowElevation = 18.dp.toPx() * progress
                     }
-                }
-
-                if (showBottomBar) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .graphicsLayer {
-                                translationY = (74.dp.toPx() * expansionProgress)
-                                alpha = (1f - expansionProgress * 1.6f).coerceIn(0f, 1f)
-                            }
-                    ) {
-                        SimpleBottomNavBar(
-                            navController = navController,
-                            currentDestination = currentDestination,
-                            hasMiniPlayerAbove = showMiniPlayerBar
-                        )
-                    }
-                }
-
-                if (showMiniPlayerBar && expansionProgress < 0.99f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = if (showBottomBar) 0.dp else 12.dp)
-                            .padding(bottom = collapsedMiniPlayerBottomPadding)
-                            .graphicsLayer {
-                                translationY = (-14.dp.toPx() * expansionProgress)
-                                alpha = (1f - expansionProgress * 2.2f).coerceIn(0f, 1f)
-                                scaleX = 1f - (0.03f * expansionProgress)
-                                scaleY = 1f - (0.03f * expansionProgress)
-                            }
-                    ) {
-                        MiniPlayer(
-                            viewModel = viewModel,
-                            onNavigateToPlayer = openPlayerSheet,
-                            onCollapseToFloating = if (microPlayerEnabled) { { isFloatingCollapsed = true } } else null,
-                            isDocked = showBottomBar,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+            ) {
+                PlayerScreen(
+                    viewModel = viewModel,
+                    navController = navController,
+                    onCollapse = collapsePlayer,
+                    isLyricsVisible = isLyricsModeOpen,
+                    onLyricsVisibilityChange = { isLyricsModeOpen = it },
+                    dismissModifier = dismissModifier
+                )
             }
         }
 

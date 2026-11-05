@@ -25,9 +25,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -149,51 +152,16 @@ fun MiniPlayer(
             shadowElevation = if (isDocked) 0.dp else 8.dp
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                val swipeTravel = remember { floatArrayOf(0f) }
+                val horizontalDragState = rememberDraggableState { delta -> swipeTravel[0] += delta }
+                val haptics = LocalHapticFeedback.current
+                val density = LocalDensity.current
+                val swipeThreshold = with(density) { 48.dp.toPx() }
+
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
-                        .pointerInput(track.id, onCollapseToFloating, onNavigateToPlayer) {
-                            var totalX = 0f
-                            var totalY = 0f
-                            var hasCollapsed = false
-                            detectDragGestures(
-                                onDragStart = {
-                                    totalX = 0f
-                                    totalY = 0f
-                                    hasCollapsed = false
-                                },
-                                onDrag = { change, dragAmount ->
-                                    totalX += dragAmount.x
-                                    totalY += dragAmount.y
-                                    if (!hasCollapsed && totalY > 36.dp.toPx() && onCollapseToFloating != null) {
-                                        hasCollapsed = true
-                                        change.consume()
-                                        onCollapseToFloating()
-                                    } else if (!hasCollapsed && totalY < -24.dp.toPx()) {
-                                        hasCollapsed = true
-                                        change.consume()
-                                        onNavigateToPlayer()
-                                    } else {
-                                        change.consume()
-                                    }
-                                },
-                                onDragEnd = {
-                                    if (!hasCollapsed) {
-                                        if (totalX < -48.dp.toPx()) viewModel.next()
-                                        else if (totalX > 48.dp.toPx()) viewModel.previous()
-                                    }
-                                    totalX = 0f
-                                    totalY = 0f
-                                    hasCollapsed = false
-                                },
-                                onDragCancel = {
-                                    totalX = 0f
-                                    totalY = 0f
-                                    hasCollapsed = false
-                                }
-                            )
-                        },
+                        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -214,7 +182,23 @@ fun MiniPlayer(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .draggable(
+                                state = horizontalDragState,
+                                orientation = Orientation.Horizontal,
+                                onDragStopped = { velocity ->
+                                    val travel = swipeTravel[0]
+                                    if (kotlin.math.abs(travel) >= swipeThreshold || kotlin.math.abs(velocity) >= 1200f) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        if (travel < 0f || velocity < -1200f) {
+                                            viewModel.next()
+                                        } else {
+                                            viewModel.previous()
+                                        }
+                                    }
+                                    swipeTravel[0] = 0f
+                                }
+                            ),
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(

@@ -128,11 +128,12 @@ internal fun PlayerTopModeHeader(
     onCollapse: () -> Unit,
     onLyricsVisibilityChange: (Boolean) -> Unit,
     onSetPlaybackMediaMode: (PlaybackMediaMode) -> Unit,
-    onShowOptionsSheet: () -> Unit
+    onShowOptionsSheet: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(8.dp))
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
@@ -268,14 +269,16 @@ internal fun PlayerTopModeHeader(
 @Composable
 internal fun ColumnScope.PlayerArtworkOrVideoSection(
     viewModel: MusicPlayerViewModel,
-    playbackState: PlaybackState
+    playbackState: PlaybackState,
+    modifier: Modifier = Modifier
 ) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = 20.dp)
+            .padding(vertical = 16.dp)
+            .then(modifier)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
@@ -467,21 +470,12 @@ internal fun ColumnScope.PlayerArtworkOrVideoSection(
                     AsyncImage(
                         model = ThumbnailUtils.getHighQualityThumbnail(targetTrack.thumbnailUrl),
                         contentDescription = "Album Art",
-                        modifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .aspectRatio(1f)
-                            .shadow(20.dp, RoundedCornerShape(20.dp))
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Zinc800),
+                        modifier = Modifier.fillMaxWidth(0.88f).aspectRatio(1f).shadow(20.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(Zinc800),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .shimmerEffect()
+                        modifier = Modifier.fillMaxWidth(0.88f).aspectRatio(1f).clip(RoundedCornerShape(20.dp)).shimmerEffect()
                     )
                 }
             }

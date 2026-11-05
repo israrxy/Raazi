@@ -42,7 +42,8 @@ fun PlayerScreen(
     sheetState: SheetState? = null,
     onCollapse: () -> Unit,
     isLyricsVisible: Boolean,
-    onLyricsVisibilityChange: (Boolean) -> Unit
+    onLyricsVisibilityChange: (Boolean) -> Unit,
+    dismissModifier: Modifier = Modifier
 ) {
     val isExpanded = sheetState?.let {
         it.targetValue == SheetValue.Expanded || it.currentValue == SheetValue.Expanded
@@ -153,6 +154,25 @@ fun PlayerScreen(
                             .statusBarsPadding()
                             .padding(horizontal = 24.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(26.dp)
+                                .then(dismissModifier)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onCollapse
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp, 4.dp)
+                                    .background(Color.White.copy(alpha = 0.35f), CircleShape)
+                            )
+                        }
+
                         PlayerTopModeHeader(
                             playbackState = playbackState,
                             isLyricsVisible = isLyricsVisible,
@@ -160,14 +180,16 @@ fun PlayerScreen(
                             onCollapse = onCollapse,
                             onLyricsVisibilityChange = onLyricsVisibilityChange,
                             onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                            onShowOptionsSheet = { showOptionsSheet = true }
+                            onShowOptionsSheet = { showOptionsSheet = true },
+                            modifier = dismissModifier
                         )
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         PlayerArtworkOrVideoSection(
                             viewModel = viewModel,
-                            playbackState = playbackState
+                            playbackState = playbackState,
+                            modifier = if (!isLyricsVisible) dismissModifier else Modifier
                         )
 
                         Spacer(modifier = Modifier.height(24.dp))
@@ -263,15 +285,37 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
                     ) {
-                        PlayerTopModeHeader(
-                            playbackState = playbackState,
-                            isLyricsVisible = true,
-                            sleepTimerActive = sleepTimerActive,
-                            onCollapse = onCollapse,
-                            onLyricsVisibilityChange = onLyricsVisibilityChange,
-                            onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                            onShowOptionsSheet = { showOptionsSheet = true }
-                        )
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(26.dp)
+                                    .then(dismissModifier)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onCollapse
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp, 4.dp)
+                                        .background(Color.White.copy(alpha = 0.35f), CircleShape)
+                                )
+                            }
+
+                            PlayerTopModeHeader(
+                                playbackState = playbackState,
+                                isLyricsVisible = true,
+                                sleepTimerActive = sleepTimerActive,
+                                onCollapse = onCollapse,
+                                onLyricsVisibilityChange = onLyricsVisibilityChange,
+                                onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
+                                onShowOptionsSheet = { showOptionsSheet = true },
+                                modifier = dismissModifier
+                            )
+                        }
                     }
                 }
             )

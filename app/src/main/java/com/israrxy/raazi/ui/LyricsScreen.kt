@@ -469,14 +469,8 @@ fun LyricsScreen(
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     if (isPlaying) viewModel.pause() else viewModel.resume()
                 },
-                onPrevious = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    viewModel.previous()
-                },
-                onNext = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    viewModel.next()
-                },
+                onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); viewModel.previous() },
+                onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); viewModel.next() },
                 onToggleShuffle = { viewModel.toggleShuffle() },
                 onToggleRepeat = { viewModel.toggleRepeat() }
             )
