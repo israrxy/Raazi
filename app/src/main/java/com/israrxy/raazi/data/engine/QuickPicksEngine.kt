@@ -33,11 +33,11 @@ class QuickPicksEngine(
         forceRefresh: Boolean = false
     ): List<MusicItem> = withContext(Dispatchers.IO) {
         try {
-            val playbackHistory = try { repository.playbackHistory.first() } catch (_: Exception) { emptyList() }
-            val topPlayed = try { repository.quickPicks.first() } catch (_: Exception) { emptyList() }
-            val favorites = try { repository.getFavoriteTracks().first() } catch (_: Exception) { emptyList() }
+            val playbackHistory: List<MusicItem> = try { repository.playbackHistory.first() } catch (_: Exception) { emptyList() }
+            val topPlayed: List<MusicItem> = try { repository.quickPicks.first() } catch (_: Exception) { emptyList() }
+            val favorites: List<MusicItem> = try { repository.favoriteTracks.first() } catch (_: Exception) { emptyList() }
 
-            val candidatePool = (topPlayed + favorites + playbackHistory)
+            val candidatePool: List<MusicItem> = (topPlayed + favorites + playbackHistory)
                 .filter { it.id.isNotBlank() && it.id !in dismissedItemIds }
                 .distinctBy { it.id }
 
@@ -74,15 +74,17 @@ class QuickPicksEngine(
             }
 
             // Blend: ~35% familiar favorites + ~65% fresh radio discovery
-            val familiarPool = candidatePool
-                .filter { it.id !in seeds.map { s -> s.id } }
-                .let { if (forceRefresh) it.shuffled() else it }
+            val seedIds = seeds.map { it.id }.toSet()
+            val familiarPool: MutableList<MusicItem> = candidatePool
+                .filter { it.id !in seedIds }
+                .let { list -> if (forceRefresh) list.shuffled() else list }
                 .toMutableList()
 
-            val freshPool = discoveryTracks
-                .filter { disc -> candidatePool.none { fav -> fav.id == disc.id } }
+            val candidateIds = candidatePool.map { it.id }.toSet()
+            val freshPool: MutableList<MusicItem> = discoveryTracks
+                .filter { it.id !in candidateIds }
                 .distinctBy { it.id }
-                .let { if (forceRefresh) it.shuffled() else it }
+                .let { list -> if (forceRefresh) list.shuffled() else list }
                 .toMutableList()
 
             val blended = mutableListOf<MusicItem>()
