@@ -244,9 +244,3 @@ internal fun MusicalInterludeDots(
     }
 }
 
-fun formatLyricsTimestamp(timestampMs: Long): String {
-    val totalSec = (timestampMs / 1000).coerceAtLeast(0)
-    val m = totalSec / 60
-    val s = totalSec % 60
-    return String.format("%d:%02d", m, s)
-}

@@ -103,8 +103,8 @@ fun LyricsScreen(
 
     val positionProvider: () -> Long = remember(duration) {
         {
-            if (hasActiveWords) {
-                val _ = frame.longValue
+            if (hasActiveWords && frame.longValue >= 0L) {
+                // Subscribe the active draw scope or snapshot to frame ticks
             }
             val now = SystemClock.elapsedRealtime()
             val elapsed = if (isAnchorPlaying) (now - anchorTime) else 0L
