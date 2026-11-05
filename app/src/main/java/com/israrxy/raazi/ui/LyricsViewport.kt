@@ -51,7 +51,7 @@ internal fun LyricsMainViewportContent(
     isSynced: Boolean,
     syncedLines: List<LyricLine>,
     activeLineIndex: Int,
-    currentPosition: Long,
+    positionProvider: () -> Long,
     duration: Long,
     listState: LazyListState,
     isUserScrolling: Boolean,
@@ -81,15 +81,16 @@ internal fun LyricsMainViewportContent(
 
         isSynced -> {
             val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
-            val showIntroInterlude = firstLineTimestamp > 4000L && currentPosition < firstLineTimestamp
+            val currentPos = positionProvider()
+            val showIntroInterlude = firstLineTimestamp > 4000L && currentPos < firstLineTimestamp
 
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = 56.dp,
-                        bottom = 160.dp,
+                        top = 16.dp,
+                        bottom = 120.dp,
                         start = 20.dp,
                         end = 20.dp
                     ),
@@ -102,7 +103,7 @@ internal fun LyricsMainViewportContent(
                                 enter = fadeIn() + scaleIn(),
                                 exit = fadeOut() + scaleOut()
                             ) {
-                                val introProgress = (currentPosition.toFloat() / firstLineTimestamp.toFloat()).coerceIn(0f, 1f)
+                                val introProgress = (currentPos.toFloat() / firstLineTimestamp.toFloat()).coerceIn(0f, 1f)
                                 MusicalInterludeDots(
                                     progress = introProgress,
                                     modifier = Modifier.padding(vertical = 12.dp)
@@ -123,21 +124,15 @@ internal fun LyricsMainViewportContent(
                         val gapToNext = nextTimestamp - line.timestamp
                         val isInInstrumentalGap = isCurrent &&
                             gapToNext > 7500L &&
-                            (currentPosition - line.timestamp) > 3500L &&
-                            currentPosition < nextTimestamp - 500L
-
-                        val displayLineText = remember(line.text, selectedVariant) {
-                            LyricsTextVariants.transform(line.text, selectedVariant)
-                        }
+                            (currentPos - line.timestamp) > 3500L &&
+                            currentPos < nextTimestamp - 500L
 
                         SpotifyYoutubeLyricItem(
-                            text = displayLineText,
+                            text = line.displayText,
                             translation = line.translation,
                             timestampMs = line.timestamp,
-                            lineEndTimestampMs = line.endTimestamp,
                             words = line.words,
-                            currentPositionMs = currentPosition,
-                            selectedVariant = selectedVariant,
+                            positionProvider = if (isCurrent) positionProvider else null,
                             isCurrent = isCurrent,
                             isPassed = isPassed,
                             distance = distance,
@@ -150,7 +145,7 @@ internal fun LyricsMainViewportContent(
                             onShareLine = {
                                 shareOrCopyLyricLine(
                                     context = context,
-                                    lyricText = displayLineText,
+                                    lyricText = line.displayText,
                                     trackTitle = currentTrack?.title,
                                     artistName = currentTrack?.artist
                                 )
@@ -158,7 +153,7 @@ internal fun LyricsMainViewportContent(
                         )
 
                         if (isInInstrumentalGap) {
-                            val gapElapsed = (currentPosition - (line.timestamp + 3500L)).coerceAtLeast(0L)
+                            val gapElapsed = (currentPos - (line.timestamp + 3500L)).coerceAtLeast(0L)
                             val gapTotal = (gapToNext - 4000L).coerceAtLeast(1L)
                             MusicalInterludeDots(
                                 progress = (gapElapsed.toFloat() / gapTotal.toFloat()).coerceIn(0f, 1f),

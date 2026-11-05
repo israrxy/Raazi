@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,18 +26,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.israrxy.raazi.data.lyrics.LyricsTextVariants
+import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.ui.theme.Emerald400
 
+@Immutable
 data class LyricWordSegment(
     val startTimeMs: Long,
     val endTimeMs: Long,
-    val text: String
+    val text: String,
+    val displayText: String = text
 )
 
+@Immutable
 data class LyricLine(
     val timestamp: Long,
     val endTimestamp: Long = timestamp + 3000L,
     val text: String,
+    val displayText: String = text,
     val words: List<LyricWordSegment> = emptyList(),
     val hasExplicitWordSync: Boolean = false,
     val translation: String? = null
@@ -84,7 +91,8 @@ fun buildRichLyricLines(
     rawPairs: List<Pair<Long, String>>,
     durationMs: Long,
     translations: List<String>,
-    showTranslation: Boolean
+    showTranslation: Boolean,
+    variant: LyricsViewVariant = LyricsViewVariant.ORIGINAL
 ): List<LyricLine> {
     if (rawPairs.isEmpty()) return emptyList()
     return rawPairs.mapIndexed { idx, (lineStartMs, rawBody) ->
@@ -117,7 +125,8 @@ fun buildRichLyricLines(
                 LyricWordSegment(
                     startTimeMs = wStart,
                     endTimeMs = wEnd.coerceAtLeast(wStart + 80L),
-                    text = token
+                    text = token,
+                    displayText = LyricsTextVariants.transform(token, variant)
                 )
             }
             lineEndMs = words.lastOrNull()?.endTimeMs ?: (lineStartMs + rawGap.coerceAtMost(5000L))
@@ -139,7 +148,8 @@ fun buildRichLyricLines(
                 val seg = LyricWordSegment(
                     startTimeMs = cursorMs,
                     endTimeMs = (cursorMs + sliceMs).coerceAtMost(lineEndMs),
-                    text = token
+                    text = token,
+                    displayText = LyricsTextVariants.transform(token, variant)
                 )
                 cursorMs += sliceMs
                 seg
@@ -150,9 +160,22 @@ fun buildRichLyricLines(
             timestamp = lineStartMs,
             endTimestamp = lineEndMs,
             text = cleanText,
+            displayText = LyricsTextVariants.transform(cleanText, variant),
             words = words,
             hasExplicitWordSync = hasExplicitWords,
             translation = if (showTranslation && idx < translations.size) translations[idx] else null
+        )
+    }
+}
+
+fun withPrecomputedVariant(lines: List<LyricLine>, variant: LyricsViewVariant): List<LyricLine> {
+    if (lines.isEmpty()) return emptyList()
+    return lines.map { line ->
+        line.copy(
+            displayText = LyricsTextVariants.transform(line.text, variant),
+            words = line.words.map { w ->
+                w.copy(displayText = LyricsTextVariants.transform(w.text, variant))
+            }
         )
     }
 }

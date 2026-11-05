@@ -1,6 +1,7 @@
 package com.israrxy.raazi.ui
 
 import android.os.Build
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -13,9 +14,6 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -37,15 +35,20 @@ import com.israrxy.raazi.service.LyricsTranslator
 import com.israrxy.raazi.utils.BlurTransformation
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /**
  * Unified Spotify + YouTube Music + Musixmatch style Lyrics Screen.
- * Supports word-by-word and line-by-line karaoke highlight, smooth auto-scrolling,
- * manual scroll with "Re-sync" pill, timestamp tap-to-seek, musical interlude pulsing dots,
- * Romanization/Script switching, AI Translation, provider badge, and line sharing.
+ * Fully optimized architecture:
+ * - Text precomputation on Dispatchers.Default (no main thread transliteration)
+ * - Wall-clock position provider with withFrameNanos (zero recomposition on time ticks)
+ * - Draw-phase word wipe clipRect (0 layout remeasures per frame)
+ * - Derived active line index with binary search
+ * - Sleek timeline under song info, bottom controls removed for maximal lyrics viewport
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -74,18 +77,39 @@ fun LyricsScreen(
         }
     }
 
-    var smoothPositionMs by remember { mutableLongStateOf(currentPosition) }
-    LaunchedEffect(currentPosition, isPlaying, duration) {
-        smoothPositionMs = currentPosition
-        if (isPlaying) {
-            val basePosition = currentPosition
-            val startWallClock = android.os.SystemClock.elapsedRealtime()
-            while (true) {
-                delay(33L)
-                val elapsed = android.os.SystemClock.elapsedRealtime() - startWallClock
-                val maxPos = if (duration > 0L) duration else Long.MAX_VALUE
-                smoothPositionMs = (basePosition + elapsed).coerceAtMost(maxPos)
+    // Fix 2: Anchored position provider replacing the delay(33) recomposition loop
+    var anchorPos by remember { mutableLongStateOf(currentPosition) }
+    var anchorTime by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    var isAnchorPlaying by remember { mutableStateOf(isPlaying) }
+
+    LaunchedEffect(currentPosition, isPlaying) {
+        val now = SystemClock.elapsedRealtime()
+        val predicted = if (isAnchorPlaying) anchorPos + (now - anchorTime) else anchorPos
+        if (abs(currentPosition - predicted) > 150L || isPlaying != isAnchorPlaying) {
+            anchorPos = currentPosition
+            anchorTime = now
+            isAnchorPlaying = isPlaying
+        }
+    }
+
+    val frame = remember { mutableLongStateOf(0L) }
+    var hasActiveWords by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isPlaying, hasActiveWords) {
+        while (isPlaying && hasActiveWords) {
+            withFrameNanos { frame.longValue = it }
+        }
+    }
+
+    val positionProvider: () -> Long = remember(duration) {
+        {
+            if (hasActiveWords) {
+                val _ = frame.longValue
             }
+            val now = SystemClock.elapsedRealtime()
+            val elapsed = if (isAnchorPlaying) (now - anchorTime) else 0L
+            val pos = anchorPos + elapsed
+            if (duration > 0L) pos.coerceIn(0L, duration) else pos.coerceAtLeast(0L)
         }
     }
 
@@ -110,7 +134,6 @@ fun LyricsScreen(
     var showOptionsMenu by remember { mutableStateOf(false) }
     var showTrackDetails by remember { mutableStateOf(false) }
     var selectedVariant by remember { mutableStateOf(LyricsViewVariant.ORIGINAL) }
-    var neuralRomanVersion by remember { mutableIntStateOf(0) }
 
     val rawSourceText = remember(lyrics) {
         (lyrics?.syncedLyrics ?: lyrics?.plainLyrics.orEmpty()).replace(STRIP_WORD_TAGS_REGEX, "")
@@ -146,29 +169,20 @@ fun LyricsScreen(
         parseLrcLines(lyrics?.syncedLyrics, hideBrackets = hideBrackets)
     }
 
-    // Prefetch Google Neural Romanization when non-Latin lyrics are present or Romanized view is selected
-    LaunchedEffect(lyrics?.syncedLyrics, lyrics?.plainLyrics, selectedVariant, availableVariants) {
-        if (LyricsViewVariant.ROMANIZED !in availableVariants) return@LaunchedEffect
-        try {
-            if (parsedPairs.isNotEmpty()) {
-                val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
-                LyricsTranslator.romanizeLines(originalTexts)
-                neuralRomanVersion++
-            } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
-                LyricsTranslator.romanizeLines(lyrics!!.plainLyrics!!.lines())
-                neuralRomanVersion++
-            }
-        } catch (_: Exception) {
+    // Fix 1: Precompute display text and warm up Transliterator in Dispatchers.Default
+    var syncedLines by remember { mutableStateOf<List<LyricLine>>(emptyList()) }
+    LaunchedEffect(parsedPairs, duration, translatedLines.toList(), showTranslation, selectedVariant) {
+        withContext(Dispatchers.Default) {
+            LyricsTextVariants.transform("warmup", selectedVariant)
+            val built = buildRichLyricLines(
+                rawPairs = parsedPairs,
+                durationMs = duration,
+                translations = translatedLines.toList(),
+                showTranslation = showTranslation,
+                variant = selectedVariant
+            )
+            syncedLines = built
         }
-    }
-
-    val syncedLines = remember(parsedPairs, duration, translatedLines.toList(), showTranslation, neuralRomanVersion) {
-        buildRichLyricLines(
-            rawPairs = parsedPairs,
-            durationMs = duration,
-            translations = translatedLines.toList(),
-            showTranslation = showTranslation
-        )
     }
 
     val isSynced = remember(syncedLines) { syncedLines.isNotEmpty() }
@@ -185,15 +199,21 @@ fun LyricsScreen(
 
         isTranslating = true
         try {
-            if (parsedPairs.isNotEmpty()) {
-                val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
-                val translations = LyricsTranslator.translateLines(originalTexts, translateLang)
-                translatedLines.clear()
-                translatedLines.addAll(translations)
-            } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
-                val plainLines = lyrics!!.plainLyrics!!.lines()
-                val translations = LyricsTranslator.translateLines(plainLines, translateLang)
-                translatedPlain = translations.joinToString("\n")
+            withContext(Dispatchers.Default) {
+                if (parsedPairs.isNotEmpty()) {
+                    val originalTexts = parsedPairs.map { it.second.replace(STRIP_WORD_TAGS_REGEX, "").trim() }
+                    val translations = LyricsTranslator.translateLines(originalTexts, translateLang)
+                    withContext(Dispatchers.Main) {
+                        translatedLines.clear()
+                        translatedLines.addAll(translations)
+                    }
+                } else if (!lyrics?.plainLyrics.isNullOrBlank()) {
+                    val plainLines = lyrics!!.plainLyrics!!.lines()
+                    val translations = LyricsTranslator.translateLines(plainLines, translateLang)
+                    withContext(Dispatchers.Main) {
+                        translatedPlain = translations.joinToString("\n")
+                    }
+                }
             }
         } catch (_: Exception) {
         } finally {
@@ -201,9 +221,16 @@ fun LyricsScreen(
         }
     }
 
-    val activeLineIndex = remember(smoothPositionMs, syncedLines, isSynced) {
-        if (!isSynced || syncedLines.isEmpty()) -1
-        else syncedLines.indexOfLast { it.timestamp <= smoothPositionMs + 120L }
+    // Derived active line index with binary search: invalidates readers ONLY when line changes
+    val activeLineIndex by remember(syncedLines) {
+        derivedStateOf {
+            binarySearchActiveLine(syncedLines, positionProvider())
+        }
+    }
+
+    LaunchedEffect(syncedLines, activeLineIndex) {
+        hasActiveWords = isSynced && activeLineIndex in syncedLines.indices &&
+            syncedLines[activeLineIndex].words.isNotEmpty()
     }
 
     val listState = rememberLazyListState()
@@ -217,7 +244,7 @@ fun LyricsScreen(
             lastManualScrollTime = System.currentTimeMillis()
         } else if (isUserScrolling) {
             val captured = lastManualScrollTime
-            delay(2000)
+            delay(3000)
             if (lastManualScrollTime == captured && !isDragged) {
                 isUserScrolling = false
             }
@@ -228,7 +255,8 @@ fun LyricsScreen(
         isUserScrolling = false
     }
 
-    LaunchedEffect(activeLineIndex, isUserScrolling, syncedLines.size) {
+    // Fix 6: Safe auto-scroll with ~1/3 viewport target, animateScrollBy when close, scrollToItem when far
+    LaunchedEffect(activeLineIndex, isUserScrolling) {
         if (!isUserScrolling && activeLineIndex >= 0 && syncedLines.isNotEmpty()) {
             val firstLineTimestamp = syncedLines.firstOrNull()?.timestamp ?: 0L
             val headerOffset = if (firstLineTimestamp > 4000L) 1 else 0
@@ -247,7 +275,7 @@ fun LyricsScreen(
                     val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
 
                     if (targetItem != null && viewportHeight > 0) {
-                        val desiredY = (viewportHeight * 0.36f).toInt()
+                        val desiredY = (viewportHeight * 0.33f).toInt()
                         val itemCenter = targetItem.offset + (targetItem.size / 2)
                         val diff = itemCenter - desiredY
                         if (abs(diff) > 8) {
@@ -257,9 +285,8 @@ fun LyricsScreen(
                             )
                         }
                     } else {
-                        // Compose requires scrollOffset >= 0 (negative offsets throw IllegalArgumentException)
                         val anchorIndex = (safeTargetIndex - 1).coerceAtLeast(0)
-                        listState.animateScrollToItem(
+                        listState.scrollToItem(
                             index = anchorIndex,
                             scrollOffset = 0
                         )
@@ -274,11 +301,7 @@ fun LyricsScreen(
     }
 
     val lyricsStatusBadge = remember(isLoading, lyrics, isSynced, hasWordSync) {
-        val rawProvider = lyrics?.source
-            ?.removePrefix("Saved ")
-            ?.trim()
-            ?.uppercase()
-            .orEmpty()
+        val rawProvider = lyrics?.source?.removePrefix("Saved ")?.trim()?.uppercase().orEmpty()
         val isSaved = lyrics?.source?.startsWith("Saved") == true
         when {
             isLoading -> "SEARCHING..."
@@ -301,7 +324,7 @@ fun LyricsScreen(
         }
     }
 
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF09090B))) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF09090B))) {
         if (currentTrack != null) {
             val isAndroid12 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             AsyncImage(
@@ -340,38 +363,6 @@ fun LyricsScreen(
                 )
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(210.dp)
-                .align(androidx.compose.ui.Alignment.TopCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.58f),
-                            Color.Black.copy(alpha = 0.18f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(190.dp)
-                .align(androidx.compose.ui.Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.5f),
-                            Color.Black.copy(alpha = 0.88f)
-                        )
-                    )
-                )
-        )
-
         if (showOptionsMenu) {
             Box(
                 modifier = Modifier
@@ -392,12 +383,21 @@ fun LyricsScreen(
         ) {
             topBar()
 
+            // Header with Now Playing, sleek timeline, and play/pause button
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
                 lyricsSource = lyrics?.source,
                 isSynced = isSynced,
                 lyricsStatusBadge = lyricsStatusBadge,
                 isTrackLiked = isTrackLiked,
+                isPlaying = isPlaying,
+                duration = duration,
+                positionProvider = positionProvider,
+                onPlayPause = {
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    if (isPlaying) viewModel.pause() else viewModel.resume()
+                },
+                onSeek = { viewModel.seekTo(it) },
                 showOptionsMenu = showOptionsMenu,
                 availableVariants = availableVariants,
                 selectedVariant = selectedVariant,
@@ -450,7 +450,7 @@ fun LyricsScreen(
                     isSynced = isSynced,
                     syncedLines = syncedLines,
                     activeLineIndex = activeLineIndex,
-                    currentPosition = smoothPositionMs,
+                    positionProvider = positionProvider,
                     duration = duration,
                     listState = listState,
                     isUserScrolling = isUserScrolling,
@@ -464,23 +464,6 @@ fun LyricsScreen(
                     onSeekTo = { viewModel.seekTo(it) }
                 )
             }
-
-            LyricsBottomTransport(
-                currentPosition = currentPosition,
-                duration = duration,
-                isPlaying = isPlaying,
-                shuffleEnabled = playbackState.isShuffleEnabled,
-                repeatMode = playbackState.repeatMode,
-                onSeek = { viewModel.seekTo(it) },
-                onPlayPause = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    if (isPlaying) viewModel.pause() else viewModel.resume()
-                },
-                onPrevious = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); viewModel.previous() },
-                onNext = { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); viewModel.next() },
-                onToggleShuffle = { viewModel.toggleShuffle() },
-                onToggleRepeat = { viewModel.toggleRepeat() }
-            )
         }
 
         SongDetailsDialog(
@@ -490,4 +473,21 @@ fun LyricsScreen(
             onDismiss = { showTrackDetails = false }
         )
     }
+}
+
+internal fun binarySearchActiveLine(lines: List<LyricLine>, positionMs: Long): Int {
+    if (lines.isEmpty()) return -1
+    var low = 0
+    var high = lines.size - 1
+    var result = -1
+    while (low <= high) {
+        val mid = (low + high).ushr(1)
+        if (lines[mid].timestamp <= positionMs + 120L) {
+            result = mid
+            low = mid + 1
+        } else {
+            high = mid - 1
+        }
+    }
+    return result
 }
