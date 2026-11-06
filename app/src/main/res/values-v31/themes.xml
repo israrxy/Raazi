@@ -2,9 +2,9 @@
 <resources>
 
     <style name="Theme.Raazi" parent="Theme.Raazi.Base">
+        <!-- No splash logo/animation: flat launch window until the app draws. -->
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
-        <item name="android:windowSplashScreenAnimationDuration">520</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_blank</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>

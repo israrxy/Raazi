@@ -49,13 +49,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // A warm launch (process still alive) must look instant: skip the
-        // animated splash and go straight to content. Only a real cold start
-        // gets the intro. Read before flipping the flag.
-        val isWarmLaunch = AppLaunchState.hasCreatedUi
-        AppLaunchState.hasCreatedUi = true
-
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         enableEdgeToEdge()
 
@@ -159,17 +152,9 @@ class MainActivity : FragmentActivity() {
 
                         val pendingUri by incomingDeepLinkUri.collectAsStateWithLifecycle()
                         val shouldOpenPlayer by openPlayerRequest.collectAsStateWithLifecycle()
-                        var showSplash by remember {
-                            mutableStateOf(
-                                !isWarmLaunch &&
-                                    incomingDeepLinkUri.value == null &&
-                                    !openPlayerRequest.value
-                            )
-                        }
 
                         LaunchedEffect(shouldOpenPlayer) {
                             if (shouldOpenPlayer) {
-                                showSplash = false
                                 viewModel.requestExpandPlayer()
                                 openPlayerRequest.value = false
                             }
@@ -179,22 +164,15 @@ class MainActivity : FragmentActivity() {
                         LaunchedEffect(pendingUri) {
                             val uri = pendingUri
                             if (uri != null) {
-                                showSplash = false
                                 viewModel.handleDeepLink(uri)
                                 incomingDeepLinkUri.value = null
                                 intent?.data = null
                             }
                         }
 
-                        if (showSplash) {
-                            com.israrxy.raazi.ui.SplashScreen(
-                                isReady = onboardingCompleted != null,
-                                onSplashFinished = { showSplash = false }
-                            )
-                        } else if (onboardingCompleted == null) {
-                            // Warm launch: settings are still loading but we do
-                            // not want to replay the intro. A plain themed
-                            // background keeps the hand-off seamless.
+                        if (onboardingCompleted == null) {
+                            // Settings are still loading. Keep a flat themed
+                            // background so the launch stays logo-free.
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()

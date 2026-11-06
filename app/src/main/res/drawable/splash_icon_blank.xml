@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    No branded splash icon. Android 12+ requires an icon attribute to exist if
+    you want to override the default (the launcher icon), so we point it at a
+    fully transparent shape. The launch window is just the flat background
+    colour until the app's first frame.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <size
+        android:width="1dp"
+        android:height="1dp" />
+</shape>
