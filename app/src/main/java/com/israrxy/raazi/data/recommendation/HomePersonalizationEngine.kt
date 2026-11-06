@@ -23,8 +23,8 @@ enum class PersonalizedSectionKind {
  * onto the existing [com.israrxy.raazi.viewmodel.HomeSection] model.
  */
 object HomePersonalizationEngine {
-    private const val MAX_MIXES = 3
-    private const val MAX_BECAUSE = 2
+    private const val MAX_MIXES = 5
+    private const val MAX_BECAUSE = 3
     private const val MIX_SIZE = 16
     private const val FAMILIAR_PER_MIX = 5
     private const val MAX_PER_ARTIST = 2
@@ -70,7 +70,7 @@ object HomePersonalizationEngine {
                     used += items.map { it.id }
                     sections += PersonalizedSection(
                         id = "because_${seed.item.id.hashCode()}",
-                        title = "Because you listened to ${seed.item.title}",
+                        title = "Because you listened to ${seed.primaryArtist.ifBlank { seed.item.title }}",
                         kind = PersonalizedSectionKind.BECAUSE_YOU_LISTENED,
                         items = items
                     )
@@ -147,6 +147,26 @@ object HomePersonalizationEngine {
         }
 
         used += localIds
+        return interleave(result)
+    }
+
+    /**
+     * Alternates familiar and fresh tracks so a mix does not open with a long
+     * run of already-played songs: two familiar picks, then one discovery.
+     */
+    private fun interleave(items: List<MusicItem>): List<MusicItem> {
+        if (items.size <= FAMILIAR_PER_MIX) return items
+        val familiar = items.take(FAMILIAR_PER_MIX)
+        val discovery = items.drop(FAMILIAR_PER_MIX)
+        val result = mutableListOf<MusicItem>()
+        var familiarIndex = 0
+        var discoveryIndex = 0
+        while (familiarIndex < familiar.size || discoveryIndex < discovery.size) {
+            repeat(2) {
+                if (familiarIndex < familiar.size) result += familiar[familiarIndex++]
+            }
+            if (discoveryIndex < discovery.size) result += discovery[discoveryIndex++]
+        }
         return result
     }
 
