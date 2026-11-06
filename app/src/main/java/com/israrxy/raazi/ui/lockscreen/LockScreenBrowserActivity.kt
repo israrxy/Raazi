@@ -1,5 +1,6 @@
 package com.israrxy.raazi.ui.lockscreen
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -22,12 +23,17 @@ import com.israrxy.raazi.ui.theme.RaaziTheme
 import com.israrxy.raazi.viewmodel.LockScreenBrowserViewModel
 
 /**
- * Sleek song browser that renders above the keyguard.
+ * Song browser that renders above the keyguard while the device is locked and
+ * as a regular full-screen browser otherwise.
  *
- * The activity opts into `showWhenLocked` + `turnScreenOn`, which lets the
- * notification "Browse" action, the Quick Settings tile and the now-playing
- * widget open it without the user unlocking the device. If the user does unlock
- * while it is open, the overlay closes so the real app takes over.
+ * It is the target of the media notification / MediaSession content intent, the
+ * Quick Settings tile and the now-playing widget. Tapping the notification is
+ * the supported way in: System UI sends the PendingIntent, which is exempt from
+ * background activity launch limits, whereas a service calling `startActivity`
+ * is blocked on Android 10+.
+ *
+ * The activity opts into `showWhenLocked` + `turnScreenOn` so it is usable
+ * without an unlock, and closes itself once the user actually unlocks.
  */
 class LockScreenBrowserActivity : FragmentActivity() {
 
@@ -48,6 +54,7 @@ class LockScreenBrowserActivity : FragmentActivity() {
 
         setContent {
             val settingsDataStore = remember { SettingsDataStore(applicationContext) }
+            val isLockScreenMode = remember { isKeyguardLocked() }
             val dynamicColor by settingsDataStore.useDynamicColor
                 .collectAsStateWithLifecycle(initialValue = false)
             val accent by settingsDataStore.pastelAccent
@@ -67,6 +74,7 @@ class LockScreenBrowserActivity : FragmentActivity() {
             ) {
                 LockScreenBrowserScreen(
                     viewModel = browserViewModel,
+                    isLockScreenMode = isLockScreenMode,
                     onClose = { finish() },
                     onOpenApp = {
                         startActivity(
@@ -91,6 +99,9 @@ class LockScreenBrowserActivity : FragmentActivity() {
         runCatching { unregisterReceiver(userPresentReceiver) }
         super.onStop()
     }
+
+    private fun isKeyguardLocked(): Boolean =
+        (getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked == true
 
     private fun showOverKeyguard() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {

@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun LockScreenBrowserScreen(
     viewModel: LockScreenBrowserViewModel,
+    isLockScreenMode: Boolean,
     onClose: () -> Unit,
     onOpenApp: () -> Unit
 ) {
@@ -120,6 +121,7 @@ fun LockScreenBrowserScreen(
             item {
                 LockScreenTopBar(
                     isConnected = isConnected,
+                    isLockScreenMode = isLockScreenMode,
                     onOpenApp = onOpenApp,
                     onClose = onClose
                 )

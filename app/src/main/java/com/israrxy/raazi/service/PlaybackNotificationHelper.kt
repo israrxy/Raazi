@@ -21,7 +21,6 @@ import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import coil.imageLoader
 import coil.request.ImageRequest
-import com.israrxy.raazi.MainActivity
 import com.israrxy.raazi.R
 import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.model.RepeatMode
@@ -82,10 +81,19 @@ internal fun MusicPlaybackService.startForegroundService() {
     }
 }
 
+/**
+ * PendingIntent used both as the notification content intent and as the
+ * MediaSession session activity.
+ *
+ * It points at the lock-screen browser instead of the main activity because the
+ * PendingIntent is dispatched by System UI. That dispatch is exempt from
+ * background-activity-launch limits, whereas a `startActivity()` call from the
+ * playback service is not - which is why the old "Browse" custom action did
+ * nothing on Android 13+. The browser itself offers a one-tap jump into the app.
+ */
 internal fun MusicPlaybackService.createContentPendingIntent(): PendingIntent {
-    val contentIntent = Intent(this, MainActivity::class.java).apply {
+    val contentIntent = Intent(this, LockScreenBrowserActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        putExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER, true)
     }
     return PendingIntent.getActivity(
         this,
@@ -285,13 +293,12 @@ internal fun MusicPlaybackService.updateMediaSessionState() {
                 PlaybackStateCompat.ACTION_STOP
         )
         .setState(state, exoPlayer.currentPosition, 1f)
-        .addCustomAction(
-            PlaybackStateCompat.CustomAction.Builder(
-                MusicPlaybackService.ACTION_OPEN_BROWSER,
-                getString(R.string.lockscreen_browse_action),
-                R.drawable.ic_browse
-            ).build()
-        )
+        // NOTE: no "Browse" custom action here. On Android 13+ System UI turns
+        // custom actions into media buttons that call back into this service,
+        // and a startActivity() from the service is blocked by background
+        // activity launch limits. Tapping the notification/artwork opens the
+        // browser through the session activity PendingIntent instead, which is
+        // exempt because System UI is the sender.
         .addCustomAction(
             PlaybackStateCompat.CustomAction.Builder(
                 MusicPlaybackService.ACTION_TOGGLE_SHUFFLE,

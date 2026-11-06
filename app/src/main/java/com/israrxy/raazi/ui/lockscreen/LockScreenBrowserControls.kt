@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
@@ -64,6 +65,7 @@ internal enum class LockScreenTab(val label: String) {
 @Composable
 internal fun LockScreenTopBar(
     isConnected: Boolean,
+    isLockScreenMode: Boolean,
     onOpenApp: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -78,7 +80,7 @@ internal fun LockScreenTopBar(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Default.Lock,
+                    imageVector = if (isLockScreenMode) Icons.Default.Lock else Icons.Default.GraphicEq,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
@@ -94,7 +96,11 @@ internal fun LockScreenTopBar(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = if (isConnected) "Lock-screen mode" else "Connecting to player…",
+                text = when {
+                    !isConnected -> "Connecting to player…"
+                    isLockScreenMode -> "Lock-screen mode"
+                    else -> "Now playing"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
