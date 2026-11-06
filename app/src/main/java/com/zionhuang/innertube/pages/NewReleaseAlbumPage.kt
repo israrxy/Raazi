@@ -20,7 +20,7 @@ object NewReleaseAlbumPage {
                     name = it.text,
                     id = it.navigationEndpoint?.browseEndpoint?.browseId
                 )
-            } ?: return null,
+            },
             year = renderer.subtitle.runs.lastOrNull()?.text?.toIntOrNull(),
             thumbnail = renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
             explicit = renderer.subtitleBadges?.find {
