@@ -174,9 +174,10 @@ class MainActivity : FragmentActivity() {
                         }
 
                         if (showSplash || onboardingCompleted == null) {
-                            com.israrxy.raazi.ui.SplashScreen {
-                                showSplash = false
-                            }
+                            com.israrxy.raazi.ui.SplashScreen(
+                                isReady = onboardingCompleted != null,
+                                onSplashFinished = { showSplash = false }
+                            )
                         } else {
                             if (onboardingCompleted == false) {
                                 com.israrxy.raazi.ui.OnboardingScreen(viewModel = viewModel) {

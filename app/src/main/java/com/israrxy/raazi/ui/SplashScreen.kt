@@ -2,145 +2,161 @@ package com.israrxy.raazi.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.israrxy.raazi.R
+import com.israrxy.raazi.ui.splash.SplashBackdrop
+import com.israrxy.raazi.ui.splash.SplashBackground
+import com.israrxy.raazi.ui.splash.SplashEqualizer
+import com.israrxy.raazi.ui.splash.SplashLogo
+import com.israrxy.raazi.ui.splash.SplashTagline
+import com.israrxy.raazi.ui.splash.SplashWordmark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Motion splash:
+ *
+ * 1. Continues the system splash icon at the same size (scale starts at 0.86).
+ * 2. The logo lifts into place while the aurora backdrop fades in.
+ * 3. Wordmark letters rise in sequence, tagline tracking expands, equalizer appears.
+ * 4. The equalizer keeps dancing while settings load, then the whole scene fades
+ *    and scales away once [isReady] is true.
+ */
 @Composable
-fun SplashScreen(onSplashFinished: () -> Unit) {
-    val logoScale = remember { Animatable(0.82f) }
-    val logoAlpha = remember { Animatable(0f) }
-    val textAlpha = remember { Animatable(0f) }
-    val textOffset = remember { Animatable(18f) }
+fun SplashScreen(
+    isReady: Boolean,
+    onSplashFinished: () -> Unit
+) {
+    val backdropIn = remember { Animatable(0f) }
+    val logoScale = remember { Animatable(0.86f) }
+    val lift = remember { Animatable(60f) }
+    val wordmark = remember { Animatable(0f) }
+    val tagline = remember { Animatable(0f) }
+    val equalizerIn = remember { Animatable(0f) }
+    val exit = remember { Animatable(0f) }
+    var entranceDone by remember { mutableStateOf(false) }
+
+    val infinite = rememberInfiniteTransition(label = "splash-motion")
+    val drift by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing)),
+        label = "splash-drift"
+    )
+    val haloPhase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing)),
+        label = "splash-halo"
+    )
+    val breath by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "splash-breath"
+    )
+    val eqPhase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
+        label = "splash-equalizer"
+    )
 
     LaunchedEffect(Unit) {
+        launch { backdropIn.animateTo(1f, tween(600, easing = FastOutSlowInEasing)) }
         launch {
-            logoScale.animateTo(
-                targetValue = 1.04f,
-                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
-            )
+            logoScale.animateTo(1.06f, tween(520, easing = FastOutSlowInEasing))
             logoScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
                     stiffness = Spring.StiffnessMedium
                 )
             )
         }
-        launch {
-            logoAlpha.animateTo(targetValue = 1f, animationSpec = tween(320))
-        }
-        launch {
-            textAlpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 380, delayMillis = 120)
-            )
-            textOffset.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
-            )
-        }
-        delay(620)
-        onSplashFinished()
+        launch { lift.animateTo(0f, tween(760, delayMillis = 60, easing = FastOutSlowInEasing)) }
+        launch { wordmark.animateTo(1f, tween(720, delayMillis = 140, easing = FastOutSlowInEasing)) }
+        launch { tagline.animateTo(1f, tween(560, delayMillis = 420, easing = FastOutSlowInEasing)) }
+        launch { equalizerIn.animateTo(1f, tween(420, delayMillis = 620)) }
+        delay(1150)
+        entranceDone = true
     }
+
+    LaunchedEffect(isReady, entranceDone) {
+        if (isReady && entranceDone) {
+            exit.animateTo(1f, tween(340, easing = FastOutSlowInEasing))
+            onSplashFinished()
+        }
+    }
+
+    val haloReveal = ((logoScale.value - 0.87f) / 0.19f).coerceIn(0f, 1f) * backdropIn.value
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF17211F), Color(0xFF08090B)),
-                    radius = 900f
-                )
-            ),
-        contentAlignment = Alignment.Center
+            .background(SplashBackground)
     ) {
         Box(
             modifier = Modifier
-                .size(300.dp)
-                .graphicsLayer(alpha = logoAlpha.value * 0.55f)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                            Color.Transparent
-                        )
-                    ),
-                    CircleShape
-                )
-        )
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = 1f - exit.value
+                    scaleX = 1f + 0.05f * exit.value
+                    scaleY = 1f + 0.05f * exit.value
+                }
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.raazi_logo),
-                contentDescription = "Raazi Logo",
+            Box(
                 modifier = Modifier
-                    .size(184.dp)
-                    .scale(logoScale.value)
-                    .clip(CircleShape)
-                    .graphicsLayer(alpha = logoAlpha.value),
-                contentScale = ContentScale.Crop
-            )
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = backdropIn.value * (1f - 0.35f * exit.value) }
+            ) {
+                SplashBackdrop(phase = drift)
+            }
 
-            Spacer(Modifier.height(22.dp))
-
-            Text(
-                text = "Raazi",
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = (-1).sp,
+            Column(
                 modifier = Modifier
-                    .offset(y = textOffset.value.dp)
-                    .graphicsLayer(alpha = textAlpha.value)
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = "MUSIC, YOUR WAY",
-                color = Color(0xFFA7F3D0).copy(alpha = 0.78f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 3.5.sp,
-                modifier = Modifier
-                    .offset(y = textOffset.value.dp)
-                    .graphicsLayer(alpha = textAlpha.value)
-            )
+                    .align(Alignment.Center)
+                    .graphicsLayer { translationY = lift.value.dp.toPx() },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                SplashLogo(
+                    logoScale = logoScale.value,
+                    haloPhase = haloPhase,
+                    breath = breath,
+                    haloAlpha = haloReveal
+                )
+                Spacer(Modifier.height(14.dp))
+                SplashWordmark(progress = wordmark.value)
+                Spacer(Modifier.height(10.dp))
+                SplashTagline(progress = tagline.value)
+                Spacer(Modifier.height(22.dp))
+                SplashEqualizer(phase = eqPhase, alpha = equalizerIn.value)
+            }
         }
     }
 }

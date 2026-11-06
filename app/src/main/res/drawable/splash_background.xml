@@ -2,8 +2,8 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
     <item
-        android:width="180dp"
-        android:height="180dp"
-        android:drawable="@drawable/ic_splash_logo"
+        android:width="160dp"
+        android:height="160dp"
+        android:drawable="@drawable/raazi_logo"
         android:gravity="center" />
 </layer-list>
