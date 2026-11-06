@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Launch window only. This is what Android paints before the process has
+    drawn anything (cold and warm starts, and every OEM skin that shows the
+    starting window). It must stay a flat colour: any drawable here is the
+    "logo flash" that appears before Compose is alive. The branded mark is
+    drawn by the Compose splash (cold starts only) and, on Android 12+, by the
+    system splash icon.
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
-    <item
-        android:width="160dp"
-        android:height="160dp"
-        android:drawable="@drawable/ic_splash_mark"
-        android:gravity="center" />
 </layer-list>
