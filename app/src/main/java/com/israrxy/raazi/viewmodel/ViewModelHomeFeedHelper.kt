@@ -2,6 +2,7 @@ package com.israrxy.raazi.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.data.engine.QuickPicksEngine
 import com.israrxy.raazi.model.MusicItem
@@ -21,6 +22,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
         _homeFeedState.value = _homeFeedState.value.copy(isLoading = true, errorMessage = null)
         try {
             loadHomeInteractionSignals()
+            refreshPersonalizedSections()
 
             launch {
                 try {
@@ -69,35 +71,34 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
             }
 
             try {
-                val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
-                val homeResult = withTimeoutOrNull(5000L) {
-                    YouTube.home(params = chipParams)
-                }
-                if (homeResult != null && homeResult.isSuccess) {
-                    var finalPage = homeResult.getOrThrow()
-                    val firstContinuation = finalPage.continuation
-                    if (finalPage.sections.size < 6 && firstContinuation != null) {
-                        YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
-                            finalPage = finalPage.copy(
-                                sections = finalPage.sections + nextPage.sections,
-                                continuation = nextPage.continuation
-                            )
-                        }
-                    }
-                    val ytQuickPicks = finalPage.sections.firstOrNull { s ->
-                        s.title.contains("quick pick", ignoreCase = true) ||
-                        s.label?.contains("start radio", ignoreCase = true) == true
-                    }
-                    if (ytQuickPicks != null) {
-                        // YouTube's generic quick picks are excluded to ensure only personalized/regional picks are shown
-                        finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
-                    }
-                    _homePage.value = finalPage
-                    cachedDefaultHomePage = finalPage
-                    _error.value = null
-                }
+                YouTubeAccountSession.ensureBootstrapped(settingsDataStore)
             } catch (e: Exception) {
-                Log.e("MusicVM", "Error loading InnerTube home", e)
+                Log.e("MusicVM", "YouTube session bootstrap failed", e)
+            }
+            if (YouTube.cookie?.contains("SAPISID") == true) {
+                try {
+                    val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                    val homeResult = withTimeoutOrNull(8000L) {
+                        YouTube.home(params = chipParams)
+                    }
+                    if (homeResult != null && homeResult.isSuccess) {
+                        var finalPage = homeResult.getOrThrow()
+                        val firstContinuation = finalPage.continuation
+                        if (finalPage.sections.size < 8 && firstContinuation != null) {
+                            YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
+                                finalPage = finalPage.copy(
+                                    sections = finalPage.sections + nextPage.sections,
+                                    continuation = nextPage.continuation
+                                )
+                            }
+                        }
+                        _homePage.value = finalPage
+                        cachedDefaultHomePage = finalPage
+                        _error.value = null
+                    }
+                } catch (e: Exception) {
+                    Log.e("MusicVM", "Error loading InnerTube home", e)
+                }
             }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading home", e)
@@ -155,6 +156,7 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
         rebuildHomeFeedState(isRefreshing = true)
         try {
             loadHomeInteractionSignals()
+            refreshPersonalizedSections(force = true)
 
             launch {
                 try {
@@ -199,18 +201,12 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
             }
 
             try {
-                val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
-                YouTube.home(params = chipParams).onSuccess { page ->
-                    var finalPage = page
-                    val ytQuickPicks = finalPage.sections.firstOrNull { s ->
-                        s.title.contains("quick pick", ignoreCase = true) ||
-                        s.label?.contains("start radio", ignoreCase = true) == true
+                YouTubeAccountSession.ensureBootstrapped(settingsDataStore)
+                if (YouTube.cookie?.contains("SAPISID") == true) {
+                    val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                    YouTube.home(params = chipParams).onSuccess { page ->
+                        _homePage.value = page
                     }
-                    if (ytQuickPicks != null) {
-                        // YouTube's generic quick picks are excluded to ensure only personalized/regional picks are shown
-                        finalPage = finalPage.copy(sections = finalPage.sections.filter { it != ytQuickPicks })
-                    }
-                    _homePage.value = finalPage
                 }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error refreshing YouTube home", e)
@@ -267,6 +263,7 @@ internal fun MusicPlayerViewModel.refreshHomeSectionImpl(sectionId: String) {
 }
 
 internal fun MusicPlayerViewModel.loadMoreSectionsImpl() {
+    if (YouTube.cookie?.contains("SAPISID") != true) return
     val continuation = _homePage.value?.continuation
     if (continuation == null || _isLoadingMore.value) return
 

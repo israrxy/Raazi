@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.PlaybackState
@@ -33,6 +34,10 @@ internal fun MusicPlayerViewModel.createServiceConnection(): ServiceConnection =
 
             val stateListener: (PlaybackState) -> Unit = { state ->
                 val oldState = _playbackState.value
+                val oldTrack = oldState.currentTrack
+                if (oldTrack != null && oldTrack.id != state.currentTrack?.id) {
+                    recordPlaybackOutcome(oldTrack, oldState)
+                }
                 _playbackState.value = state
                 if (state.currentTrack?.id != oldState.currentTrack?.id) {
                     state.currentTrack?.let { track ->
@@ -351,6 +356,31 @@ internal fun MusicPlayerViewModel.handleDeepLinkImpl(uri: Uri) {
             _pendingDeepLinkEvent.value = MusicPlayerViewModel.DeepLinkEvent.ExpandPlayer
         } catch (e: Exception) {
             Log.e("MusicVM", "Error handling deep link: $cleanVideoId", e)
+        }
+    }
+}
+
+/**
+ * Derives a completion/skip signal from the elapsed playback position so the
+ * home personalization engine can learn even without a YouTube account.
+ */
+internal fun MusicPlayerViewModel.recordPlaybackOutcome(track: MusicItem, state: PlaybackState) {
+    val duration = track.duration.takeIf { it > 0L } ?: state.duration
+    if (duration <= 0L) return
+    val ratio = (state.currentPosition.toDouble() / duration.toDouble()).coerceIn(0.0, 1.0)
+    val action = when {
+        ratio >= 0.8 -> HomeInteractionEntity.ACTION_COMPLETE
+        state.currentPosition >= 5_000L && ratio <= 0.25 -> HomeInteractionEntity.ACTION_SKIP
+        else -> return
+    }
+    viewModelScope.launch(Dispatchers.IO) {
+        runCatching {
+            repository.recordHomeInteraction(
+                itemId = track.id,
+                sectionId = "playback",
+                action = action,
+                sourceType = HomeInteractionEntity.SOURCE_LOCAL
+            )
         }
     }
 }

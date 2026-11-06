@@ -329,21 +329,24 @@ internal fun parsePlaylistContinuationPage(response: BrowseResponse): PlaylistCo
 }
 
 internal fun parseHomePage(response: BrowseResponse): HomePage {
-    val continuation = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
-        ?.tabRenderer?.content?.sectionListRenderer?.continuations?.getContinuation()
     val sectionListRender = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
         ?.tabRenderer?.content?.sectionListRenderer
-    val sections = sectionListRender?.contents!!
-        .mapNotNull { content ->
-            content.musicCarouselShelfRenderer?.let {
-                HomePage.Section.fromMusicCarouselShelfRenderer(it)
-            } ?: content.musicShelfRenderer?.let {
-                HomePage.Section.fromMusicShelfRenderer(it)
-            } ?: content.gridRenderer?.let {
-                HomePage.Section.fromGridRenderer(it)
+    val continuation = sectionListRender?.continuations?.getContinuation()
+    val sections = sectionListRender?.contents.orEmpty()
+        .flatMap { content ->
+            buildList {
+                content.musicCarouselShelfRenderer?.let { HomePage.Section.fromMusicCarouselShelfRenderer(it) }?.let(::add)
+                content.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+                content.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+                content.gridRenderer?.let { HomePage.Section.fromGridRenderer(it) }?.let(::add)
+                content.itemSectionRenderer?.contents.orEmpty().forEach { inner ->
+                    inner.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+                    inner.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+                }
             }
-        }.toMutableList()
-    val chips = sectionListRender.header?.chipCloudRenderer?.chips?.mapNotNull { HomePage.Chip.fromChipCloudChipRenderer(it) }
+        }
+    val chips = sectionListRender?.header?.chipCloudRenderer?.chips
+        ?.mapNotNull { HomePage.Chip.fromChipCloudChipRenderer(it) }
     return HomePage(chips, sections, continuation)
 }
 

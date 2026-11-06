@@ -98,7 +98,7 @@ class RaaziApplication : Application(), ImageLoaderFactory {
                 android.util.Log.e("RaaziApp", "NewPipe extractor init failed", e)
             }
             try {
-                YouTubeAccountSession.bootstrap(SettingsDataStore(applicationContext))
+                YouTubeAccountSession.ensureBootstrapped(SettingsDataStore(applicationContext))
             } catch (e: Exception) {
                 android.util.Log.e("RaaziApp", "YouTube account bootstrap failed", e)
             }

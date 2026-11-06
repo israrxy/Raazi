@@ -290,12 +290,33 @@ interface MusicDao {
     fun deleteOldHomeInteractions(before: Long): Int
 
     @Query("""
+        SELECT itemId, action, COUNT(*) AS count
+        FROM home_interactions
+        WHERE action IN (:actions) AND timestamp > :since
+        GROUP BY itemId, action
+    """)
+    fun getHomeSignalCounts(actions: List<String>, since: Long): List<HomeSignalCount>
+
+    @Query("""
         SELECT t.* FROM tracks t
         INNER JOIN related_songs r ON t.id = r.relatedTrackId
         WHERE r.sourceTrackId = :trackId
     """)
     fun getRelatedTracks(trackId: String): Flow<List<TrackEntity>>
+
+    @Query("""
+        SELECT t.* FROM tracks t
+        INNER JOIN related_songs r ON t.id = r.relatedTrackId
+        WHERE r.sourceTrackId = :trackId
+    """)
+    fun getRelatedTracksDirect(trackId: String): List<TrackEntity>
 }
+
+data class HomeSignalCount(
+    val itemId: String,
+    val action: String,
+    val count: Int
+)
 
 data class PlaylistWithTracks(
     @Embedded val playlist: PlaylistEntity,
