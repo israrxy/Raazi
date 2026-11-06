@@ -8,6 +8,7 @@ import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.YTItem
 
 private const val RECENT_PLAY_PENALTY = 0.55
+private const val RECENT_PLAY_FLAT_PENALTY = 0.25
 
 /**
  * Two-tier dedupe + anonymous-shelf personalization.
@@ -28,8 +29,36 @@ internal class HomeFeedRanking(
     private val discoverySeen = mutableSetOf<String>()
     private val appearances = mutableMapOf<String, Int>()
 
-    fun familiarMusic(items: List<MusicItem>, limit: Int): List<MusicItem> =
-        selectMusic(items, limit, familiarSeen, checkFamiliar = true)
+    fun familiarMusic(
+        items: List<MusicItem>,
+        limit: Int,
+        floor: Int = 0,
+        recordInFamiliarSeen: Boolean = true
+    ): List<MusicItem> {
+        val targetSeen = if (recordInFamiliarSeen) familiarSeen else mutableSetOf()
+        val picked = selectMusic(
+            items = items,
+            limit = limit,
+            seen = targetSeen,
+            checkFamiliar = recordInFamiliarSeen
+        )
+        if (picked.size >= floor || items.isEmpty()) return picked
+
+        val result = picked.toMutableList()
+        val pickedIds = result.mapTo(mutableSetOf()) { it.id }
+        val fallbackFloor = minOf(floor, limit, items.size)
+        for (item in items) {
+            if (result.size >= fallbackFloor) break
+            val id = item.id
+            if (id.isBlank() || id in dismissedIds || id in pickedIds) continue
+            if ((appearances[id] ?: 0) >= maxAppearances) continue
+            pickedIds += id
+            if (recordInFamiliarSeen) familiarSeen += id
+            appearances[id] = (appearances[id] ?: 0) + 1
+            result += item
+        }
+        return result
+    }
 
     fun discoveryMusic(items: List<MusicItem>, limit: Int): List<MusicItem> =
         selectMusic(items, limit, discoverySeen, checkFamiliar = false)
@@ -92,7 +121,11 @@ internal class HomeFeedRanking(
      * played, so discovery rails stay fresh instead of replaying the same songs.
      */
     private fun discoveryScore(id: String, affinity: Double): Double =
-        if (id in recentlyPlayedIds) affinity * RECENT_PLAY_PENALTY else affinity
+        if (id in recentlyPlayedIds) {
+            if (affinity > 0.0) affinity * RECENT_PLAY_PENALTY else -RECENT_PLAY_FLAT_PENALTY
+        } else {
+            affinity
+        }
 
     fun affinityOf(item: YTItem): Double {
         val artists = when (item) {

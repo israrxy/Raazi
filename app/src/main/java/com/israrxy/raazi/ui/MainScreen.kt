@@ -28,6 +28,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,6 +54,8 @@ import kotlin.math.roundToInt
 @Composable
 fun MainScreen(viewModel: MusicPlayerViewModel) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val settingsDataStore = remember { SettingsDataStore(context) }
     val navController = rememberNavController()
     val currentTrackFlow = remember(viewModel) {
@@ -96,6 +100,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     val expandPlayer: () -> Unit = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
         playerTransition.captureOrigin()
         isExpanded = true
         if (defaultPlayerScreen == "LYRICS") {
@@ -107,6 +113,8 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     val onTrackSelectExpandPlayer: () -> Unit = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
         if (openPlayerOnTrackSelect) {
             expandPlayer()
         }
@@ -160,7 +168,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     }
 
     LaunchedEffect(isExpanded) {
-        if (!isExpanded) {
+        if (isExpanded) {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        } else {
             snapshotFlow { playerExpansion.value }.first { it <= 0.001f }
             playerTransition.clearOrigin()
         }

@@ -9,6 +9,9 @@ import com.israrxy.raazi.data.recommendation.ListeningProfileBuilder
 import com.israrxy.raazi.data.recommendation.PersonalizedSection
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.PlaylistItem
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -78,7 +81,7 @@ internal fun MusicPlayerViewModel.loadDiscoverySources(force: Boolean = false) {
     }
 }
 
-private suspend fun MusicPlayerViewModel.fetchCommunityPlaylists(): List<PlaylistItem> {
+private suspend fun MusicPlayerViewModel.fetchCommunityPlaylists(): List<PlaylistItem> = coroutineScope {
     val artistSeeds = runCatching {
         repository.playbackHistory.first()
             .mapNotNull { it.artist.split(',').firstOrNull()?.trim() }
@@ -91,19 +94,17 @@ private suspend fun MusicPlayerViewModel.fetchCommunityPlaylists(): List<Playlis
         listOf("Trending hits", "Chill mix", "Party hits")
     }
 
-    val playlists = mutableListOf<PlaylistItem>()
-    for (seed in seeds) {
-        val result = runCatching {
-            withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
-                YouTube.search(seed, YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST)
-            }
-        }.getOrNull()?.getOrNull()
-
-        result?.items?.forEach { item ->
-            if (item is PlaylistItem) playlists += item
+    val playlists = seeds.map { seed ->
+        async {
+            runCatching {
+                withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
+                    YouTube.search(seed, YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST)
+                }
+            }.getOrNull()?.getOrNull()?.items?.filterIsInstance<PlaylistItem>().orEmpty()
         }
-    }
-    return playlists.distinctBy { it.id }.take(20)
+    }.awaitAll().flatten()
+
+    playlists.distinctBy { it.id }.take(20)
 }
 
 private const val REQUEST_TIMEOUT_MS = 5000L

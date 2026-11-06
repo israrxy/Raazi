@@ -76,6 +76,13 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         emptyList()
     )
 
+    val playbackHistory: StateFlow<List<com.israrxy.raazi.model.MusicItem>> = repository.playbackHistory
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            emptyList()
+        )
+
     private val suggestionCache = java.util.concurrent.ConcurrentHashMap<String, CachedSuggestionBundle>()
 
     init {
@@ -176,6 +183,94 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                 saveSearchHistory(query = normalizedQuery)
             } finally {
                 _isSearching.value = false
+            }
+        }
+    }
+
+    fun resolvePlayableHistoryItem(
+        history: SearchHistoryEntity,
+        onResolved: (com.israrxy.raazi.model.MusicItem) -> Unit
+    ) {
+        val targetTitle = (history.resultTitle?.takeIf { it.isNotBlank() } ?: history.query).trim()
+        val targetArtist = history.resultArtist?.trim().orEmpty()
+
+        val candidates = playbackHistory.value + topResults.value + _searchResults.value?.items.orEmpty()
+        val matchedTrack = candidates.firstOrNull { item ->
+            item.id.isNotBlank() &&
+                item.title.equals(targetTitle, ignoreCase = true) &&
+                (targetArtist.isBlank() ||
+                    item.artist.equals(targetArtist, ignoreCase = true) ||
+                    item.artist.contains(targetArtist, ignoreCase = true))
+        } ?: candidates.firstOrNull { item ->
+            item.id.isNotBlank() && item.title.equals(targetTitle, ignoreCase = true)
+        } ?: candidates.firstOrNull { item ->
+            item.id.isNotBlank() &&
+                !history.thumbnailUrl.isNullOrBlank() &&
+                item.thumbnailUrl == history.thumbnailUrl
+        }
+
+        if (matchedTrack != null) {
+            onResolved(matchedTrack)
+            return
+        }
+
+        val thumbUrl = history.thumbnailUrl.orEmpty()
+        if (thumbUrl.contains("ytimg.com/vi/")) {
+            val videoId = thumbUrl.substringAfter("ytimg.com/vi/").substringBefore("/").trim()
+            if (videoId.isNotBlank() && videoId != thumbUrl) {
+                onResolved(
+                    com.israrxy.raazi.model.MusicItem(
+                        id = videoId,
+                        title = targetTitle,
+                        artist = targetArtist.ifBlank { "Unknown Artist" },
+                        duration = 0L,
+                        thumbnailUrl = thumbUrl,
+                        audioUrl = "",
+                        videoUrl = videoId,
+                        contentType = com.israrxy.raazi.model.MusicContentType.SONG
+                    )
+                )
+                return
+            }
+        }
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val dbHistory = runCatching { musicDao.getAllPlaybackHistoryDirect() }.getOrDefault(emptyList())
+            val dbMatch = dbHistory.firstOrNull { entity ->
+                entity.id.isNotBlank() &&
+                    entity.title.equals(targetTitle, ignoreCase = true) &&
+                    (targetArtist.isBlank() ||
+                        entity.artist.equals(targetArtist, ignoreCase = true) ||
+                        entity.artist.contains(targetArtist, ignoreCase = true))
+            } ?: dbHistory.firstOrNull { entity ->
+                entity.id.isNotBlank() && entity.title.equals(targetTitle, ignoreCase = true)
+            }
+            if (dbMatch != null) {
+                val item = com.israrxy.raazi.model.MusicItem(
+                    id = dbMatch.id,
+                    title = dbMatch.title,
+                    artist = dbMatch.artist,
+                    duration = dbMatch.duration,
+                    thumbnailUrl = dbMatch.thumbnailUrl,
+                    audioUrl = dbMatch.audioUrl,
+                    videoUrl = dbMatch.videoUrl.ifBlank { dbMatch.id },
+                    contentType = com.israrxy.raazi.model.MusicContentType.SONG
+                )
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResolved(item)
+                }
+                return@launch
+            }
+
+            val searchQuery = if (targetArtist.isNotBlank()) "$targetTitle $targetArtist" else targetTitle
+            val result = runCatching { repository.searchMusic(searchQuery, _selectedService.value) }.getOrNull()
+            val bestTrack = result?.topResult?.takeIf { it.id.isNotBlank() && !it.isPlaylist }
+                ?: result?.topTracks?.firstOrNull { it.id.isNotBlank() }
+                ?: result?.items?.firstOrNull { it.id.isNotBlank() && !it.isPlaylist }
+            if (bestTrack != null) {
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResolved(bestTrack)
+                }
             }
         }
     }

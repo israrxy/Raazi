@@ -37,13 +37,15 @@ internal fun SearchSuggestionsAndHistoryList(
     suggestionsListState: LazyListState,
     normalizedSearchQuery: String,
     searchHistory: List<SearchHistoryEntity>,
+    playbackHistory: List<MusicItem> = emptyList(),
     searchSuggestions: List<String>,
     topResults: List<MusicItem>,
     onClearHistory: () -> Unit,
     onDeleteHistory: (SearchHistoryEntity) -> Unit,
     onSubmitSuggestionOrHistory: (String) -> Unit,
     onFillQuery: (String) -> Unit = onSubmitSuggestionOrHistory,
-    onPreviewItemClick: (MusicItem) -> Unit
+    onPreviewItemClick: (MusicItem) -> Unit,
+    onHistorySongClick: (SearchHistoryEntity) -> Unit = { onSubmitSuggestionOrHistory(it.query) }
 ) {
     LazyColumn(
         state = suggestionsListState,
@@ -61,9 +63,16 @@ internal fun SearchSuggestionsAndHistoryList(
                 }
 
                 items(searchHistory.take(10), key = { it.id }) { history ->
+                    val isPlayedSongHistory = !history.resultTitle.isNullOrBlank() || !history.thumbnailUrl.isNullOrBlank()
                     RecentSearchRow(
                         history = history,
-                        onClick = { onSubmitSuggestionOrHistory(history.query) },
+                        onClick = {
+                            if (isPlayedSongHistory) {
+                                onHistorySongClick(history)
+                            } else {
+                                onSubmitSuggestionOrHistory(history.query)
+                            }
+                        },
                         onDelete = { onDeleteHistory(history) }
                     )
                 }
@@ -73,7 +82,45 @@ internal fun SearchSuggestionsAndHistoryList(
                 }
             }
         } else {
-            val matchingHistory = searchHistory.take(4)
+            val enrichedSearchHistory = searchHistory.map { entry ->
+                if (!entry.resultTitle.isNullOrBlank() || !entry.thumbnailUrl.isNullOrBlank()) {
+                    entry
+                } else {
+                    val matchedTrack = playbackHistory.firstOrNull {
+                        it.title.equals(entry.query.trim(), ignoreCase = true)
+                    }
+                    if (matchedTrack != null) {
+                        entry.copy(
+                            thumbnailUrl = matchedTrack.thumbnailUrl,
+                            resultTitle = matchedTrack.title,
+                            resultArtist = matchedTrack.artist
+                        )
+                    } else {
+                        entry
+                    }
+                }
+            }
+            val existingTitles = enrichedSearchHistory.mapNotNull {
+                (it.resultTitle ?: it.query).trim().lowercase().takeIf(String::isNotEmpty)
+            }.toSet()
+            val playbackMatches = playbackHistory
+                .filter { track ->
+                    track.title.trim().lowercase() !in existingTitles &&
+                        (track.title.contains(normalizedSearchQuery, ignoreCase = true) ||
+                            track.artist.contains(normalizedSearchQuery, ignoreCase = true))
+                }
+                .take(4)
+                .mapIndexed { idx, track ->
+                    SearchHistoryEntity(
+                        id = -(idx + 1L) - track.id.hashCode().toLong(),
+                        query = track.title,
+                        thumbnailUrl = track.thumbnailUrl,
+                        resultTitle = track.title,
+                        resultArtist = track.artist
+                    )
+                }
+
+            val matchingHistory = (enrichedSearchHistory + playbackMatches).take(4)
             val historyQueries = matchingHistory.map { it.query.trim().lowercase() }.toSet()
             val historyTrackTitles = matchingHistory.mapNotNull { it.resultTitle?.trim()?.lowercase() }.toSet()
 
@@ -91,11 +138,19 @@ internal fun SearchSuggestionsAndHistoryList(
 
             // 1. Matching recent history at top (just like YT Music)
             if (matchingHistory.isNotEmpty()) {
-                items(matchingHistory, key = { "recent_match_${it.id}" }) { history ->
+                items(matchingHistory, key = { "recent_match_${it.id}_${it.query}" }) { history ->
+                    val isPlayedSongHistory = !history.resultTitle.isNullOrBlank() || !history.thumbnailUrl.isNullOrBlank()
                     RecentSearchRow(
                         history = history,
-                        onClick = { onSubmitSuggestionOrHistory(history.query) },
-                        onDelete = { onDeleteHistory(history) }
+                        onClick = {
+                            if (isPlayedSongHistory) {
+                                onHistorySongClick(history)
+                            } else {
+                                onSubmitSuggestionOrHistory(history.query)
+                            }
+                        },
+                        onDelete = { onDeleteHistory(history) },
+                        showHistoryIndicatorInsteadOfDelete = isPlayedSongHistory
                     )
                 }
             }
@@ -254,7 +309,8 @@ internal fun SearchActionRow(
 internal fun RecentSearchRow(
     history: SearchHistoryEntity,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    showHistoryIndicatorInsteadOfDelete: Boolean = false
 ) {
     val primaryText = history.resultTitle?.takeIf { it.isNotBlank() } ?: history.query
     val secondaryText = history.resultArtist?.takeIf { it.isNotBlank() }
@@ -302,8 +358,21 @@ internal fun RecentSearchRow(
             }
         }
 
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Close, "Remove from history", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showHistoryIndicatorInsteadOfDelete) {
+            Box(
+                modifier = Modifier.size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "From playback history",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Close, "Remove from history", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

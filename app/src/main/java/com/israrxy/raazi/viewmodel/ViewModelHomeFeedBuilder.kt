@@ -130,7 +130,11 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         title = "Keep Listening",
         type = HomeSectionType.KEEP_LISTENING,
         source = HomeInteractionEntity.SOURCE_LOCAL,
-        items = ranking.familiarMusic(orderedHistory, 14),
+        items = ranking.familiarMusic(
+            items = orderedHistory,
+            limit = 14,
+            recordInFamiliarSeen = false
+        ),
         actionLabel = "Refresh"
     )
 
@@ -184,7 +188,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
             title = section.title,
             type = section.type,
             source = section.sourceType,
-            items = ranking.familiarMusic(items, 16)
+            items = ranking.familiarMusic(items = items, limit = 16, floor = 6)
         )
     }
 

@@ -47,6 +47,7 @@ fun SearchScreen(
     val isSearching by searchViewModel.isSearching.collectAsState()
     val searchSuggestions by searchViewModel.searchSuggestions.collectAsState()
     val searchHistory by searchViewModel.searchHistory.collectAsState()
+    val playbackHistory by searchViewModel.playbackHistory.collectAsStateWithLifecycle()
     val topResults by searchViewModel.topResults.collectAsStateWithLifecycle()
     val favoriteTracks by playerViewModel.favoriteTracks.collectAsStateWithLifecycle()
     val savedCollectionIds by playerViewModel.savedCollectionIds.collectAsStateWithLifecycle()
@@ -54,6 +55,7 @@ fun SearchScreen(
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val dismissKeyboard: () -> Unit = { keyboardController?.hide(); focusManager.clearFocus() }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedTracks by remember { mutableStateOf(setOf<MusicItem>()) }
@@ -137,6 +139,7 @@ fun SearchScreen(
     }
 
     val handleOpenOrPlayItem: (MusicItem) -> Unit = { musicItem ->
+        dismissKeyboard()
         when {
             musicItem.isPlaylistResult() -> onNavigateToPlaylist(musicItem.id)
             musicItem.isArtistResult() -> onNavigateToArtist(musicItem.artistId ?: musicItem.id, musicItem.title)
@@ -200,6 +203,7 @@ fun SearchScreen(
                     )
                     IconButton(onClick = {
                         if (selectedTracks.isNotEmpty()) {
+                            dismissKeyboard()
                             playerViewModel.playPlaylist(selectedTracks.toList(), 0)
                             isSelectionMode = false
                             selectedTracks = emptySet()
@@ -254,8 +258,7 @@ fun SearchScreen(
             onSearch = {
                 if (normalizedSearchQuery.isNotBlank()) {
                     searchViewModel.performSearch(normalizedSearchQuery)
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
+                    dismissKeyboard()
                 }
             }
         )
@@ -451,6 +454,7 @@ fun SearchScreen(
                     suggestionsListState = suggestionsListState,
                     normalizedSearchQuery = normalizedSearchQuery,
                     searchHistory = searchHistory,
+                    playbackHistory = playbackHistory,
                     searchSuggestions = searchSuggestions,
                     topResults = topResults,
                     onClearHistory = { searchViewModel.clearSearchHistory() },
@@ -458,13 +462,14 @@ fun SearchScreen(
                     onSubmitSuggestionOrHistory = { selectedQuery ->
                         searchQuery = selectedQuery
                         searchViewModel.performSearch(selectedQuery)
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
+                        dismissKeyboard()
                     },
-                    onFillQuery = { filledQuery ->
-                        searchQuery = "$filledQuery "
-                    },
-                    onPreviewItemClick = handleOpenOrPlayItem
+                    onFillQuery = { filledQuery -> searchQuery = "$filledQuery " },
+                    onPreviewItemClick = handleOpenOrPlayItem,
+                    onHistorySongClick = { history ->
+                        dismissKeyboard()
+                        searchViewModel.resolvePlayableHistoryItem(history, handleOpenOrPlayItem)
+                    }
                 )
             }
         }

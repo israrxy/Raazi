@@ -140,7 +140,14 @@ fun HomeFeedItemCard(
                     action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
                     sourceType = section.sourceType
                 )
-                viewModel.playMusic(item.item)
+                val railTracks = section.musicItems()
+                val idx = railTracks.indexOfFirst { it.id == item.item.id }.coerceAtLeast(0)
+                if (railTracks.size > 1) {
+                    viewModel.playPlaylist(railTracks, idx)
+                } else {
+                    viewModel.playMusic(item.item)
+                }
+                viewModel.fetchAutoPlayQueue(item.item)
             }
         )
         is HomeFeedItem.YouTube -> {
