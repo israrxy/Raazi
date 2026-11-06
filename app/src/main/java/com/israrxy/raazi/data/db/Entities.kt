@@ -123,6 +123,8 @@ data class HomeInteractionEntity(
         const val ACTION_OPEN = "open"
         const val ACTION_DISMISS = "dismiss"
         const val ACTION_REFRESH = "refresh"
+        const val ACTION_COMPLETE = "complete"
+        const val ACTION_SKIP = "skip"
         const val SOURCE_LOCAL = "local"
         const val SOURCE_YOUTUBE = "youtube"
         const val SOURCE_EXPLORE = "explore"

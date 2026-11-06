@@ -5,9 +5,31 @@ import com.israrxy.raazi.data.local.SettingsDataStore
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.AccountInfo
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 object YouTubeAccountSession {
     private const val TAG = "YouTubeAccountSession"
+    private val bootstrapMutex = Mutex()
+
+    @Volatile
+    private var bootstrapped = false
+
+    /**
+     * Applies the persisted YouTube/visitor session exactly once and is safe to
+     * await from the ViewModel before the first `FEmusic_home` request.
+     */
+    suspend fun ensureBootstrapped(settingsDataStore: SettingsDataStore) {
+        if (bootstrapped) return
+        bootstrapMutex.withLock {
+            if (bootstrapped) return
+            try {
+                bootstrap(settingsDataStore)
+            } finally {
+                bootstrapped = true
+            }
+        }
+    }
 
     suspend fun bootstrap(settingsDataStore: SettingsDataStore) {
         val cookie = settingsDataStore.innerTubeCookie.first().nullIfBlank()
@@ -49,10 +71,15 @@ object YouTubeAccountSession {
             email = accountInfo?.email,
             channelHandle = accountInfo?.channelHandle
         )
+        // A fresh login should browse with the account unless the user explicitly
+        // turns it off later.
+        settingsDataStore.setUseLoginForBrowse(true)
 
         YouTube.cookie = cookie.nullIfBlank()
         YouTube.visitorData = visitorData.nullIfBlank()
         YouTube.dataSyncId = normalizedDataSyncId
+        YouTube.useLoginForBrowse = true
+        bootstrapped = true
     }
 
     suspend fun clear(settingsDataStore: SettingsDataStore) {

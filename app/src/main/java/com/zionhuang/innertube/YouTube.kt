@@ -185,13 +185,23 @@ object YouTube {
 
     private suspend fun homeContinuation(continuation: String): Result<HomePage> = runCatching {
         val response = innerTube.browse(WEB_REMIX, continuation = continuation, poToken = webPoToken).body<BrowseResponse>()
-        val nextContinuation = response.continuationContents?.sectionListContinuation?.continuations?.getContinuation()
+        val sectionList = response.continuationContents?.sectionListContinuation
+        val sections = sectionList?.contents.orEmpty().flatMap { content ->
+            buildList {
+                content.musicCarouselShelfRenderer?.let { HomePage.Section.fromMusicCarouselShelfRenderer(it) }?.let(::add)
+                content.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+                content.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+                content.gridRenderer?.let { HomePage.Section.fromGridRenderer(it) }?.let(::add)
+                content.itemSectionRenderer?.contents.orEmpty().forEach { inner ->
+                    inner.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+                    inner.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+                }
+            }
+        }
         HomePage(
-            null,
-            response.continuationContents?.sectionListContinuation?.contents
-                ?.mapNotNull { it.musicCarouselShelfRenderer }
-                ?.mapNotNull { HomePage.Section.fromMusicCarouselShelfRenderer(it) }.orEmpty(),
-            nextContinuation
+            chips = null,
+            sections = sections,
+            continuation = sectionList?.continuations?.getContinuation()
         )
     }
 
@@ -210,7 +220,7 @@ object YouTube {
 
     suspend fun moodAndGenres(): Result<List<MoodAndGenres>> = runCatching {
         val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_moods_and_genres", poToken = webPoToken).body<BrowseResponse>()
-        response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents!!
+        response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents.orEmpty()
             .mapNotNull(MoodAndGenres.Companion::fromSectionListRendererContent)
     }
 

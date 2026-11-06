@@ -5,6 +5,7 @@ import com.zionhuang.innertube.models.Artist
 import com.zionhuang.innertube.models.ArtistItem
 import com.zionhuang.innertube.models.BrowseEndpoint
 import com.zionhuang.innertube.models.GridRenderer
+import com.zionhuang.innertube.models.MusicCardShelfRenderer
 import com.zionhuang.innertube.models.MusicCarouselShelfRenderer
 import com.zionhuang.innertube.models.MusicShelfRenderer
 import com.zionhuang.innertube.models.MusicTwoRowItemRenderer
@@ -80,6 +81,21 @@ data class HomePage(
                     items = renderer.items.take(50).mapNotNull { it.musicTwoRowItemRenderer }
                         .mapNotNull { fromMusicTwoRowItemRenderer(it) }
                         .ifEmpty { return null }
+                )
+            }
+
+            fun fromMusicCardShelfRenderer(renderer: MusicCardShelfRenderer): Section? {
+                val items = renderer.contents.orEmpty()
+                    .mapNotNull { it.musicResponsiveListItemRenderer?.let { content -> SearchPage.toYTItem(content) } }
+                if (items.isEmpty()) return null
+                return Section(
+                    title = renderer.header?.musicCardShelfHeaderBasicRenderer?.title?.runs?.firstOrNull()?.text
+                        ?: renderer.title.runs?.firstOrNull()?.text
+                        ?: "Recommended",
+                    label = renderer.subtitle.runs?.firstOrNull()?.text,
+                    thumbnail = null,
+                    endpoint = renderer.onTap.browseEndpoint,
+                    items = items
                 )
             }
 

@@ -239,6 +239,8 @@ class MusicPlayerViewModel(
     val forgottenFavorites: StateFlow<List<MusicItem>> = _forgottenFavorites.asStateFlow()
     internal val _keepListening = MutableStateFlow<List<MusicItem>>(emptyList())
     val keepListening: StateFlow<List<MusicItem>> = _keepListening.asStateFlow()
+    internal var personalizedSections: List<HomeSection> = emptyList()
+    internal var personalizedSectionsJob: Job? = null
 
     sealed class RecommendationItem {
         data class FromYTItem(val ytItem: YTItem) : RecommendationItem()
