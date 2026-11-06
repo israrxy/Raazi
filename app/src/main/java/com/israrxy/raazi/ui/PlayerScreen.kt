@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,6 +33,7 @@ import com.israrxy.raazi.data.lyrics.LyricsMetadataSanitizer
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.savedCollectionId
+import com.israrxy.raazi.ui.player.PlayerSheetNestedScrollConnection
 import com.israrxy.raazi.ui.player.PlayerTransition
 import com.israrxy.raazi.ui.player.easeOutCubic
 import com.israrxy.raazi.ui.theme.Zinc800
@@ -48,6 +50,9 @@ fun PlayerScreen(
     isLyricsVisible: Boolean,
     onLyricsVisibilityChange: (Boolean) -> Unit,
     dismissModifier: Modifier = Modifier,
+    onPlayerDragStart: () -> Unit = {},
+    onPlayerDrag: (Float) -> Unit = {},
+    onPlayerDragEnd: (Float) -> Unit = {},
     transition: PlayerTransition? = null,
     cardTop: () -> Float = { 0f }
 ) {
@@ -125,6 +130,19 @@ fun PlayerScreen(
         }
     }
 
+    val playerScrollState = rememberScrollState()
+    val currentDragStart by rememberUpdatedState(onPlayerDragStart)
+    val currentDrag by rememberUpdatedState(onPlayerDrag)
+    val currentDragEnd by rememberUpdatedState(onPlayerDragEnd)
+    val playerScrollDragConnection = remember(playerScrollState) {
+        PlayerSheetNestedScrollConnection(
+            isAtTop = { playerScrollState.value == 0 },
+            onDragStart = { currentDragStart() },
+            onDrag = { delta -> currentDrag(delta) },
+            onDragEnd = { velocity -> currentDragEnd(velocity) }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -146,7 +164,8 @@ fun PlayerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
+                        .nestedScroll(playerScrollDragConnection)
+                        .verticalScroll(playerScrollState)
                 ) {
                     Column(
                         modifier = Modifier

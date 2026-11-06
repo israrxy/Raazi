@@ -1,15 +1,12 @@
 package com.israrxy.raazi.ui
 
 import android.net.Uri
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.ui.player.FloatingMiniPlayer
 import com.israrxy.raazi.ui.player.MiniPlayer
+import com.israrxy.raazi.ui.player.PlayerSheetDragController
 import com.israrxy.raazi.ui.player.PlayerTransition
 import com.israrxy.raazi.ui.player.RevealCardShape
 import com.israrxy.raazi.ui.player.lerpFloat
@@ -113,6 +110,12 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         if (openPlayerOnTrackSelect) {
             expandPlayer()
         }
+    }
+
+    // Re-expand after an interrupted drag without resetting the player view mode.
+    val restorePlayerExpansion: () -> Unit = {
+        isExpanded = true
+        scope.launch { playerExpansion.animateTo(1f, sheetSpringSpec) }
     }
 
     val collapsePlayer: () -> Unit = {
@@ -237,45 +240,19 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
         var dragProgress by remember { mutableFloatStateOf(0f) }
         var dragJob by remember { mutableStateOf<Job?>(null) }
 
-        val dismissModifier = Modifier.pointerInput(parentHeightPx) {
-            var gestureStartMs = 0L
-            var totalDragPx = 0f
-            var dismissDragJob: Job? = null
-            detectVerticalDragGestures(
-                onDragStart = {
-                    gestureStartMs = SystemClock.uptimeMillis()
-                    totalDragPx = 0f
-                    dragProgress = playerExpansion.value
-                },
-                onDragEnd = {
-                    dismissDragJob?.cancel()
-                    dismissDragJob = null
-                    val elapsedMs = (SystemClock.uptimeMillis() - gestureStartMs).coerceAtLeast(1L)
-                    val velocity = totalDragPx / (elapsedMs / 1000f)
-                    if (totalDragPx > 0f && (dragProgress < 0.70f || velocity > 500f)) {
-                        collapsePlayer()
-                    } else {
-                        expandPlayer()
-                    }
-                },
-                onDragCancel = {
-                    dismissDragJob?.cancel()
-                    dismissDragJob = null
-                    expandPlayer()
-                },
-                onVerticalDrag = { change, dragAmount ->
-                    if (dragProgress >= 0.999f && dragAmount < 0f) {
-                        return@detectVerticalDragGestures
-                    }
-                    change.consume()
-                    totalDragPx += dragAmount
-                    dragProgress = (dragProgress - dragAmount / effectiveHeight).coerceIn(0f, 1f)
-                    dismissDragJob?.cancel()
-                    dismissDragJob = scope.launch {
-                        playerExpansion.snapTo(dragProgress)
-                    }
-                }
+        val currentCollapse by rememberUpdatedState(collapsePlayer)
+        val currentExpand by rememberUpdatedState(restorePlayerExpansion)
+        val sheetDragController = remember(playerExpansion, effectiveHeight) {
+            PlayerSheetDragController(
+                expansion = playerExpansion,
+                heightPx = effectiveHeight,
+                scope = scope,
+                onCollapse = { currentCollapse() },
+                onExpand = { currentExpand() }
             )
+        }
+        val dismissModifier = remember(sheetDragController) {
+            sheetDragController.dismissModifier()
         }
 
         // Background App Surface (scaled back & dimmed as player expands)
@@ -469,6 +446,9 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
                         isLyricsVisible = isLyricsModeOpen,
                         onLyricsVisibilityChange = { isLyricsModeOpen = it },
                         dismissModifier = dismissModifier,
+                        onPlayerDragStart = sheetDragController::startDrag,
+                        onPlayerDrag = sheetDragController::dragBy,
+                        onPlayerDragEnd = sheetDragController::endDrag,
                         transition = playerTransition,
                         cardTop = cardTop
                     )
