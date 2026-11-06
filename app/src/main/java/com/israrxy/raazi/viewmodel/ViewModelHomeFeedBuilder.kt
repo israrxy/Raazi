@@ -84,7 +84,8 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         return
     }
 
-    val ranking = HomeFeedRanking(dismissedHomeItemIds, artistAffinity)
+    val recentlyPlayedIds = _keepListening.value.take(12).mapTo(mutableSetOf()) { it.id }
+    val ranking = HomeFeedRanking(dismissedHomeItemIds, artistAffinity, recentlyPlayedIds)
     val addedTitles = mutableSetOf<String>()
 
     fun addSection(
@@ -275,7 +276,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
             title = "New Releases",
             type = HomeSectionType.NEW_RELEASES,
             source = HomeInteractionEntity.SOURCE_EXPLORE,
-            items = ranking.discoveryYouTube(ranking.rankYouTube(albums), 12, ::homeYouTubeItemId)
+            items = ranking.discoveryYouTube(ranking.rankYouTube(albums, ::homeYouTubeItemId), 12, ::homeYouTubeItemId)
                 .map(HomeFeedItem::YouTube)
         )
     }

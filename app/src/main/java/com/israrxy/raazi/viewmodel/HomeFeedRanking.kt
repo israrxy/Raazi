@@ -7,6 +7,8 @@ import com.zionhuang.innertube.models.PlaylistItem
 import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.YTItem
 
+private const val RECENT_PLAY_PENALTY = 0.55
+
 /**
  * Two-tier dedupe + anonymous-shelf personalization.
  *
@@ -19,6 +21,7 @@ import com.zionhuang.innertube.models.YTItem
 internal class HomeFeedRanking(
     private val dismissedIds: Set<String>,
     private val artistAffinity: Map<String, Double>,
+    private val recentlyPlayedIds: Set<String> = emptySet(),
     private val maxAppearances: Int = 2
 ) {
     private val familiarSeen = mutableSetOf<String>()
@@ -58,7 +61,7 @@ internal class HomeFeedRanking(
         idOf: (YTItem) -> String
     ): List<YTItem> {
         if (items.isEmpty()) return emptyList()
-        val ranked = rankYouTube(items)
+        val ranked = rankYouTube(items, idOf)
         val picked = discoveryYouTube(ranked, limit, idOf)
         if (picked.size >= floor) return picked
 
@@ -78,11 +81,18 @@ internal class HomeFeedRanking(
         return result
     }
 
-    fun rankYouTube(items: List<YTItem>): List<YTItem> =
-        items.sortedByDescending { affinityOf(it) }
+    fun rankYouTube(items: List<YTItem>, idOf: (YTItem) -> String = { it.id }): List<YTItem> =
+        items.sortedByDescending { discoveryScore(idOf(it), affinityOf(it)) }
 
     fun rankMusic(items: List<MusicItem>): List<MusicItem> =
-        items.sortedByDescending { affinityOf(it) }
+        items.sortedByDescending { discoveryScore(it.id, affinityOf(it)) }
+
+    /**
+     * Keeps affinity as the primary signal but demotes tracks the user just
+     * played, so discovery rails stay fresh instead of replaying the same songs.
+     */
+    private fun discoveryScore(id: String, affinity: Double): Double =
+        if (id in recentlyPlayedIds) affinity * RECENT_PLAY_PENALTY else affinity
 
     fun affinityOf(item: YTItem): Double {
         val artists = when (item) {
