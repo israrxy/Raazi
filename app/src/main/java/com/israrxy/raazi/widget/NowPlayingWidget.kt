@@ -12,8 +12,8 @@ import coil.ImageLoader
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.israrxy.raazi.MainActivity
 import com.israrxy.raazi.R
-import com.israrxy.raazi.ui.lockscreen.LockScreenBrowserActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -84,12 +84,8 @@ class NowPlayingWidget : AppWidgetProvider() {
                 getPendingIntent(context, ACTION_PREVIOUS)
             )
             
-            // Open the lock-screen browser on widget click. It works both while
-            // locked and from the home screen, and offers a button to open the
-            // full app.
-            val openAppIntent = Intent(context, LockScreenBrowserActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
+            // Open app on widget click
+            val openAppIntent = Intent(context, MainActivity::class.java)
             val openAppPendingIntent = PendingIntent.getActivity(
                 context, 0, openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

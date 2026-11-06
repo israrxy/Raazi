@@ -20,18 +20,6 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
-    <!-- OEM permission editors used by the lock-screen setup screen. Without
-         these declarations Android 11+ package visibility hides them and the
-         deep links silently fail. -->
-    <queries>
-        <package android:name="com.miui.securitycenter" />
-        <package android:name="com.coloros.safecenter" />
-        <package android:name="com.oplus.safecenter" />
-        <package android:name="com.vivo.permissionmanager" />
-        <package android:name="com.iqoo.secure" />
-        <package android:name="com.huawei.systemmanager" />
-    </queries>
-
     <application
         android:name=".RaaziApplication"
         android:allowBackup="true"
@@ -106,37 +94,12 @@
                 <data android:scheme="raazi" android:host="lastfm-callback" />
             </intent-filter>
         </activity>
-
-        <!-- Lock-screen overlay browser. Rendered above the keyguard so the
-             notification action, QS tile and widget can open it without an
-             unlock. Playback data only. -->
-        <activity
-            android:name=".ui.lockscreen.LockScreenBrowserActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTop"
-            android:showWhenLocked="true"
-            android:taskAffinity="com.israrxy.raazi.lockscreen"
-            android:theme="@style/Theme.Raazi"
-            android:turnScreenOn="true" />
-
+        
         <service
             android:name=".service.MusicPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback"
             android:stopWithTask="false" />
-
-        <service
-            android:name=".service.LockScreenBrowserTileService"
-            android:exported="true"
-            android:icon="@drawable/ic_browse"
-            android:label="@string/lockscreen_tile_label"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
-
         
         <!-- Now Playing Widget -->
         <receiver

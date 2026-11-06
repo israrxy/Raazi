@@ -54,11 +54,6 @@ internal enum class SettingsCategory(
         subtitle = "Theme, colors & layout",
         icon = Icons.Filled.Palette
     ),
-    LOCK_SCREEN(
-        title = "Lock screen",
-        subtitle = "Browser above the keyguard",
-        icon = Icons.Filled.Lock
-    ),
     PLAYBACK(
         title = "Playback & Audio",
         subtitle = "Streaming quality & crossfade",
@@ -253,7 +248,6 @@ fun SettingsScreen(
                                             ?: youTubeAccountName?.takeIf { it.isNotBlank() }
                                             ?: "Not signed in"
                                         SettingsCategory.APPEARANCE -> appTheme
-                                        SettingsCategory.LOCK_SCREEN -> "Setup"
                                         SettingsCategory.PLAYBACK -> audioQuality
                                         SettingsCategory.LYRICS_AI -> if (translateLyrics) targetLanguage.uppercase() else "Off"
                                         SettingsCategory.DOWNLOADS -> downloadQuality

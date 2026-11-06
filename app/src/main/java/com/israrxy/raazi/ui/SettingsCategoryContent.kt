@@ -93,12 +93,6 @@ internal fun SettingsCategoryDetailList(
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         when (currentCategory) {
-            SettingsCategory.LOCK_SCREEN -> {
-                item {
-                    com.israrxy.raazi.ui.settings.SettingsLockScreenSection(context)
-                }
-            }
-
             SettingsCategory.ACCOUNT -> {
                 item {
                     com.israrxy.raazi.ui.settings.SettingsDualLoginSection(

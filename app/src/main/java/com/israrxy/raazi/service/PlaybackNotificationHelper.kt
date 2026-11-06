@@ -21,10 +21,10 @@ import androidx.core.content.ContextCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.israrxy.raazi.MainActivity
 import com.israrxy.raazi.R
 import com.israrxy.raazi.model.PlaybackState
 import com.israrxy.raazi.model.RepeatMode
-import com.israrxy.raazi.ui.lockscreen.LockScreenBrowserActivity
 import com.israrxy.raazi.widget.NowPlayingWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,19 +81,10 @@ internal fun MusicPlaybackService.startForegroundService() {
     }
 }
 
-/**
- * PendingIntent used both as the notification content intent and as the
- * MediaSession session activity.
- *
- * It points at the lock-screen browser instead of the main activity because the
- * PendingIntent is dispatched by System UI. That dispatch is exempt from
- * background-activity-launch limits, whereas a `startActivity()` call from the
- * playback service is not - which is why the old "Browse" custom action did
- * nothing on Android 13+. The browser itself offers a one-tap jump into the app.
- */
 internal fun MusicPlaybackService.createContentPendingIntent(): PendingIntent {
-    val contentIntent = Intent(this, LockScreenBrowserActivity::class.java).apply {
+    val contentIntent = Intent(this, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra(MusicPlaybackService.EXTRA_OPEN_PLAYER, true)
     }
     return PendingIntent.getActivity(
         this,
@@ -135,14 +126,6 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
     val favoritePending = servicePending(MusicPlaybackService.ACTION_TOGGLE_FAVORITE, 15)
     val speedPending = servicePending(MusicPlaybackService.ACTION_CYCLE_SPEED, 16)
     val stopPending = servicePending(MusicPlaybackService.ACTION_STOP, 17)
-    val browsePending = PendingIntent.getActivity(
-        this,
-        18,
-        Intent(this, LockScreenBrowserActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        },
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
 
     val shuffleIcon = if (playbackState.isShuffleEnabled) R.drawable.ic_shuffle_active else R.drawable.ic_shuffle
     val shuffleLabel = if (playbackState.isShuffleEnabled) "Shuffle" else "Shuffle off"
@@ -208,6 +191,8 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
         .setUsesChronometer(true)
         .setWhen(System.currentTimeMillis() - currentPos)
 
+    builder.addAction(NotificationCompat.Action(shuffleIcon, shuffleLabel, shufflePending))
+    builder.addAction(NotificationCompat.Action(favoriteIcon, favoriteLabel, favoritePending))
     builder.addAction(NotificationCompat.Action(R.drawable.ic_skip_previous, "Previous", prevPending))
     builder.addAction(
         NotificationCompat.Action(
@@ -217,21 +202,12 @@ internal fun MusicPlaybackService.createNotification(playbackState: PlaybackStat
         )
     )
     builder.addAction(NotificationCompat.Action(R.drawable.ic_skip_next, "Next", nextPending))
-    builder.addAction(
-        NotificationCompat.Action(
-            R.drawable.ic_browse,
-            getString(R.string.lockscreen_browse_action),
-            browsePending
-        )
-    )
-    builder.addAction(NotificationCompat.Action(favoriteIcon, favoriteLabel, favoritePending))
-    builder.addAction(NotificationCompat.Action(shuffleIcon, shuffleLabel, shufflePending))
     builder.addAction(NotificationCompat.Action(repeatIcon, repeatLabel, repeatPending))
     builder.addAction(NotificationCompat.Action(speedIcon, speedLabel, speedPending))
 
     val mediaStyle = MediaStyle()
         .setMediaSession(mediaSession.sessionToken)
-        .setShowActionsInCompactView(0, 1, 2)
+        .setShowActionsInCompactView(2, 3, 4)
         .setShowCancelButton(true)
         .setCancelButtonIntent(stopPending)
 
@@ -249,14 +225,6 @@ internal fun MusicPlaybackService.formatSpeedText(speed: Float): String {
     } else {
         String.format("%.2f", value).trimEnd('0').trimEnd('.') + "x"
     }
-}
-
-internal fun MusicPlaybackService.openLockScreenBrowser() {
-    val intent = Intent(this, LockScreenBrowserActivity::class.java).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-    }
-    runCatching { startActivity(intent) }
-        .onFailure { Log.w(MusicPlaybackService.TAG, "Could not open lock screen browser: ${it.message}") }
 }
 
 internal fun MusicPlaybackService.updateNotification() {
@@ -293,12 +261,6 @@ internal fun MusicPlaybackService.updateMediaSessionState() {
                 PlaybackStateCompat.ACTION_STOP
         )
         .setState(state, exoPlayer.currentPosition, 1f)
-        // NOTE: no "Browse" custom action here. On Android 13+ System UI turns
-        // custom actions into media buttons that call back into this service,
-        // and a startActivity() from the service is blocked by background
-        // activity launch limits. Tapping the notification/artwork opens the
-        // browser through the session activity PendingIntent instead, which is
-        // exempt because System UI is the sender.
         .addCustomAction(
             PlaybackStateCompat.CustomAction.Builder(
                 MusicPlaybackService.ACTION_TOGGLE_SHUFFLE,
