@@ -295,7 +295,7 @@ interface MusicDao {
         WHERE action IN (:actions) AND timestamp > :since
         GROUP BY itemId, action
     """)
-    suspend fun getHomeSignalCounts(actions: List<String>, since: Long): List<HomeSignalCount>
+    fun getHomeSignalCounts(actions: List<String>, since: Long): List<HomeSignalCount>
 
     @Query("""
         SELECT t.* FROM tracks t
@@ -309,7 +309,7 @@ interface MusicDao {
         INNER JOIN related_songs r ON t.id = r.relatedTrackId
         WHERE r.sourceTrackId = :trackId
     """)
-    suspend fun getRelatedTracksDirect(trackId: String): List<TrackEntity>
+    fun getRelatedTracksDirect(trackId: String): List<TrackEntity>
 }
 
 data class HomeSignalCount(
