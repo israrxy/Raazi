@@ -11,11 +11,13 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateFloatAsState
@@ -236,39 +238,109 @@ fun HomeCategoryFilterBar(
 @Composable
 fun HomeSectionHeader(
     section: HomeSection,
-    onAction: (() -> Unit)? = null
+    onAction: (() -> Unit)? = null,
+    onMore: (() -> Unit)? = null,
+    onNotInterested: (() -> Unit)? = null
 ) {
-    Row(
+    var menuExpanded by remember { mutableStateOf(false) }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = section.title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (section.actionLabel != null && onAction != null) {
-            val refreshLabel = section.actionLabel.contains("refresh", ignoreCase = true) ||
-                section.actionLabel.contains("reload", ignoreCase = true)
-            if (refreshLabel) {
-                IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = section.actionLabel,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+        section.strapline?.takeIf { it.isNotBlank() }?.let { strapline ->
+            Text(
+                text = strapline,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (!section.avatarUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ThumbnailUtils.getHighQualityThumbnail(section.avatarUrl!!),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                section.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            } else {
-                TextButton(onClick = onAction) {
-                    Text(section.actionLabel)
+            }
+            if (section.moreEndpoint != null && onMore != null) {
+                TextButton(onClick = onMore) {
+                    Text("More", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            if (section.actionLabel != null && onAction != null) {
+                val refreshLabel = section.actionLabel.contains("refresh", ignoreCase = true) ||
+                    section.actionLabel.contains("reload", ignoreCase = true)
+                if (refreshLabel) {
+                    IconButton(onClick = onAction, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = section.actionLabel,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    TextButton(onClick = onAction) {
+                        Text(section.actionLabel)
+                    }
+                }
+            }
+            if (onNotInterested != null) {
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Shelf options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Not interested in ${section.artistName ?: section.title}") },
+                            onClick = {
+                                menuExpanded = false
+                                onNotInterested()
+                            }
+                        )
+                    }
                 }
             }
         }

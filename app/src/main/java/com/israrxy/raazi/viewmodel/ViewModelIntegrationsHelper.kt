@@ -383,4 +383,5 @@ internal fun MusicPlayerViewModel.recordPlaybackOutcome(track: MusicItem, state:
             )
         }
     }
+    maybeRefreshTasteAfterPlayback()
 }

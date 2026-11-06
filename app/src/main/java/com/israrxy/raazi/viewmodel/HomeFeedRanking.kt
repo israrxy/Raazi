@@ -17,12 +17,15 @@ private const val RECENT_PLAY_PENALTY = 0.55
  * only against dismissals and itself, so a chart song can still appear in a
  * chart rail even when Quick Picks also used it. Every source keeps a floor so
  * personalization can never make an anonymous shelf disappear.
+ *
+ * Artists marked "not interested" are removed from every shelf.
  */
 internal class HomeFeedRanking(
     private val dismissedIds: Set<String>,
     private val artistAffinity: Map<String, Double>,
     private val recentlyPlayedIds: Set<String> = emptySet(),
-    private val maxAppearances: Int = 2
+    private val maxAppearances: Int = 2,
+    private val blockedArtistKeys: Set<String> = emptySet()
 ) {
     private val familiarSeen = mutableSetOf<String>()
     private val discoverySeen = mutableSetOf<String>()
@@ -42,6 +45,7 @@ internal class HomeFeedRanking(
         val result = mutableListOf<YTItem>()
         for (item in items) {
             if (result.size >= limit) break
+            if (isBlocked(item)) continue
             val id = idOf(item)
             if (!canShow(id, discoverySeen, checkFamiliar = false)) continue
             mark(id, discoverySeen)
@@ -70,6 +74,7 @@ internal class HomeFeedRanking(
         val fallbackFloor = minOf(floor, limit, items.size)
         for (item in items) {
             if (result.size >= fallbackFloor) break
+            if (isBlocked(item)) continue
             val id = idOf(item)
             if (id.isBlank() || id in dismissedIds || id in pickedIds) continue
             if ((appearances[id] ?: 0) >= maxAppearances) continue
@@ -94,22 +99,28 @@ internal class HomeFeedRanking(
     private fun discoveryScore(id: String, affinity: Double): Double =
         if (id in recentlyPlayedIds) affinity * RECENT_PLAY_PENALTY else affinity
 
-    fun affinityOf(item: YTItem): Double {
-        val artists = when (item) {
-            is SongItem -> item.artists.map { it.name }
-            is AlbumItem -> item.artists?.mapNotNull { it.name }.orEmpty()
-            is ArtistItem -> listOf(item.title)
-            is PlaylistItem -> listOfNotNull(item.author?.name, item.title)
-            else -> emptyList()
-        }
-        return artists
+    fun affinityOf(item: YTItem): Double =
+        artistsOf(item)
             .map { artistAffinity[normalizeArtist(it)] ?: 0.0 }
             .maxOrNull()
             ?: 0.0
-    }
 
     fun affinityOf(item: MusicItem): Double =
         artistAffinity[normalizeArtist(item.artist)] ?: 0.0
+
+    fun isBlocked(item: YTItem): Boolean =
+        artistsOf(item).any { normalizeArtist(it) in blockedArtistKeys }
+
+    fun isBlocked(item: MusicItem): Boolean =
+        normalizeArtist(item.artist) in blockedArtistKeys
+
+    private fun artistsOf(item: YTItem): List<String> = when (item) {
+        is SongItem -> item.artists.map { it.name }
+        is AlbumItem -> item.artists?.mapNotNull { it.name }.orEmpty()
+        is ArtistItem -> listOf(item.title)
+        is PlaylistItem -> listOfNotNull(item.author?.name, item.title)
+        else -> emptyList()
+    }
 
     private fun selectMusic(
         items: List<MusicItem>,
@@ -120,6 +131,7 @@ internal class HomeFeedRanking(
         val result = mutableListOf<MusicItem>()
         for (item in items) {
             if (result.size >= limit) break
+            if (isBlocked(item)) continue
             if (!canShow(item.id, seen, checkFamiliar)) continue
             mark(item.id, seen)
             result += item

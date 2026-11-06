@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.PlaylistEntity
+import com.israrxy.raazi.data.recommendation.PlaybackContext
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.ui.downloads.toMusicItem
@@ -61,6 +62,7 @@ internal fun MusicPlayerViewModel.addToHistoryInternal(musicItem: MusicItem) {
         } catch (e: Exception) {
             Log.w("MusicVM", "Failed to persist track to history", e)
         }
+        runCatching { homeTaste.playbackContextStore.record(PlaybackContext.song(musicItem)) }
     }
 }
 
@@ -100,6 +102,9 @@ internal fun MusicPlayerViewModel.playPlaylistInternal(items: List<MusicItem>, s
 
     initialTrack?.let { currentTrack ->
         addToHistoryInternal(currentTrack)
+        _currentPlaylist.value
+            ?.takeIf { it.items.firstOrNull()?.id == currentTrack.id }
+            ?.let { rememberPlaylistContext(it) }
         viewModelScope.launch(Dispatchers.IO) {
             repository.fetchAndSaveRelated(currentTrack)
         }

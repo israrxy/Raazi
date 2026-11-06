@@ -87,6 +87,12 @@ class SettingsDataStore(private val context: Context) {
         val CONTENT_LANGUAGE_KEY = stringPreferencesKey("content_language")
         val RESET_TO_ARTWORK_ON_TRACK_CHANGE_KEY = booleanPreferencesKey("reset_to_artwork_on_track_change")
         val OPEN_PLAYER_ON_TRACK_SELECT_KEY = booleanPreferencesKey("open_player_on_track_select")
+        val TASTE_SEED_ARTISTS_KEY = stringPreferencesKey("taste_seed_artists")
+        val TASTE_DISMISSED_ARTISTS_KEY = stringPreferencesKey("taste_dismissed_artists")
+        val TASTE_LANGUAGE_KEY = stringPreferencesKey("taste_language")
+        val TASTE_BUILDER_DISMISSED_KEY = booleanPreferencesKey("taste_builder_dismissed")
+        val TASTE_RESET_AT_KEY = longPreferencesKey("taste_reset_at")
+        val HOME_REFRESH_SEED_KEY = intPreferencesKey("home_refresh_seed")
     }
 
     private fun <T> prefFlow(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -137,6 +143,24 @@ class SettingsDataStore(private val context: Context) {
 
     val openPlayerOnTrackSelect: Flow<Boolean> = prefFlow(OPEN_PLAYER_ON_TRACK_SELECT_KEY, true)
     suspend fun setOpenPlayerOnTrackSelect(open: Boolean) = setPref(OPEN_PLAYER_ON_TRACK_SELECT_KEY, open)
+
+    val tasteSeedArtists: Flow<String> = prefFlow(TASTE_SEED_ARTISTS_KEY, "")
+    suspend fun setTasteSeedArtists(json: String) = setPref(TASTE_SEED_ARTISTS_KEY, json)
+
+    val tasteDismissedArtists: Flow<String> = prefFlow(TASTE_DISMISSED_ARTISTS_KEY, "")
+    suspend fun setTasteDismissedArtists(keys: String) = setPref(TASTE_DISMISSED_ARTISTS_KEY, keys)
+
+    val tasteLanguage: Flow<String> = prefFlow(TASTE_LANGUAGE_KEY, "AUTO")
+    suspend fun setTasteLanguage(language: String) = setPref(TASTE_LANGUAGE_KEY, language)
+
+    val tasteBuilderDismissed: Flow<Boolean> = prefFlow(TASTE_BUILDER_DISMISSED_KEY, false)
+    suspend fun setTasteBuilderDismissed(dismissed: Boolean) = setPref(TASTE_BUILDER_DISMISSED_KEY, dismissed)
+
+    val tasteResetAt: Flow<Long> = prefFlow(TASTE_RESET_AT_KEY, 0L)
+    suspend fun setTasteResetAt(timestamp: Long) = setPref(TASTE_RESET_AT_KEY, timestamp)
+
+    val homeRefreshSeed: Flow<Int> = prefFlow(HOME_REFRESH_SEED_KEY, 0)
+    suspend fun setHomeRefreshSeed(value: Int) = setPref(HOME_REFRESH_SEED_KEY, value)
 
     val lyricsAutoScroll: Flow<Boolean> = prefFlow(LYRICS_AUTO_SCROLL_KEY, true)
     suspend fun setLyricsAutoScroll(enabled: Boolean) = setPref(LYRICS_AUTO_SCROLL_KEY, enabled)

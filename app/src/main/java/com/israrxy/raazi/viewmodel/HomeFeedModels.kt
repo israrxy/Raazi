@@ -25,19 +25,37 @@ data class HomeSection(
     val sourceType: String,
     val items: List<HomeFeedItem> = emptyList(),
     val actionLabel: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val strapline: String? = null,       // small text above title (e.g. "Similar to")
+    val avatarUrl: String? = null,       // 40dp circle art in header
+    val moreEndpoint: String? = null,    // playlist/artist ID for "More" pill
+    val layout: HomeSectionLayout = HomeSectionLayout.CAROUSEL,
+    val subtitle: String? = null,       // secondary line under the title
+    val artistName: String? = null      // enables "Not interested" for artist shelves
 )
+
+enum class HomeSectionLayout {
+    CAROUSEL,       // horizontal LazyRow (default)
+    LIST_COLUMNS,   // 2-column grid of rectangle cards (like YTM "Listen again")
+    GRID            // gradient mix cards
+}
 
 enum class HomeSectionType {
     STATUS,
     KEEP_LISTENING,
+    LISTEN_AGAIN,       // NEW
     QUICK_PICKS,
     FORGOTTEN_FAVORITES,
     RECOMMENDATION,
     NEW_RELEASES,
     MOODS,
     MOOD_PLAYLISTS,
-    YOUTUBE_RAIL
+    YOUTUBE_RAIL,
+    ALBUMS_FOR_YOU,     // NEW
+    SIMILAR_TO,         // NEW
+    MY_MIX,             // NEW
+    BECAUSE_YOU_LISTENED, // NEW
+    TASTEBUILDER_CARD   // NEW
 }
 
 sealed class HomeFeedItem {
@@ -193,3 +211,13 @@ internal fun MusicPlayerViewModel.selectFilterChipImpl(chip: HomePage.Chip?) {
         }
     }
 }
+
+/** Used by BackfillGenerator and rebuildHomeFeedState to get a stable ID from a YTItem. */
+fun homeYouTubeItemIdOf(item: com.zionhuang.innertube.models.YTItem): String =
+    when (item) {
+        is com.zionhuang.innertube.models.SongItem -> item.id
+        is com.zionhuang.innertube.models.AlbumItem -> item.id
+        is com.zionhuang.innertube.models.ArtistItem -> item.id
+        is com.zionhuang.innertube.models.PlaylistItem -> item.id
+        else -> item.hashCode().toString()
+    }
