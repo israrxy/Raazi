@@ -23,6 +23,7 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
         try {
             loadHomeInteractionSignals()
             refreshPersonalizedSections()
+            loadDiscoverySources()
 
             launch {
                 try {
@@ -75,30 +76,28 @@ internal fun MusicPlayerViewModel.loadHomeContentImpl() {
             } catch (e: Exception) {
                 Log.e("MusicVM", "YouTube session bootstrap failed", e)
             }
-            if (YouTube.cookie?.contains("SAPISID") == true) {
-                try {
-                    val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
-                    val homeResult = withTimeoutOrNull(8000L) {
-                        YouTube.home(params = chipParams)
-                    }
-                    if (homeResult != null && homeResult.isSuccess) {
-                        var finalPage = homeResult.getOrThrow()
-                        val firstContinuation = finalPage.continuation
-                        if (finalPage.sections.size < 8 && firstContinuation != null) {
-                            YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
-                                finalPage = finalPage.copy(
-                                    sections = finalPage.sections + nextPage.sections,
-                                    continuation = nextPage.continuation
-                                )
-                            }
-                        }
-                        _homePage.value = finalPage
-                        cachedDefaultHomePage = finalPage
-                        _error.value = null
-                    }
-                } catch (e: Exception) {
-                    Log.e("MusicVM", "Error loading InnerTube home", e)
+            try {
+                val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                val homeResult = withTimeoutOrNull(8000L) {
+                    YouTube.home(params = chipParams)
                 }
+                if (homeResult != null && homeResult.isSuccess) {
+                    var finalPage = homeResult.getOrThrow()
+                    val firstContinuation = finalPage.continuation
+                    if (finalPage.sections.size < 8 && firstContinuation != null) {
+                        YouTube.home(continuation = firstContinuation).onSuccess { nextPage ->
+                            finalPage = finalPage.copy(
+                                sections = finalPage.sections + nextPage.sections,
+                                continuation = nextPage.continuation
+                            )
+                        }
+                    }
+                    _homePage.value = finalPage
+                    cachedDefaultHomePage = finalPage
+                    _error.value = null
+                }
+            } catch (e: Exception) {
+                Log.e("MusicVM", "Error loading InnerTube home", e)
             }
         } catch (e: Exception) {
             Log.e("MusicVM", "Error loading home", e)
@@ -157,6 +156,7 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
         try {
             loadHomeInteractionSignals()
             refreshPersonalizedSections(force = true)
+            loadDiscoverySources(force = true)
 
             launch {
                 try {
@@ -202,11 +202,9 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
 
             try {
                 YouTubeAccountSession.ensureBootstrapped(settingsDataStore)
-                if (YouTube.cookie?.contains("SAPISID") == true) {
-                    val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
-                    YouTube.home(params = chipParams).onSuccess { page ->
-                        _homePage.value = page
-                    }
+                val chipParams = _selectedInnerTubeChip.value?.endpoint?.params
+                YouTube.home(params = chipParams).onSuccess { page ->
+                    _homePage.value = page
                 }
             } catch (e: Exception) {
                 Log.e("MusicVM", "Error refreshing YouTube home", e)
@@ -263,7 +261,6 @@ internal fun MusicPlayerViewModel.refreshHomeSectionImpl(sectionId: String) {
 }
 
 internal fun MusicPlayerViewModel.loadMoreSectionsImpl() {
-    if (YouTube.cookie?.contains("SAPISID") != true) return
     val continuation = _homePage.value?.continuation
     if (continuation == null || _isLoadingMore.value) return
 

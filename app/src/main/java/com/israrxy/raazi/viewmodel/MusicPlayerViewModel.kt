@@ -45,6 +45,7 @@ import com.israrxy.raazi.service.RingtoneType
 import com.israrxy.raazi.service.SpotifyTrack
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import com.israrxy.raazi.utils.ConnectivityObserver
+import com.zionhuang.innertube.models.PlaylistItem
 import com.zionhuang.innertube.models.YTItem
 import com.zionhuang.innertube.pages.ExplorePage
 import com.zionhuang.innertube.pages.HomePage
@@ -126,7 +127,7 @@ class MusicPlayerViewModel(
     val trendingResults: StateFlow<SearchResult?> = _trendingResults.asStateFlow()
     private val _trendingVideosResults = MutableStateFlow<SearchResult?>(null)
     val trendingVideosResults: StateFlow<SearchResult?> = _trendingVideosResults.asStateFlow()
-    private val _allCharts = MutableStateFlow<Map<String, List<MusicItem>>>(emptyMap())
+    internal val _allCharts = MutableStateFlow<Map<String, List<MusicItem>>>(emptyMap())
     val allCharts: StateFlow<Map<String, List<MusicItem>>> = _allCharts.asStateFlow()
     internal val _homePage = MutableStateFlow<HomePage?>(null)
     val homePage: StateFlow<HomePage?> = _homePage.asStateFlow()
@@ -241,6 +242,8 @@ class MusicPlayerViewModel(
     val keepListening: StateFlow<List<MusicItem>> = _keepListening.asStateFlow()
     internal var personalizedSections: List<HomeSection> = emptyList()
     internal var personalizedSectionsJob: Job? = null
+    internal var artistAffinity: Map<String, Double> = emptyMap()
+    internal val _communityPlaylists = MutableStateFlow<List<PlaylistItem>>(emptyList())
 
     sealed class RecommendationItem {
         data class FromYTItem(val ytItem: YTItem) : RecommendationItem()

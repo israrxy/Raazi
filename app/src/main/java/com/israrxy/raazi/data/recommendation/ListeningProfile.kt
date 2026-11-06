@@ -79,4 +79,21 @@ data class ListeningProfile(
                 cluster.tracks.sumOf { it.score(nowMs) }
             }
             .take(limit)
+
+    /**
+     * Normalized artist affinity map used to re-rank anonymous shelves
+     * (community playlists, charts, YouTube browse shelves).
+     */
+    fun artistScores(limit: Int = 20, nowMs: Long = System.currentTimeMillis()): Map<String, Double> {
+        val scores = topArtists(limit, nowMs)
+            .associate { cluster ->
+                cluster.artist.lowercase() to cluster.tracks.sumOf { it.score(nowMs) }
+            }
+            .toMutableMap()
+        favorites.forEach { item ->
+            val key = item.artist.split(',', '&', ';').firstOrNull()?.trim()?.lowercase().orEmpty()
+            if (key.isNotBlank() && key !in scores) scores[key] = 0.5
+        }
+        return scores
+    }
 }
