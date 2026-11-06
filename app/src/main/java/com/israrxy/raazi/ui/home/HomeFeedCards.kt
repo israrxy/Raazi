@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.canPlayAsTrack
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.HomeFeedItem
 import com.israrxy.raazi.viewmodel.HomeSection
@@ -45,7 +47,7 @@ fun HomeMusicRail(
     onToggleSelection: (MusicItem) -> Unit = {},
     onEnterSelection: (MusicItem) -> Unit = {}
 ) {
-    val tracks = section.musicItems()
+    val tracks = section.musicItems().filter { it.canPlayAsTrack() }
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -125,31 +127,54 @@ fun HomeFeedItemCard(
     onEnterSelection: (MusicItem) -> Unit = {}
 ) {
     when (item) {
-        is HomeFeedItem.Music -> MusicCard(
-            musicItem = item.item,
-            viewModel = viewModel,
-            onNavigateToPlayer = onNavigateToPlayer,
-            isSelected = selectedTracks.contains(item.item),
-            isSelectionMode = isSelectionMode,
-            onToggleSelection = onToggleSelection,
-            onEnterSelection = onEnterSelection,
-            onClick = {
-                viewModel.recordHomeInteraction(
-                    itemId = item.item.id,
-                    sectionId = section.id,
-                    action = com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY,
-                    sourceType = section.sourceType
-                )
-                val railTracks = section.musicItems()
-                val idx = railTracks.indexOfFirst { it.id == item.item.id }.coerceAtLeast(0)
-                if (railTracks.size > 1) {
-                    viewModel.playPlaylist(railTracks, idx)
-                } else {
-                    viewModel.playMusic(item.item)
+        is HomeFeedItem.Music -> {
+            val musicItem = item.item
+            val isArtist = musicItem.contentType == MusicContentType.ARTIST
+            val isCollection = musicItem.isPlaylist ||
+                musicItem.contentType == MusicContentType.PLAYLIST ||
+                musicItem.contentType == MusicContentType.ALBUM
+            MusicCard(
+                musicItem = musicItem,
+                viewModel = viewModel,
+                onNavigateToPlayer = onNavigateToPlayer,
+                openPlayerOnClick = !isArtist && !isCollection,
+                isSelected = selectedTracks.contains(musicItem),
+                isSelectionMode = isSelectionMode,
+                onToggleSelection = onToggleSelection,
+                onEnterSelection = onEnterSelection,
+                onClick = {
+                    viewModel.recordHomeInteraction(
+                        itemId = musicItem.id,
+                        sectionId = section.id,
+                        action = if (isArtist || isCollection) {
+                            com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_OPEN
+                        } else {
+                            com.israrxy.raazi.data.db.HomeInteractionEntity.ACTION_PLAY
+                        },
+                        sourceType = section.sourceType
+                    )
+                    when {
+                        isArtist -> onNavigateToArtist(
+                            musicItem.artistId ?: musicItem.id,
+                            musicItem.title
+                        )
+
+                        isCollection -> onNavigateToPlaylist(musicItem.id)
+
+                        else -> {
+                            val railTracks = section.musicItems().filter { it.canPlayAsTrack() }
+                            val idx = railTracks.indexOfFirst { it.id == musicItem.id }.coerceAtLeast(0)
+                            if (railTracks.size > 1) {
+                                viewModel.playPlaylist(railTracks, idx)
+                            } else {
+                                viewModel.playMusic(musicItem)
+                            }
+                            viewModel.fetchAutoPlayQueue(musicItem)
+                        }
+                    }
                 }
-                viewModel.fetchAutoPlayQueue(item.item)
-            }
-        )
+            )
+        }
         is HomeFeedItem.YouTube -> {
             val songTrack = (item.item as? com.zionhuang.innertube.models.SongItem)?.toHomeMusicItem()
             YouTubeFeedCard(

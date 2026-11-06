@@ -16,6 +16,7 @@ import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
 import com.israrxy.raazi.model.SavedCollectionItem
 import com.israrxy.raazi.model.SearchResult
+import com.israrxy.raazi.model.canPlayAsTrack
 import com.israrxy.raazi.model.toSavedCollectionItem
 import com.israrxy.raazi.model.toSavedCollectionItemOrNull
 import com.israrxy.raazi.service.YouTubeMusicExtractor
@@ -83,6 +84,7 @@ class MusicRepository(
         try {
             val charts = chartsExtractor.getCharts()
             val topSongs = charts.entries.find { it.key.contains("Top songs", ignoreCase = true) }?.value
+                ?.filter { it.canPlayAsTrack() }
             if (!topSongs.isNullOrEmpty()) {
                 return SearchResult("Top Songs Global", topSongs)
             }

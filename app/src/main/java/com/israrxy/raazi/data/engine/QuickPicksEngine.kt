@@ -5,6 +5,7 @@ import com.israrxy.raazi.data.db.MusicDao
 import com.israrxy.raazi.data.remote.YouTubeChartsExtractor
 import com.israrxy.raazi.data.repository.MusicRepository
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.canPlayAsTrack
 import com.israrxy.raazi.service.YouTubeMusicExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -153,10 +154,10 @@ class QuickPicksEngine(
             }.orEmpty()
 
             val topSongs = charts.entries.find { it.key.contains("Top songs", ignoreCase = true) }?.value
-                ?: charts.values.firstOrNull()
+                ?: charts.values.firstOrNull { items -> items.any { it.canPlayAsTrack() } }
 
             if (!topSongs.isNullOrEmpty()) {
-                topSongs.filter { it.id.isNotBlank() && it.id !in dismissedItemIds }
+                topSongs.filter { it.canPlayAsTrack() && it.id !in dismissedItemIds }
                     .distinctBy { it.id }
                     .take(TARGET_QUICK_PICKS_COUNT)
             } else {
@@ -164,7 +165,7 @@ class QuickPicksEngine(
                     repository.getTrending()
                 }
                 trending?.items.orEmpty()
-                    .filter { it.id.isNotBlank() && it.id !in dismissedItemIds }
+                    .filter { it.canPlayAsTrack() && it.id !in dismissedItemIds }
                     .distinctBy { it.id }
                     .take(TARGET_QUICK_PICKS_COUNT)
             }

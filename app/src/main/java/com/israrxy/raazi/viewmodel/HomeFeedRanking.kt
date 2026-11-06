@@ -1,5 +1,6 @@
 package com.israrxy.raazi.viewmodel
 
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.zionhuang.innertube.models.AlbumItem
 import com.zionhuang.innertube.models.ArtistItem
@@ -141,8 +142,10 @@ internal class HomeFeedRanking(
             ?: 0.0
     }
 
-    fun affinityOf(item: MusicItem): Double =
-        artistAffinity[normalizeArtist(item.artist)] ?: 0.0
+    fun affinityOf(item: MusicItem): Double {
+        val artistName = if (item.contentType == MusicContentType.ARTIST) item.title else item.artist
+        return artistAffinity[normalizeArtist(artistName)] ?: 0.0
+    }
 
     private fun selectMusic(
         items: List<MusicItem>,

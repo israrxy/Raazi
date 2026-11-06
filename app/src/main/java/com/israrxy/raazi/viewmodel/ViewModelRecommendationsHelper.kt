@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.canPlayAsTrack
 import com.israrxy.raazi.service.AdvancedDownloadManager
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.ArtistItem
@@ -305,19 +306,22 @@ private suspend fun MusicPlayerViewModel.loadFallbackRecommendations(
 ) {
     try {
         val trending = repository.getTrending()
-        if (trending.items.isNotEmpty()) {
+        val trendingTracks = trending.items.filter { it.canPlayAsTrack() }
+        if (trendingTracks.isNotEmpty()) {
             recommendations.add(
                 MusicPlayerViewModel.SimilarRecommendation(
                     title = "Trending Now",
-                    thumbnailUrl = trending.items.firstOrNull()?.thumbnailUrl,
-                    items = trending.items.take(15).map { MusicPlayerViewModel.RecommendationItem.FromMusicItem(it) }
+                    thumbnailUrl = trendingTracks.firstOrNull()?.thumbnailUrl,
+                    items = trendingTracks.take(15).map { MusicPlayerViewModel.RecommendationItem.FromMusicItem(it) }
                 )
             )
         }
 
         val charts = repository.getAllCharts()
-        charts.entries.firstOrNull()?.let { (chartName, items) ->
-            if (items.isNotEmpty()) {
+        charts.entries
+            .map { (chartName, items) -> chartName to items.filter { it.canPlayAsTrack() } }
+            .firstOrNull { it.second.isNotEmpty() }
+            ?.let { (chartName, items) ->
                 recommendations.add(
                     MusicPlayerViewModel.SimilarRecommendation(
                         title = chartName,
@@ -326,7 +330,6 @@ private suspend fun MusicPlayerViewModel.loadFallbackRecommendations(
                     )
                 )
             }
-        }
     } catch (e: Exception) {
         Log.e("MusicVM", "Fallback recommendations failed", e)
     }

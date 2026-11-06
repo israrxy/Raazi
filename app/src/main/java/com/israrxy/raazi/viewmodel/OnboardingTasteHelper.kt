@@ -3,6 +3,7 @@ package com.israrxy.raazi.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.canPlayAsTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -179,7 +180,7 @@ internal suspend fun MusicPlayerViewModel.loadOnboardingTasteSuggestions(
     val chartTracks = runCatching {
         val charts = _allCharts.value.ifEmpty { repository.getAllCharts() }
         charts.values.flatten()
-            .filter { it.id.isNotBlank() && it.title.isNotBlank() && !it.isPlaylist }
+            .filter { it.canPlayAsTrack() && it.title.isNotBlank() }
             .distinctBy { it.id }
             .take(12)
     }.getOrDefault(emptyList())

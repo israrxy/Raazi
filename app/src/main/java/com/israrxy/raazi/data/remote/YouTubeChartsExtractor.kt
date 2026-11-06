@@ -4,8 +4,11 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.SearchResult
+import com.zionhuang.innertube.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_ARTIST
+import com.zionhuang.innertube.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_PLAYLIST
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -202,85 +205,102 @@ class YouTubeChartsExtractor {
         return emptyList()
     }
 
+    /**
+     * Parses a chart shelf. Entries may be songs/videos (`watchEndpoint`),
+     * real playlists (`VL...` browse ids) or artists
+     * (`MUSIC_PAGE_TYPE_ARTIST`). Everything else - podcast shows, albums,
+     * genre hubs - is skipped: treating any browse id as a playlist produced
+     * cards whose "play" did nothing.
+     */
     private fun parseItems(items: JsonArray): List<MusicItem> {
         val musicItems = mutableListOf<MusicItem>()
         items.forEach { itemWrapper ->
             try {
-                // Determine item type: musicTwoRowItemRenderer (Songs/Albums) or musicResponsiveListItemRenderer (Songs in list)
-                val renderer = itemWrapper.asJsonObject.getAsJsonObject("musicTwoRowItemRenderer") 
-                    ?: itemWrapper.asJsonObject.getAsJsonObject("musicResponsiveListItemRenderer")
-                
-                if (renderer != null) {
-                    val title = renderer.getAsJsonObject("title")
-                        ?.getAsJsonArray("runs")?.get(0)?.asJsonObject?.get("text")?.asString ?: ""
-                    
-                    // Thumbnail
-                    val thumbUrl = renderer.getAsJsonObject("thumbnailRenderer")
-                        ?.getAsJsonObject("musicThumbnailRenderer")
-                        ?.getAsJsonObject("thumbnail")
-                        ?.getAsJsonArray("thumbnails")
-                        ?.lastOrNull()?.asJsonObject // highest quality
-                        ?.get("url")?.asString ?: ""
+                val wrapper = itemWrapper.asJsonObject
+                val renderer = wrapper.getAsJsonObject("musicTwoRowItemRenderer")
+                    ?: wrapper.getAsJsonObject("musicResponsiveListItemRenderer")
+                    ?: return@forEach
 
-                    // Video ID or Playlist ID
-                    var videoId = ""
-                    // Try navigationEndpoint
-                    val navEndpoint = renderer.getAsJsonObject("navigationEndpoint")
-                        ?: renderer.getAsJsonObject("musicTwoRowItemRenderer")?.getAsJsonObject("navigationEndpoint") // fallback?
-                        
-                   videoId = navEndpoint?.getAsJsonObject("watchEndpoint")?.get("videoId")?.asString 
-                        ?: navEndpoint?.getAsJsonObject("watchPlaylistEndpoint")?.get("playlistId")?.asString 
-                        ?: navEndpoint?.getAsJsonObject("browseEndpoint")?.get("browseId")?.asString ?: ""
+                val title = parseTitle(renderer)
+                if (title.isBlank()) return@forEach
 
-                    // Subtitle (Artist)
-                    val subtitleRuns = renderer.getAsJsonObject("subtitle")?.getAsJsonArray("runs") 
-                        ?: renderer.getAsJsonArray("flexColumns")?.get(1)?.asJsonObject
-                            ?.getAsJsonObject("musicResponsiveListItemFlexColumnRenderer")
-                            ?.getAsJsonObject("text")?.getAsJsonArray("runs")
+                val thumbnailUrl = parseThumbnail(renderer)
+                val navEndpoint = renderer.getAsJsonObject("navigationEndpoint")
+                val videoId = navEndpoint
+                    ?.getAsJsonObject("watchEndpoint")
+                    ?.get("videoId")?.asString
+                val browseEndpoint = navEndpoint?.getAsJsonObject("browseEndpoint")
+                val browseId = browseEndpoint?.get("browseId")?.asString
+                val pageType = browseEndpoint
+                    ?.getAsJsonObject("browseEndpointContextSupportedConfigs")
+                    ?.getAsJsonObject("browseEndpointContextMusicConfig")
+                    ?.get("pageType")?.asString
+                val subtitleRuns = parseSubtitleRuns(renderer)
+                val artistId = subtitleRuns?.firstNotNullOfOrNull { run ->
+                    run.asJsonObject
+                        .getAsJsonObject("navigationEndpoint")
+                        ?.getAsJsonObject("browseEndpoint")
+                        ?.get("browseId")?.asString
+                        ?.takeIf { it.startsWith("UC") }
+                }
 
-                    var artist = "Unknown"
-                    var artistId: String? = null
+                when {
+                    !videoId.isNullOrBlank() -> {
+                        musicItems += MusicItem(
+                            id = videoId,
+                            title = title,
+                            artist = subtitleText(subtitleRuns) ?: "Unknown",
+                            duration = 0L,
+                            thumbnailUrl = thumbnailUrl,
+                            audioUrl = "",
+                            videoUrl = videoId,
+                            isLive = false,
+                            artistId = artistId
+                        )
+                    }
 
-                    subtitleRuns?.forEach { run ->
-                        val text = run.asJsonObject.get("text")?.asString
-                        if (text != null && text != " • " && artist == "Unknown") {
-                             artist = text
-                        }
-                        
-                        // Extract Artist ID
-                        val navEndpoint = run.asJsonObject.getAsJsonObject("navigationEndpoint")
-                        val browseId = navEndpoint?.getAsJsonObject("browseEndpoint")?.get("browseId")?.asString
-                        if (browseId != null && browseId.startsWith("UC")) {
-                            artistId = browseId
+                    pageType == MUSIC_PAGE_TYPE_ARTIST && !browseId.isNullOrBlank() -> {
+                        musicItems += MusicItem(
+                            id = browseId,
+                            title = title,
+                            artist = "Artist",
+                            duration = 0L,
+                            thumbnailUrl = thumbnailUrl,
+                            audioUrl = "",
+                            videoUrl = "",
+                            isLive = false,
+                            artistId = browseId,
+                            contentType = MusicContentType.ARTIST
+                        )
+                    }
+
+                    pageType == MUSIC_PAGE_TYPE_PLAYLIST && !browseId.isNullOrBlank() -> {
+                        // Browse ids for playlists carry a "VL" prefix that the
+                        // playlist endpoint does not accept.
+                        val playlistId = browseId.removePrefix("VL")
+                        if (playlistId.startsWith("PL") ||
+                            playlistId.startsWith("OLAK") ||
+                            playlistId.startsWith("RD")
+                        ) {
+                            musicItems += MusicItem(
+                                id = playlistId,
+                                title = title,
+                                artist = subtitleText(subtitleRuns) ?: "Playlist",
+                                duration = 0L,
+                                thumbnailUrl = thumbnailUrl,
+                                audioUrl = "",
+                                videoUrl = "",
+                                isLive = false,
+                                isPlaylist = true,
+                                contentType = MusicContentType.PLAYLIST
+                            )
                         }
                     }
 
-                   if (videoId.isNotEmpty()) {
-                       // Check if it is a playlist (videoId might be empty, or we used playlistId as ID)
-                       val hasPlaylistEndpoint = navEndpoint?.getAsJsonObject("watchPlaylistEndpoint") != null
-                       val hasBrowseEndpoint = navEndpoint?.getAsJsonObject("browseEndpoint") != null
-                       val isPlaylist = navEndpoint?.getAsJsonObject("watchEndpoint")?.get("videoId")?.asString.isNullOrEmpty() || hasPlaylistEndpoint || hasBrowseEndpoint
-                       
-                       // Use ID directly for videoUrl if it's a track, or construct playlist URL if playlist
-                       // (MusicPlaybackService handles IDs safely, preventing malformed URLs)
-                       val videoUrl = if (isPlaylist) "https://www.youtube.com/playlist?list=$videoId" else videoId
-                       
-                       musicItems.add(MusicItem(
-                           id = videoId,
-                           title = title,
-                           artist = artist,
-                           duration = 0L,
-                           thumbnailUrl = thumbUrl,
-                           audioUrl = "", // Empty initially
-                           videoUrl = videoUrl,
-                           isLive = false,
-                           isPlaylist = isPlaylist,
-                           artistId = artistId
-                       ))
-                   } else {
-                       // Log warning for skipped item
-                       Log.w("ChartsExtractor", "Skipping item with missing videoId: $title")
-                   }
+                    else -> Log.w(
+                        "ChartsExtractor",
+                        "Skipping unsupported chart item: $title ($pageType)"
+                    )
                 }
             } catch (e: Exception) {
                 // skip bad item
@@ -288,4 +308,50 @@ class YouTubeChartsExtractor {
         }
         return musicItems
     }
+
+    private fun parseTitle(renderer: JsonObject): String {
+        renderer.getAsJsonObject("title")
+            ?.getAsJsonArray("runs")
+            ?.firstOrNull()?.asJsonObject
+            ?.get("text")?.asString
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        return renderer.getAsJsonArray("flexColumns")
+            ?.firstOrNull()?.asJsonObject
+            ?.getAsJsonObject("musicResponsiveListItemFlexColumnRenderer")
+            ?.getAsJsonObject("text")
+            ?.getAsJsonArray("runs")
+            ?.firstOrNull()?.asJsonObject
+            ?.get("text")?.asString
+            .orEmpty()
+    }
+
+    private fun parseThumbnail(renderer: JsonObject): String {
+        // Two-row items expose `thumbnailRenderer`, responsive rows `thumbnail`.
+        val thumbnailNode = renderer.getAsJsonObject("thumbnailRenderer")
+            ?: renderer.getAsJsonObject("thumbnail")
+            ?: return ""
+        return thumbnailNode
+            .getAsJsonObject("musicThumbnailRenderer")
+            ?.getAsJsonObject("thumbnail")
+            ?.getAsJsonArray("thumbnails")
+            ?.lastOrNull()?.asJsonObject
+            ?.get("url")?.asString
+            .orEmpty()
+    }
+
+    private fun parseSubtitleRuns(renderer: JsonObject): JsonArray? =
+        renderer.getAsJsonObject("subtitle")?.getAsJsonArray("runs")
+            ?: renderer.getAsJsonArray("flexColumns")
+                ?.takeIf { it.size() > 1 }
+                ?.get(1)?.asJsonObject
+                ?.getAsJsonObject("musicResponsiveListItemFlexColumnRenderer")
+                ?.getAsJsonObject("text")
+                ?.getAsJsonArray("runs")
+
+    private fun subtitleText(runs: JsonArray?): String? =
+        runs?.firstOrNull()?.asJsonObject
+            ?.get("text")?.asString
+            ?.takeIf { it.isNotBlank() && it != " • " }
 }

@@ -1,6 +1,7 @@
 package com.israrxy.raazi.data.recommendation
 
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.model.canPlayAsTrack
 
 /** A home rail produced purely from local signals (plus optional anonymous charts). */
 data class PersonalizedSection(
@@ -40,7 +41,7 @@ object HomePersonalizationEngine {
         val used = mutableSetOf<String>()
         val chartTracksByArtist = charts.values
             .flatten()
-            .filter { it.id.isNotBlank() && it.id !in profile.dismissedIds }
+            .filter { it.canPlayAsTrack() && it.id !in profile.dismissedIds }
             .distinctBy { it.id }
             .groupBy { artistKeyOf(it.artist) }
 
@@ -78,7 +79,7 @@ object HomePersonalizationEngine {
             }
 
         val trending = pickTrendingChart(charts)
-            .filter { it.id !in used && it.id.isNotBlank() }
+            .filter { it.canPlayAsTrack() && it.id !in used }
             .distinctBy { it.id }
             .take(TRENDING_SIZE)
         if (trending.size >= 5) {
@@ -173,17 +174,26 @@ object HomePersonalizationEngine {
     private fun pickTrendingChart(charts: Map<String, List<MusicItem>>): List<MusicItem> {
         if (charts.isEmpty()) return emptyList()
         val preferred = charts.entries.firstOrNull {
-            it.key.contains("top song", ignoreCase = true) ||
-                it.key.contains("trending", ignoreCase = true)
+            it.value.any { item -> item.canPlayAsTrack() } && (
+                it.key.contains("top song", ignoreCase = true) ||
+                    it.key.contains("trending", ignoreCase = true)
+                )
         }
-        return (preferred ?: charts.entries.first()).value
+        return (preferred ?: charts.entries.firstOrNull { entry ->
+            entry.value.any { it.canPlayAsTrack() }
+        })?.value.orEmpty()
     }
 
     private fun trendingChartTitle(charts: Map<String, List<MusicItem>>): String {
         val name = charts.entries.firstOrNull {
-            it.key.contains("top song", ignoreCase = true) ||
-                it.key.contains("trending", ignoreCase = true)
+            it.value.any { item -> item.canPlayAsTrack() } && (
+                it.key.contains("top song", ignoreCase = true) ||
+                    it.key.contains("trending", ignoreCase = true)
+                )
         }?.key
+            ?: charts.entries.firstOrNull { entry ->
+                entry.value.any { it.canPlayAsTrack() }
+            }?.key
         return name?.takeIf { it.isNotBlank() } ?: "Trending Now"
     }
 

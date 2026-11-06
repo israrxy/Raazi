@@ -56,6 +56,18 @@ data class SearchResult(
 
 fun savedCollectionId(type: MusicContentType, sourceId: String): String = "${type.name}:$sourceId"
 
+/**
+ * True when this item can be queued and streamed as a single track.
+ * Artists, albums and playlists are destinations, not playable tracks.
+ */
+fun MusicItem.canPlayAsTrack(): Boolean =
+    !isPlaylist &&
+        (contentType == MusicContentType.SONG ||
+            contentType == MusicContentType.VIDEO ||
+            contentType == MusicContentType.UNKNOWN) &&
+        id.isNotBlank() &&
+        (videoUrl.isNotBlank() || audioUrl.isNotBlank() || !localPath.isNullOrBlank())
+
 fun MusicItem.toSavedCollectionItemOrNull(): SavedCollectionItem? {
     val savedType = when {
         contentType == MusicContentType.ARTIST -> MusicContentType.ARTIST

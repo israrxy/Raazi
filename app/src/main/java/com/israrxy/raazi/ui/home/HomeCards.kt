@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,8 +24,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.model.Playlist
+import com.israrxy.raazi.model.canPlayAsTrack
 import com.israrxy.raazi.utils.ThumbnailUtils
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
 
@@ -35,41 +38,56 @@ fun MusicCard(
     viewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onClick: (() -> Unit)? = null,
+    openPlayerOnClick: Boolean = true,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     onToggleSelection: (MusicItem) -> Unit = {},
     onEnterSelection: (MusicItem) -> Unit = {}
 ) {
+    val isArtist = musicItem.contentType == MusicContentType.ARTIST
+    val artworkShape = if (isArtist) CircleShape else RoundedCornerShape(8.dp)
     Column(
         modifier = Modifier
             .width(160.dp)
             .combinedClickable(
                 onClick = {
-                    if (isSelectionMode) {
+                    if (isSelectionMode && !isArtist) {
                         onToggleSelection(musicItem)
                     } else {
                         if (onClick != null) {
                             onClick()
-                        } else {
+                        } else if (musicItem.canPlayAsTrack()) {
                             viewModel.playMusic(musicItem)
                         }
-                        onNavigateToPlayer()
+                        if (openPlayerOnClick) onNavigateToPlayer()
                     }
                 },
-                onLongClick = { onEnterSelection(musicItem) }
+                onLongClick = { if (!isArtist) onEnterSelection(musicItem) }
             )
     ) {
-        Box {
-            AsyncImage(
-                model = ThumbnailUtils.getHighQualityThumbnail(musicItem.thumbnailUrl ?: ""),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(160.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
-            if (isSelectionMode) {
+        Box(
+            modifier = Modifier
+                .size(160.dp)
+                .clip(artworkShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isArtist && musicItem.thumbnailUrl.isBlank()) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(72.dp)
+                )
+            } else {
+                AsyncImage(
+                    model = ThumbnailUtils.getHighQualityThumbnail(musicItem.thumbnailUrl),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            if (isSelectionMode && !isArtist) {
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -101,7 +119,7 @@ fun MusicCard(
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = musicItem.artist,
+            text = if (isArtist) "Artist" else musicItem.artist,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
