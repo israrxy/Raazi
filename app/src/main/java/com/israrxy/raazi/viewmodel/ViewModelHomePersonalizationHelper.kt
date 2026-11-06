@@ -48,15 +48,19 @@ internal fun MusicPlayerViewModel.refreshPersonalizedSections(force: Boolean = f
 internal fun MusicPlayerViewModel.loadDiscoverySources(force: Boolean = false) {
     if (!force && _allCharts.value.isNotEmpty() && _communityPlaylists.value.isNotEmpty()) return
 
-    viewModelScope.launch {
-        try {
-            val charts = repository.getAllCharts()
-            if (charts.isNotEmpty()) {
-                _allCharts.value = charts
-                rebuildHomeFeedState()
+    // Charts are normally owned by refreshPersonalizedSections(); only fetch
+    // them here when that job is not already in flight.
+    if (personalizedSectionsJob?.isActive != true && _allCharts.value.isEmpty()) {
+        viewModelScope.launch {
+            try {
+                val charts = repository.getAllCharts()
+                if (charts.isNotEmpty()) {
+                    _allCharts.value = charts
+                    rebuildHomeFeedState()
+                }
+            } catch (e: Exception) {
+                Log.w("MusicVM", "Charts source failed", e)
             }
-        } catch (e: Exception) {
-            Log.w("MusicVM", "Charts source failed", e)
         }
     }
 

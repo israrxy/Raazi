@@ -175,7 +175,7 @@ fun HomeFeedItemCard(
                             viewModel.fetchAutoPlayQueue()
                             onNavigateToPlayer()
                         }
-                        is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.id)
+                        is com.zionhuang.innertube.models.AlbumItem -> onNavigateToPlaylist(ytItem.playlistId)
                         is com.zionhuang.innertube.models.PlaylistItem -> onNavigateToPlaylist(ytItem.id)
                         is com.zionhuang.innertube.models.ArtistItem -> onNavigateToArtist(ytItem.id, ytItem.title)
                     }
