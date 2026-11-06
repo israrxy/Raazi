@@ -21,7 +21,7 @@ object NewReleaseAlbumPage {
                     id = it.navigationEndpoint?.browseEndpoint?.browseId
                 )
             },
-            year = renderer.subtitle.runs.lastOrNull()?.text?.toIntOrNull(),
+            year = renderer.subtitle?.runs?.lastOrNull()?.text?.toIntOrNull(),
             thumbnail = renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
             explicit = renderer.subtitleBadges?.find {
                 it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
