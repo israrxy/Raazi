@@ -381,7 +381,6 @@ fun SettingsScreen(
                 }
             }
         }
-        com.israrxy.raazi.ui.home.TasteBuilderSheetHost(viewModel)
     }
 
     SettingsSelectionDialogsHost(

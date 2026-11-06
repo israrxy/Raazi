@@ -243,7 +243,6 @@ class MusicPlayerViewModel(
     internal var personalizedSections: List<HomeSection> = emptyList()
     internal var personalizedSectionsJob: Job? = null
     internal var artistAffinity: Map<String, Double> = emptyMap()
-    internal val homeTaste = HomeTasteState(RaaziApplication.instance)
     internal val _communityPlaylists = MutableStateFlow<List<PlaylistItem>>(emptyList())
 
     sealed class RecommendationItem {

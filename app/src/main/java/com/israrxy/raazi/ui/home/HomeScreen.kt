@@ -30,9 +30,6 @@ import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.viewmodel.HomeSectionType
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
-import com.israrxy.raazi.viewmodel.dismissTasteArtist
-import com.israrxy.raazi.viewmodel.dismissTasteBuilder
-import com.israrxy.raazi.viewmodel.openTasteBuilder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -266,62 +263,6 @@ fun HomeScreen(
                                 )
                             }
 
-                            HomeSectionType.TASTEBUILDER_CARD -> item(key = section.id) {
-                                TasteBuilderCard(
-                                    onPick = { viewModel.openTasteBuilder() },
-                                    onDismiss = { viewModel.dismissTasteBuilder() }
-                                )
-                            }
-
-                            HomeSectionType.LISTEN_AGAIN -> item(key = section.id) {
-                                HomeSectionHeader(section = section)
-                                ListenAgainRail(
-                                    section = section,
-                                    viewModel = viewModel,
-                                    onNavigateToPlayer = onNavigateToPlayer,
-                                    onNavigateToPlaylist = onNavigateToPlaylist
-                                )
-                            }
-
-                            HomeSectionType.MY_MIX -> item(key = section.id) {
-                                HomeSectionHeader(
-                                    section = section,
-                                    onNotInterested = section.artistName?.let { artist ->
-                                        { viewModel.dismissTasteArtist(artist) }
-                                    }
-                                )
-                                MixRail(
-                                    section = section,
-                                    viewModel = viewModel,
-                                    onNavigateToPlayer = onNavigateToPlayer
-                                )
-                            }
-
-                            HomeSectionType.SIMILAR_TO,
-                            HomeSectionType.ALBUMS_FOR_YOU,
-                            HomeSectionType.BECAUSE_YOU_LISTENED -> item(key = section.id) {
-                                HomeSectionHeader(
-                                    section = section,
-                                    onMore = section.moreEndpoint?.let { endpoint ->
-                                        { onNavigateToArtist(endpoint, section.title) }
-                                    },
-                                    onNotInterested = section.artistName?.let { artist ->
-                                        { viewModel.dismissTasteArtist(artist) }
-                                    }
-                                )
-                                HomeFeedRail(
-                                    section = section,
-                                    viewModel = viewModel,
-                                    onNavigateToPlayer = onNavigateToPlayer,
-                                    onNavigateToPlaylist = onNavigateToPlaylist,
-                                    onNavigateToArtist = onNavigateToArtist,
-                                    isSelectionMode = isHomeSelectionMode,
-                                    selectedTracks = selectedHomeTracks,
-                                    onToggleSelection = onHomeToggleSelection,
-                                    onEnterSelection = onHomeEnterSelection
-                                )
-                            }
-
                             HomeSectionType.FORGOTTEN_FAVORITES -> item(key = section.id) {
                                 HomeSectionHeader(section = section)
                                 HomeMusicRail(
@@ -454,7 +395,6 @@ fun HomeScreen(
                 }
             }
         }
-        TasteBuilderSheetHost(viewModel)
     }
 
     // Add To Playlist Dialog

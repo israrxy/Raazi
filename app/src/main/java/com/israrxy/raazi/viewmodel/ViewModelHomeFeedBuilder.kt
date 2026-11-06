@@ -85,21 +85,8 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
     }
 
     val recentlyPlayedIds = _keepListening.value.take(12).mapTo(mutableSetOf()) { it.id }
-    val ranking = HomeFeedRanking(
-        dismissedIds = dismissedHomeItemIds,
-        artistAffinity = artistAffinity,
-        recentlyPlayedIds = recentlyPlayedIds,
-        blockedArtistKeys = homeTaste.profile?.dismissedArtistKeys.orEmpty()
-    )
+    val ranking = HomeFeedRanking(dismissedHomeItemIds, artistAffinity, recentlyPlayedIds)
     val addedTitles = mutableSetOf<String>()
-    val usedCollections = mutableSetOf<String>()
-
-    fun idOf(item: HomeFeedItem): String? = when (item) {
-        is HomeFeedItem.Music -> item.item.id
-        is HomeFeedItem.YouTube -> homeYouTubeItemId(item.item)
-        is HomeFeedItem.PlaylistResult -> item.playlist.id
-        is HomeFeedItem.Mood -> null
-    }
 
     fun addSection(
         id: String,
@@ -107,22 +94,17 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         type: HomeSectionType,
         source: String,
         items: List<HomeFeedItem>,
-        actionLabel: String? = null,
-        avoidIds: Set<String> = emptySet(),
-        floor: Int = 0
+        actionLabel: String? = null
     ) {
         if (items.isEmpty()) return
         if (!addedTitles.add(title.lowercase())) return
-        val filtered = if (avoidIds.isEmpty()) items else items.filterNot { idOf(it) in avoidIds }
-        val finalItems = if (floor > 0 && filtered.size < floor) items else filtered
-        if (finalItems.isEmpty()) return
         sections += HomeSection(
             id = id,
             title = title,
             type = type,
             sourceType = source,
             actionLabel = actionLabel,
-            items = finalItems
+            items = items
         )
     }
 
@@ -132,81 +114,26 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         type: HomeSectionType,
         source: String,
         items: List<MusicItem>,
-        actionLabel: String? = null,
-        avoidIds: Set<String> = emptySet(),
-        floor: Int = 0
+        actionLabel: String? = null
     ) {
-        addSection(
-            id = id,
-            title = title,
-            type = type,
-            source = source,
-            items = items.map(HomeFeedItem::Music),
-            actionLabel = actionLabel,
-            avoidIds = avoidIds,
-            floor = floor
-        )
+        addSection(id, title, type, source, items.map(HomeFeedItem::Music), actionLabel)
     }
 
-    fun addGeneratedShelf(section: HomeSection) {
-        if (section.items.isEmpty()) return
-        if (!addedTitles.add(section.title.lowercase())) return
-        val kept = section.items.mapNotNull { item ->
-            when (item) {
-                is HomeFeedItem.Music -> ranking.familiarMusic(listOf(item.item), 1)
-                    .firstOrNull()
-                    ?.let(HomeFeedItem::Music)
-                is HomeFeedItem.PlaylistResult -> {
-                    val key = "${item.playlist.id}:${item.playlist.title.lowercase()}"
-                    if (usedCollections.add(key)) item else null
-                }
-                else -> item
-            }
-        }
-        val finalItems = if (kept.size >= 3) kept else section.items
-        if (finalItems.isEmpty()) return
-        sections += section.copy(
-            items = finalItems,
-            sourceType = HomeInteractionEntity.SOURCE_LOCAL
-        )
-    }
-
-    val taste = homeTaste.profile
-    if (taste != null && taste.isColdStart && !homeTaste.builderDismissed.value) {
-        sections += HomeSection(
-            id = "tastebuilder_card",
-            title = "Pick artists you like",
-            type = HomeSectionType.TASTEBUILDER_CARD,
-            sourceType = HomeInteractionEntity.SOURCE_LOCAL,
-            subtitle = "Choose at least three artists to build your feed"
-        )
-    }
-
-    val generatedShelves = homeTaste.shelves.value
-    val hasGeneratedShelves = generatedShelves.isNotEmpty()
-
-    if (hasGeneratedShelves) {
-        generatedShelves
-            .filter { it.type == HomeSectionType.LISTEN_AGAIN }
-            .forEach(::addGeneratedShelf)
+    val activeTrack = _playbackState.value.currentTrack
+    val orderedHistory = if (activeTrack != null) {
+        listOf(activeTrack) + _keepListening.value.filter { it.id != activeTrack.id }
     } else {
-        val activeTrack = _playbackState.value.currentTrack
-        val orderedHistory = if (activeTrack != null) {
-            listOf(activeTrack) + _keepListening.value.filter { it.id != activeTrack.id }
-        } else {
-            _keepListening.value
-        }
-        addMusicSection(
-            id = "keep_listening",
-            title = "Keep Listening",
-            type = HomeSectionType.KEEP_LISTENING,
-            source = HomeInteractionEntity.SOURCE_LOCAL,
-            items = ranking.familiarMusic(orderedHistory, 14),
-            actionLabel = "Refresh"
-        )
+        _keepListening.value
     }
+    addMusicSection(
+        id = "keep_listening",
+        title = "Keep Listening",
+        type = HomeSectionType.KEEP_LISTENING,
+        source = HomeInteractionEntity.SOURCE_LOCAL,
+        items = ranking.familiarMusic(orderedHistory, 14),
+        actionLabel = "Refresh"
+    )
 
-    // The existing Quick Picks engine stays the source for this shelf.
     addMusicSection(
         id = "quick_picks",
         title = "Quick Picks",
@@ -216,93 +143,82 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         actionLabel = "Refresh"
     )
 
-    if (hasGeneratedShelves) {
-        generatedShelves
-            .filterNot { it.type == HomeSectionType.LISTEN_AGAIN }
-            .forEach(::addGeneratedShelf)
-    } else {
-        // Legacy personalization is the fallback if every new generator failed.
-        val allowLegacyRecommendations = personalizedSections.isEmpty()
-        _similarRecommendations.value.forEachIndexed { index, recommendation ->
-            val isArtistRail = recommendation.title.startsWith("More from", ignoreCase = true)
-            if (!isArtistRail && !allowLegacyRecommendations) return@forEachIndexed
+    // "More from <artist>" rails stay; the generic legacy rails are replaced by
+    // the local personalization engine below.
+    val allowLegacyRecommendations = personalizedSections.isEmpty()
+    _similarRecommendations.value.forEachIndexed { index, recommendation ->
+        val isArtistRail = recommendation.title.startsWith("More from", ignoreCase = true)
+        if (!isArtistRail && !allowLegacyRecommendations) return@forEachIndexed
 
-            val items = mutableListOf<HomeFeedItem>()
-            for (item in recommendation.items) {
-                if (items.size >= 14) break
-                when (item) {
-                    is MusicPlayerViewModel.RecommendationItem.FromMusicItem -> {
-                        val picked = ranking.familiarMusic(listOf(item.musicItem), 1)
-                        if (picked.isNotEmpty()) items += HomeFeedItem.Music(picked.first())
-                    }
-                    is MusicPlayerViewModel.RecommendationItem.FromYTItem -> {
-                        val picked = ranking.discoveryYouTube(listOf(item.ytItem), 1, ::homeYouTubeItemId)
-                        if (picked.isNotEmpty()) items += HomeFeedItem.YouTube(picked.first())
-                    }
+        val items = mutableListOf<HomeFeedItem>()
+        for (item in recommendation.items) {
+            if (items.size >= 14) break
+            when (item) {
+                is MusicPlayerViewModel.RecommendationItem.FromMusicItem -> {
+                    val picked = ranking.familiarMusic(listOf(item.musicItem), 1)
+                    if (picked.isNotEmpty()) items += HomeFeedItem.Music(picked.first())
+                }
+                is MusicPlayerViewModel.RecommendationItem.FromYTItem -> {
+                    val picked = ranking.discoveryYouTube(listOf(item.ytItem), 1, ::homeYouTubeItemId)
+                    if (picked.isNotEmpty()) items += HomeFeedItem.YouTube(picked.first())
                 }
             }
-            addSection(
-                id = "recommendation_$index",
-                title = recommendation.title,
-                type = HomeSectionType.RECOMMENDATION,
-                source = HomeInteractionEntity.SOURCE_YOUTUBE,
-                items = items
-            )
         }
-
-        val (familiarPersonalized, discoveryPersonalized) = personalizedSections.partition {
-            !it.id.startsWith("personalized_trending")
-        }
-        familiarPersonalized.forEach { section ->
-            val items = section.items.mapNotNull { (it as? HomeFeedItem.Music)?.item }
-            addMusicSection(
-                id = section.id,
-                title = section.title,
-                type = section.type,
-                source = section.sourceType,
-                items = ranking.familiarMusic(items, 16)
-            )
-        }
-
-        addMusicSection(
-            id = "forgotten_favorites",
-            title = "Rediscover",
-            type = HomeSectionType.FORGOTTEN_FAVORITES,
-            source = HomeInteractionEntity.SOURCE_LOCAL,
-            items = ranking.familiarMusic(rankHomeMusicItems(_forgottenFavorites.value), 10)
+        addSection(
+            id = "recommendation_$index",
+            title = recommendation.title,
+            type = HomeSectionType.RECOMMENDATION,
+            source = HomeInteractionEntity.SOURCE_YOUTUBE,
+            items = items
         )
-
-        discoveryPersonalized.forEach { section ->
-            val items = section.items.mapNotNull { (it as? HomeFeedItem.Music)?.item }
-            addMusicSection(
-                id = section.id,
-                title = section.title,
-                type = section.type,
-                source = section.sourceType,
-                items = ranking.discoveryMusic(items, 16)
-            )
-        }
     }
 
-    // Backfill never repeats a track already shown in a personal shelf, but a
-    // shelf is never cut below its floor of six just to satisfy dedupe.
-    val personalIds = buildSet {
-        sections.forEach { section ->
-            section.items.forEach { item -> idOf(item)?.let { add(it) } }
-        }
+    // Familiar personalization first (My Mix / Because you listened to...).
+    val (familiarPersonalized, discoveryPersonalized) = personalizedSections.partition {
+        !it.id.startsWith("personalized_trending")
+    }
+    familiarPersonalized.forEach { section ->
+        val items = section.items.mapNotNull { (it as? HomeFeedItem.Music)?.item }
+        addMusicSection(
+            id = section.id,
+            title = section.title,
+            type = section.type,
+            source = section.sourceType,
+            items = ranking.familiarMusic(items, 16)
+        )
     }
 
+    addMusicSection(
+        id = "forgotten_favorites",
+        title = "Rediscover",
+        type = HomeSectionType.FORGOTTEN_FAVORITES,
+        source = HomeInteractionEntity.SOURCE_LOCAL,
+        items = ranking.familiarMusic(rankHomeMusicItems(_forgottenFavorites.value), 10)
+    )
+
+    // Discovery personalization (Trending) never competes with familiar rails.
+    discoveryPersonalized.forEach { section ->
+        val items = section.items.mapNotNull { (it as? HomeFeedItem.Music)?.item }
+        addMusicSection(
+            id = section.id,
+            title = section.title,
+            type = section.type,
+            source = section.sourceType,
+            items = ranking.discoveryMusic(items, 16)
+        )
+    }
+
+    // Anonymous community playlists, always kept and personalized by order.
     addSection(
         id = "community_playlists",
         title = "Community Playlists",
         type = HomeSectionType.RECOMMENDATION,
         source = HomeInteractionEntity.SOURCE_YOUTUBE,
         items = ranking.discoveryYouTube(_communityPlaylists.value, 20, ::homeYouTubeItemId)
-            .map(HomeFeedItem::YouTube),
-        avoidIds = personalIds,
-        floor = 6
+            .map(HomeFeedItem::YouTube)
     )
 
+    // Anonymous charts, always kept and floored.
     _allCharts.value.entries
         .sortedByDescending { (_, items) -> items.size }
         .take(3)
@@ -313,12 +229,12 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
                 title = chartTitle,
                 type = HomeSectionType.RECOMMENDATION,
                 source = HomeInteractionEntity.SOURCE_EXPLORE,
-                items = ranking.discoveryMusic(ranked, 16),
-                avoidIds = personalIds,
-                floor = 6
+                items = ranking.discoveryMusic(ranked, 16)
             )
         }
 
+    // YouTube home shelves are always fetched and personalized in place. The
+    // shelf floor means personalization can never make them disappear.
     _homePage.value?.sections.orEmpty().forEachIndexed { index, section ->
         val items = ranking.personalizedShelf(
             items = section.items,
@@ -331,12 +247,12 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
             title = section.title,
             type = HomeSectionType.YOUTUBE_RAIL,
             source = HomeInteractionEntity.SOURCE_YOUTUBE,
-            items = items.map(HomeFeedItem::YouTube),
-            avoidIds = personalIds,
-            floor = 6
+            items = items.map(HomeFeedItem::YouTube)
         )
     }
 
+    // Anonymous explore shelves (charts, top songs, new releases, …) are kept
+    // and personalized in place, just like the home shelves above.
     _explorePage.value?.sections.orEmpty().forEachIndexed { index, section ->
         if (section.title.isBlank()) return@forEachIndexed
         val items = ranking.personalizedShelf(
@@ -350,9 +266,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
             title = section.title,
             type = HomeSectionType.YOUTUBE_RAIL,
             source = HomeInteractionEntity.SOURCE_EXPLORE,
-            items = items.map(HomeFeedItem::YouTube),
-            avoidIds = personalIds,
-            floor = 6
+            items = items.map(HomeFeedItem::YouTube)
         )
     }
 
@@ -363,9 +277,7 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
             type = HomeSectionType.NEW_RELEASES,
             source = HomeInteractionEntity.SOURCE_EXPLORE,
             items = ranking.discoveryYouTube(ranking.rankYouTube(albums, ::homeYouTubeItemId), 12, ::homeYouTubeItemId)
-                .map(HomeFeedItem::YouTube),
-            avoidIds = personalIds,
-            floor = 6
+                .map(HomeFeedItem::YouTube)
         )
     }
 

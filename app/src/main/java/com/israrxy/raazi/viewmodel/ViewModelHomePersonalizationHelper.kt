@@ -7,7 +7,6 @@ import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.data.recommendation.HomePersonalizationEngine
 import com.israrxy.raazi.data.recommendation.ListeningProfileBuilder
 import com.israrxy.raazi.data.recommendation.PersonalizedSection
-import com.israrxy.raazi.data.recommendation.TasteProfileBuilder
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.PlaylistItem
 import kotlinx.coroutines.flow.first
@@ -15,35 +14,26 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Rebuilds the local taste profile, the legacy personalised rails (used as a
- * fallback) and the new signed-out shelves. No account or cookie is involved.
+ * Rebuilds the local-first personalized rails (My Mix, Because you listened
+ * to…, Trending) and the affinity map used to re-rank anonymous shelves.
+ * These are generated from Room signals only, so they work for Google Drive
+ * users who never sign in to YouTube Music.
  */
 internal fun MusicPlayerViewModel.refreshPersonalizedSections(force: Boolean = false) {
-    if (!force && (personalizedSections.isNotEmpty() || homeTaste.shelves.value.isNotEmpty())) return
-    paintCachedHomeShelves()
+    if (!force && personalizedSections.isNotEmpty()) return
     personalizedSectionsJob?.cancel()
     personalizedSectionsJob = viewModelScope.launch {
         try {
             val profile = ListeningProfileBuilder(repository, musicDao).build()
-            val taste = TasteProfileBuilder(repository, musicDao, settingsDataStore).build()
-            artistAffinity = taste.affinity()
-            homeTaste.profile = taste
-            homeTaste.isColdStart.value = taste.isColdStart
-            homeTaste.builderDismissed.value = runCatching {
-                settingsDataStore.tasteBuilderDismissed.first()
-            }.getOrDefault(false)
-            homeTaste.language.value = taste.language
-
+            artistAffinity = profile.artistScores()
             val cachedCharts = _allCharts.value
             val charts = if (cachedCharts.isNotEmpty()) cachedCharts
             else runCatching { repository.getAllCharts() }.getOrDefault(emptyMap())
             if (charts.isNotEmpty()) _allCharts.value = charts
-
-            personalizedSections = HomePersonalizationEngine.build(profile, charts)
+            val generated = HomePersonalizationEngine.build(profile, charts)
+            personalizedSections = generated
                 .map { it.toHomeSection() }
                 .filter { it.items.isNotEmpty() }
-
-            refreshHomeShelves(taste, force = force || homeTaste.shelves.value.isEmpty())
             rebuildHomeFeedState()
         } catch (e: Exception) {
             Log.e("MusicVM", "Error generating personalized sections", e)
@@ -58,6 +48,8 @@ internal fun MusicPlayerViewModel.refreshPersonalizedSections(force: Boolean = f
 internal fun MusicPlayerViewModel.loadDiscoverySources(force: Boolean = false) {
     if (!force && _allCharts.value.isNotEmpty() && _communityPlaylists.value.isNotEmpty()) return
 
+    // Charts are normally owned by refreshPersonalizedSections(); only fetch
+    // them here when that job is not already in flight.
     if (personalizedSectionsJob?.isActive != true && _allCharts.value.isEmpty()) {
         viewModelScope.launch {
             try {

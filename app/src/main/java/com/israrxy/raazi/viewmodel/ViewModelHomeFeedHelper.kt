@@ -155,7 +155,6 @@ internal fun MusicPlayerViewModel.refreshHomeContentImpl() {
         rebuildHomeFeedState(isRefreshing = true)
         try {
             loadHomeInteractionSignals()
-            advanceHomeShelfSeed()
             refreshPersonalizedSections(force = true)
             loadDiscoverySources(force = true)
 

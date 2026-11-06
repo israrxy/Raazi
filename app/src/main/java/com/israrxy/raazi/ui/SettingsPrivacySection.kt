@@ -15,8 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
-import com.israrxy.raazi.viewmodel.openTasteBuilder
-import com.israrxy.raazi.viewmodel.resetTasteProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -34,7 +32,6 @@ internal fun LazyListScope.settingsPrivacySection(
         var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
         var showClearSearchDialog by remember { mutableStateOf(false) }
         var showClearHistoryDialog by remember { mutableStateOf(false) }
-        var showResetTasteDialog by remember { mutableStateOf(false) }
 
         SettingsSection(title = "Privacy & Transparency") {
             SettingsActionItem(
@@ -78,23 +75,6 @@ internal fun LazyListScope.settingsPrivacySection(
                 title = "Clear Playback History",
                 subtitle = "Reset recently played songs in library",
                 onClick = { showClearHistoryDialog = true }
-            )
-        }
-
-        SettingsSection(title = "Recommendations") {
-            SettingsActionItem(
-                icon = Icons.Filled.MusicNote,
-                title = "Pick artists you like",
-                subtitle = "Seed your home feed with artists you love",
-                onClick = { viewModel.openTasteBuilder() }
-            )
-            SettingsDivider()
-            SettingsActionItem(
-                icon = Icons.Filled.Restore,
-                title = "Reset taste profile",
-                subtitle = "Forget learned taste, picks and cached shelves",
-                onClick = { showResetTasteDialog = true },
-                isDestructive = true
             )
         }
 
@@ -163,36 +143,6 @@ internal fun LazyListScope.settingsPrivacySection(
                 },
                 dismissButton = {
                     TextButton(onClick = { showClearHistoryDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
-
-        if (showResetTasteDialog) {
-            AlertDialog(
-                onDismissRequest = { showResetTasteDialog = false },
-                title = { Text("Reset taste profile") },
-                text = {
-                    Text(
-                        "This clears learned taste signals, your artist picks, " +
-                            "\"not interested\" artists and cached shelves. " +
-                            "Your playback history stays."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.resetTasteProfile()
-                            Toast.makeText(context, "Taste profile reset", Toast.LENGTH_SHORT).show()
-                            showResetTasteDialog = false
-                        }
-                    ) {
-                        Text("Reset")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showResetTasteDialog = false }) {
                         Text("Cancel")
                     }
                 }
