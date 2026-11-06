@@ -250,6 +250,25 @@ internal fun MusicPlayerViewModel.rebuildHomeFeedState(isRefreshing: Boolean = _
         )
     }
 
+    // Anonymous explore shelves (charts, top songs, new releases, …) are kept
+    // and personalized in place, just like the home shelves above.
+    _explorePage.value?.sections.orEmpty().forEachIndexed { index, section ->
+        if (section.title.isBlank()) return@forEachIndexed
+        val items = ranking.personalizedShelf(
+            items = section.items,
+            limit = 14,
+            floor = 6,
+            idOf = ::homeYouTubeItemId
+        )
+        addSection(
+            id = "explore_$index",
+            title = section.title,
+            type = HomeSectionType.YOUTUBE_RAIL,
+            source = HomeInteractionEntity.SOURCE_EXPLORE,
+            items = items.map(HomeFeedItem::YouTube)
+        )
+    }
+
     _explorePage.value?.newReleaseAlbums?.takeIf { it.isNotEmpty() }?.let { albums ->
         addSection(
             id = "new_releases",

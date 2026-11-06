@@ -28,6 +28,7 @@ object HomePersonalizationEngine {
     private const val MIX_SIZE = 16
     private const val FAMILIAR_PER_MIX = 5
     private const val MAX_PER_ARTIST = 2
+    private const val MAX_PER_SEED_ARTIST = 9
     private const val TRENDING_SIZE = 16
 
     fun build(
@@ -37,10 +38,15 @@ object HomePersonalizationEngine {
     ): List<PersonalizedSection> {
         val sections = mutableListOf<PersonalizedSection>()
         val used = mutableSetOf<String>()
+        val chartTracksByArtist = charts.values
+            .flatten()
+            .filter { it.id.isNotBlank() && it.id !in profile.dismissedIds }
+            .distinctBy { it.id }
+            .groupBy { artistKeyOf(it.artist) }
 
         val clusters = profile.topArtists(MAX_MIXES, nowMs)
         clusters.forEachIndexed { index, cluster ->
-            val items = buildMix(cluster, profile, used, nowMs)
+            val items = buildMix(cluster, profile, used, nowMs, chartTracksByArtist)
             if (items.size >= 5) {
                 sections += PersonalizedSection(
                     id = "my_mix_${index}_${cluster.artist.hashCode()}",
@@ -91,20 +97,28 @@ object HomePersonalizationEngine {
         cluster: ArtistCluster,
         profile: ListeningProfile,
         used: MutableSet<String>,
-        nowMs: Long
+        nowMs: Long,
+        chartTracksByArtist: Map<String, List<MusicItem>>
     ): List<MusicItem> {
         val result = mutableListOf<MusicItem>()
         val localIds = mutableSetOf<String>()
         val artistCounts = mutableMapOf<String, Int>()
         val seedKey = cluster.artist.lowercase()
+        var seedCount = 0
 
         fun add(item: MusicItem, artistKey: String) {
             if (result.size >= MIX_SIZE || item.id in localIds || item.id in used) return
             if (item.id in profile.dismissedIds) return
-            if (artistKey.isNotBlank() && artistKey != seedKey && (artistCounts[artistKey] ?: 0) >= MAX_PER_ARTIST) return
+            if (artistKey == seedKey) {
+                if (seedCount >= MAX_PER_SEED_ARTIST) return
+            } else if (artistKey.isNotBlank() && (artistCounts[artistKey] ?: 0) >= MAX_PER_ARTIST) {
+                return
+            }
             result += item
             localIds += item.id
-            if (artistKey.isNotBlank()) {
+            if (artistKey == seedKey) {
+                seedCount++
+            } else if (artistKey.isNotBlank()) {
                 artistCounts[artistKey] = (artistCounts[artistKey] ?: 0) + 1
             }
         }
@@ -115,15 +129,13 @@ object HomePersonalizationEngine {
             .sortedByDescending { it.score(nowMs) }
             .take(3)
             .flatMap { profile.relatedByTrack[it.item.id].orEmpty() }
-            .forEach { candidate ->
-                val artistKey = candidate.artist
-                    .split(',', '&', ';')
-                    .firstOrNull()
-                    ?.trim()
-                    ?.lowercase()
-                    .orEmpty()
-                add(candidate, artistKey)
-            }
+            .forEach { candidate -> add(candidate, artistKeyOf(candidate.artist)) }
+
+        // Anonymous charts are the discovery catalogue: they let a mix stay
+        // fresh even when the cached related graph is sparse.
+        chartTracksByArtist[seedKey].orEmpty().forEach { candidate ->
+            add(candidate, seedKey)
+        }
 
         // Fall back to the related graph of the most recent track when the
         // cluster is too small to fill a rail.
@@ -131,15 +143,7 @@ object HomePersonalizationEngine {
             profile.rankedTracks(nowMs)
                 .asSequence()
                 .flatMap { profile.relatedByTrack[it.item.id].orEmpty().asSequence() }
-                .forEach { candidate ->
-                    val artistKey = candidate.artist
-                        .split(',', '&', ';')
-                        .firstOrNull()
-                        ?.trim()
-                        ?.lowercase()
-                        .orEmpty()
-                    add(candidate, artistKey)
-                }
+                .forEach { candidate -> add(candidate, artistKeyOf(candidate.artist)) }
         }
 
         used += localIds
@@ -162,4 +166,11 @@ object HomePersonalizationEngine {
         }?.key
         return name?.takeIf { it.isNotBlank() } ?: "Trending Now"
     }
+
+    private fun artistKeyOf(value: String): String =
+        value.split(',', '&', ';')
+            .firstOrNull()
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
 }

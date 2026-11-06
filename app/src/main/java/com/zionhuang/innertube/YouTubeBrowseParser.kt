@@ -8,6 +8,7 @@ import com.zionhuang.innertube.models.MusicCarouselShelfRenderer
 import com.zionhuang.innertube.models.MusicShelfRenderer
 import com.zionhuang.innertube.models.PlaylistItem
 import com.zionhuang.innertube.models.SearchSuggestions
+import com.zionhuang.innertube.models.SectionListRenderer
 import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.WatchEndpoint
 import com.zionhuang.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
@@ -328,30 +329,36 @@ internal fun parsePlaylistContinuationPage(response: BrowseResponse): PlaylistCo
     }
 }
 
+private fun parseSectionListContents(
+    contents: List<SectionListRenderer.Content>
+): List<HomePage.Section> = contents.flatMap { content ->
+    buildList {
+        content.musicCarouselShelfRenderer?.let { HomePage.Section.fromMusicCarouselShelfRenderer(it) }?.let(::add)
+        content.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+        content.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+        content.gridRenderer?.let { HomePage.Section.fromGridRenderer(it) }?.let(::add)
+        content.itemSectionRenderer?.contents.orEmpty().forEach { inner ->
+            inner.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
+            inner.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
+        }
+    }
+}
+
 internal fun parseHomePage(response: BrowseResponse): HomePage {
     val sectionListRender = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
         ?.tabRenderer?.content?.sectionListRenderer
     val continuation = sectionListRender?.continuations?.getContinuation()
-    val sections = sectionListRender?.contents.orEmpty()
-        .flatMap { content ->
-            buildList {
-                content.musicCarouselShelfRenderer?.let { HomePage.Section.fromMusicCarouselShelfRenderer(it) }?.let(::add)
-                content.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
-                content.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
-                content.gridRenderer?.let { HomePage.Section.fromGridRenderer(it) }?.let(::add)
-                content.itemSectionRenderer?.contents.orEmpty().forEach { inner ->
-                    inner.musicCardShelfRenderer?.let { HomePage.Section.fromMusicCardShelfRenderer(it) }?.let(::add)
-                    inner.musicShelfRenderer?.let { HomePage.Section.fromMusicShelfRenderer(it) }?.let(::add)
-                }
-            }
-        }
+    val sections = parseSectionListContents(sectionListRender?.contents.orEmpty())
     val chips = sectionListRender?.header?.chipCloudRenderer?.chips
         ?.mapNotNull { HomePage.Chip.fromChipCloudChipRenderer(it) }
     return HomePage(chips, sections, continuation)
 }
 
 internal fun parseExplorePage(response: BrowseResponse): ExplorePage {
+    val contents = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
+        ?.tabRenderer?.content?.sectionListRenderer?.contents.orEmpty()
     return ExplorePage(
+        sections = parseSectionListContents(contents),
         newReleaseAlbums = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents?.find {
             it.musicCarouselShelfRenderer?.header?.musicCarouselShelfBasicHeaderRenderer?.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint?.browseId == "FEmusic_new_releases_albums"
         }?.musicCarouselShelfRenderer?.contents

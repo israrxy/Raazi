@@ -46,7 +46,7 @@ internal fun MusicPlayerViewModel.refreshPersonalizedSections(force: Boolean = f
  * Drive-only users: charts and community playlists.
  */
 internal fun MusicPlayerViewModel.loadDiscoverySources(force: Boolean = false) {
-    if (!force && (_allCharts.value.isNotEmpty() || _communityPlaylists.value.isNotEmpty())) return
+    if (!force && _allCharts.value.isNotEmpty() && _communityPlaylists.value.isNotEmpty()) return
 
     viewModelScope.launch {
         try {
