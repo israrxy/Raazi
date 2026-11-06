@@ -17,8 +17,8 @@ private const val DAY_MS = 86_400_000L
 private const val SIGNAL_WINDOW_DAYS = 60L
 private const val RELATED_SEED_LIMIT = 8
 private const val MIN_RELATED_SEEDS = 3
-private const val RELATED_WARMUP_LIMIT = 3
-private const val RELATED_WARMUP_TIMEOUT_MS = 6000L
+private const val RELATED_WARMUP_LIMIT = 2
+private const val RELATED_WARMUP_TIMEOUT_MS = 4000L
 
 /**
  * Builds the local listening profile used by the home feed.
