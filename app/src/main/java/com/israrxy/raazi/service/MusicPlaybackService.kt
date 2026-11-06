@@ -8,7 +8,6 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
@@ -108,30 +107,7 @@ class MusicPlaybackService : Service() {
 
         audioEffectsController.initializeAudioEffects()
 
-        mediaSession = MediaSessionCompat(this, "RaaziMusicSession").apply {
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() = resume()
-                override fun onPause() = pause()
-                override fun onSkipToNext() = next()
-                override fun onSkipToPrevious() = previous()
-                override fun onStop() = stop()
-                override fun onSeekTo(pos: Long) = seekTo(pos)
-                override fun onCustomAction(action: String?, extras: Bundle?) {
-                    when (action) {
-                        ACTION_TOGGLE_SHUFFLE -> toggleShuffle()
-                        ACTION_TOGGLE_REPEAT -> toggleRepeat()
-                        ACTION_TOGGLE_FAVORITE -> toggleFavoriteFromNotificationImpl()
-                        ACTION_CYCLE_SPEED -> cyclePlaybackSpeed()
-                    }
-                }
-            })
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-            )
-            setSessionActivity(createContentPendingIntent())
-            isActive = true
-        }
+        mediaSession = createPlaybackMediaSession()
 
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -227,6 +203,7 @@ class MusicPlaybackService : Service() {
             ACTION_TOGGLE_REPEAT -> toggleRepeat()
             ACTION_TOGGLE_FAVORITE -> toggleFavoriteFromNotificationImpl()
             ACTION_CYCLE_SPEED -> cyclePlaybackSpeed()
+            ACTION_OPEN_BROWSER -> openLockScreenBrowser()
             ACTION_STOP -> {
                 stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -486,6 +463,7 @@ class MusicPlaybackService : Service() {
         const val ACTION_STOP = "com.israrxy.raazi.ACTION_STOP"
         const val ACTION_TOGGLE_FAVORITE = "com.israrxy.raazi.ACTION_TOGGLE_FAVORITE"
         const val ACTION_CYCLE_SPEED = "com.israrxy.raazi.ACTION_CYCLE_SPEED"
+        const val ACTION_OPEN_BROWSER = "com.israrxy.raazi.ACTION_OPEN_BROWSER"
 
         const val NOTIFICATION_LIKE_CHANNEL = "com.israrxy.raazi.LIKE_EVENT"
         const val EXTRA_TRACK_ID = "track_id"

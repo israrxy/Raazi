@@ -9,6 +9,6 @@
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_now_playing"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen"
+    android:widgetCategory="home_screen|keyguard"
     android:previewImage="@drawable/raazi_logo"
     android:description="@string/widget_description" />

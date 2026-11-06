@@ -94,12 +94,37 @@
                 <data android:scheme="raazi" android:host="lastfm-callback" />
             </intent-filter>
         </activity>
-        
+
+        <!-- Lock-screen overlay browser. Rendered above the keyguard so the
+             notification action, QS tile and widget can open it without an
+             unlock. Playback data only. -->
+        <activity
+            android:name=".ui.lockscreen.LockScreenBrowserActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:taskAffinity="com.israrxy.raazi.lockscreen"
+            android:theme="@style/Theme.Raazi"
+            android:turnScreenOn="true" />
+
         <service
             android:name=".service.MusicPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback"
             android:stopWithTask="false" />
+
+        <service
+            android:name=".service.LockScreenBrowserTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_browse"
+            android:label="@string/lockscreen_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         
         <!-- Now Playing Widget -->
         <receiver
