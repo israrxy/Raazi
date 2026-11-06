@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -45,6 +46,11 @@ class LockScreenBrowserActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val keyguardLocked = isKeyguardLocked()
+        Log.i(
+            TAG,
+            "Lock-screen browser opened (keyguardLocked=$keyguardLocked, sdk=${Build.VERSION.SDK_INT})"
+        )
         showOverKeyguard()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -54,7 +60,7 @@ class LockScreenBrowserActivity : FragmentActivity() {
 
         setContent {
             val settingsDataStore = remember { SettingsDataStore(applicationContext) }
-            val isLockScreenMode = remember { isKeyguardLocked() }
+            val isLockScreenMode = remember { keyguardLocked }
             val dynamicColor by settingsDataStore.useDynamicColor
                 .collectAsStateWithLifecycle(initialValue = false)
             val accent by settingsDataStore.pastelAccent
@@ -114,5 +120,9 @@ class LockScreenBrowserActivity : FragmentActivity() {
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
+    }
+
+    private companion object {
+        const val TAG = "LockScreenBrowser"
     }
 }
