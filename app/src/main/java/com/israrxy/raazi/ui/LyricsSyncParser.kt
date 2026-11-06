@@ -134,30 +134,16 @@ fun buildRichLyricLines(
             }
             lineEndMs = words.lastOrNull()?.endTimeMs ?: (lineStartMs + rawGap.coerceAtMost(5000L))
         } else {
+            // Line-synced only. Do not fabricate word timings by slicing the
+            // line duration across its words - that produces a fake karaoke
+            // sweep that never matches the vocal. The whole line is shown at
+            // once when its timestamp is reached.
             hasExplicitWords = false
-            val splitTokens = cleanText.split(" ").filter { it.isNotBlank() }
-            val activeSingDuration = rawGap.coerceIn(900L, (splitTokens.size * 420L).coerceIn(1400L, 5200L))
+            val tokenCount = cleanText.split(" ").count { it.isNotBlank() }.coerceAtLeast(1)
+            val activeSingDuration = rawGap.coerceIn(900L, (tokenCount * 420L).coerceIn(1400L, 5200L))
                 .coerceAtMost((rawGap - 180L).coerceAtLeast(500L))
             lineEndMs = lineStartMs + activeSingDuration
-            val totalWeight = splitTokens.sumOf { it.length.coerceAtLeast(2) }.coerceAtLeast(1)
-            var cursorMs = lineStartMs
-            words = splitTokens.mapIndexed { wIdx, token ->
-                val weight = token.length.coerceAtLeast(2)
-                val sliceMs = if (wIdx == splitTokens.lastIndex) {
-                    (lineEndMs - cursorMs).coerceAtLeast(80L)
-                } else {
-                    ((activeSingDuration * weight) / totalWeight).coerceAtLeast(80L)
-                }
-                val safeStart = cursorMs
-                val safeEnd = (cursorMs + sliceMs).coerceAtLeast(safeStart + 80L)
-                cursorMs = safeEnd
-                LyricWordSegment(
-                    startTimeMs = safeStart,
-                    endTimeMs = safeEnd,
-                    text = token,
-                    displayText = LyricsTextVariants.transform(token, variant)
-                )
-            }
+            words = emptyList()
         }
 
         LyricLine(
