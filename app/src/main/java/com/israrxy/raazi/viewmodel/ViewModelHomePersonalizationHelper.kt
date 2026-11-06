@@ -2,6 +2,7 @@ package com.israrxy.raazi.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.israrxy.raazi.data.account.YouTubeAccountSession
 import com.israrxy.raazi.data.db.HomeInteractionEntity
 import com.israrxy.raazi.data.recommendation.HomePersonalizationEngine
 import com.israrxy.raazi.data.recommendation.ListeningProfileBuilder
@@ -61,6 +62,7 @@ internal fun MusicPlayerViewModel.loadDiscoverySources(force: Boolean = false) {
 
     viewModelScope.launch {
         try {
+            runCatching { YouTubeAccountSession.ensureBootstrapped(settingsDataStore) }
             val playlists = fetchCommunityPlaylists()
             if (playlists.isNotEmpty()) {
                 _communityPlaylists.value = playlists
