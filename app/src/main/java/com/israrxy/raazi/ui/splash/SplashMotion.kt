@@ -11,14 +11,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -167,7 +164,7 @@ internal fun SplashLogo(
         }
 
         Image(
-            painter = painterResource(id = R.drawable.raazi_logo),
+            painter = painterResource(id = R.drawable.ic_splash_mark),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
@@ -176,22 +173,6 @@ internal fun SplashLogo(
                     val scale = logoScale * (1f + 0.012f * breath)
                     scaleX = scale
                     scaleY = scale
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }
-                .drawWithContent {
-                    drawContent()
-                    // Feather the bitmap's black background into the backdrop so
-                    // the glow behind the mark shows through the edges.
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            0f to Color.Black,
-                            0.86f to Color.Black,
-                            1f to Color.Transparent,
-                            center = center,
-                            radius = size.minDimension / 2f
-                        ),
-                        blendMode = BlendMode.DstIn
-                    )
                 }
         )
     }

@@ -4,6 +4,6 @@
     <item
         android:width="160dp"
         android:height="160dp"
-        android:drawable="@drawable/raazi_logo"
+        android:drawable="@drawable/ic_splash_mark"
         android:gravity="center" />
 </layer-list>
