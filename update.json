@@ -3,5 +3,5 @@
     "latestVersionName": "6.6.5",
     "downloadUrl": "https://github.com/israrxy/Raazi/releases/download/v6.6.5/Raazi-v6.6.5.apk",
     "forceUpdate": false,
-    "releaseNotes": "v6.6.5 — In-App Update Test\n\n• The app now downloads update APKs inside the app with a live progress indicator.\n• After downloading, it opens the system installer directly.\n• If the download or install fails, you can retry or open the website manually.\n• This test build points at the latest v6.6.5 APK in israrxy/Raazi."
+    "releaseNotes": "v6.6.5 — In-App Update Test\n\n• The app now downloads update APKs inside the app with a live progress indicator.\n• After downloading, it opens the system installer directly.\n• Interrupted downloads resume, and a finished download is reused instead of being fetched again.\n• If the download or install fails, you can retry or open the website manually.\n• This test build points at the latest v6.6.5 APK in israrxy/Raazi."
 }
