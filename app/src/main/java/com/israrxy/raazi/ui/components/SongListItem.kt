@@ -17,10 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.israrxy.raazi.data.repository.youtubeVideoIdOrNull
+import com.israrxy.raazi.model.MusicContentType
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.*
 import com.israrxy.raazi.utils.ThumbnailUtils
@@ -62,6 +66,21 @@ fun SongListItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val hasMenuActions = showAddToPlaylist || showGoToArtist || showDownload || showRingtone || showAddToQueue || showMoreOptions || showLike || showSave || selectionEnabled
+    val isVideo = song.contentType == MusicContentType.VIDEO
+    val context = LocalContext.current
+    val thumbnailModel = remember(song.id, song.videoUrl, song.thumbnailUrl, isVideo) {
+        ThumbnailUtils.resolveThumbnail(
+            url = song.thumbnailUrl,
+            videoId = song.youtubeVideoIdOrNull()
+        )
+    }
+    val thumbnailRequest = remember(context, thumbnailModel) {
+        ImageRequest.Builder(context)
+            .data(thumbnailModel)
+            .allowHardware(false)
+            .crossfade(true)
+            .build()
+    }
 
     Row(
         modifier = modifier
@@ -88,14 +107,23 @@ fun SongListItem(
                 modifier = Modifier.padding(end = 12.dp)
             )
         }
-        Box(modifier = Modifier.size(56.dp)) {
-            AsyncImage(
-                model = ThumbnailUtils.getListThumbnail(song.thumbnailUrl),
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isVideo) Icons.Default.PlayCircle else Icons.Default.MusicNote,
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(22.dp)
+            )
+            AsyncImage(
+                model = thumbnailRequest,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
         }

@@ -5,6 +5,8 @@ package com.israrxy.raazi.utils
  * YouTube supports sizing via URL parameters: =wXXX-hYYY
  */
 object ThumbnailUtils {
+    private val YOUTUBE_ID_REGEX = Regex("[A-Za-z0-9_-]{11}")
+
     /**
      * Resize thumbnail URL to specified dimensions
      * @param url Original thumbnail URL
@@ -37,6 +39,43 @@ object ThumbnailUtils {
         
         return url
     }
+
+    /**
+     * Resolves a usable image URL for list rows. Video results sometimes carry
+     * a watch page URL or no thumbnail at all, which Coil renders as a black
+     * box. Fall back to the video id so every row has artwork.
+     */
+    fun resolveThumbnail(
+        url: String?,
+        videoId: String? = null,
+        width: Int = 180,
+        height: Int = 180
+    ): String {
+        val raw = url?.trim().orEmpty()
+        val imageUrl = when {
+            raw.startsWith("/storage") || raw.startsWith("file:") -> raw
+            raw.startsWith("http") && looksLikeImage(raw) -> resizeThumbnailUrl(raw, width, height)
+            else -> ""
+        }
+        if (imageUrl.isNotBlank()) return imageUrl
+
+        val id = videoId?.trim().orEmpty()
+        return if (id.matches(YOUTUBE_ID_REGEX)) {
+            "https://i.ytimg.com/vi/$id/mqdefault.jpg"
+        } else {
+            ""
+        }
+    }
+
+    private fun looksLikeImage(url: String): Boolean =
+        url.contains("googleusercontent.com", ignoreCase = true) ||
+            url.contains("ytimg.com", ignoreCase = true) ||
+            url.contains("ggpht.com", ignoreCase = true) ||
+            url.contains(".jpg", ignoreCase = true) ||
+            url.contains(".jpeg", ignoreCase = true) ||
+            url.contains(".png", ignoreCase = true) ||
+            url.contains(".webp", ignoreCase = true)
+
     
     /**
      * Get high-quality thumbnail (544x544)
