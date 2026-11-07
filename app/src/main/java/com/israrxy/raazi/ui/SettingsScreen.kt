@@ -79,6 +79,11 @@ internal enum class SettingsCategory(
         subtitle = "Biometric lock & reset",
         icon = Icons.Filled.Security
     ),
+    PERMISSIONS(
+        title = "App Permissions",
+        subtitle = "Notifications, mic & storage",
+        icon = Icons.Filled.VerifiedUser
+    ),
     ABOUT(
         title = "About",
         subtitle = "Updates & version info",

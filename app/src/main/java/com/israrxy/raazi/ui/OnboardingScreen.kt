@@ -51,9 +51,15 @@ import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.region.RegionManager
 import com.israrxy.raazi.model.MusicItem
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.israrxy.raazi.ui.onboarding.OnboardingAiKeyPage
 import com.israrxy.raazi.ui.onboarding.OnboardingAudioLyricsPage
+import com.israrxy.raazi.ui.onboarding.OnboardingBottomBar
 import com.israrxy.raazi.ui.onboarding.OnboardingHeroPage
+import com.israrxy.raazi.ui.onboarding.OnboardingPermissionsPage
 import com.israrxy.raazi.ui.onboarding.OnboardingPersonalizePage
 import com.israrxy.raazi.ui.onboarding.OnboardingSoundDataPage
 import com.israrxy.raazi.ui.onboarding.OnboardingTastePickerPage
@@ -67,11 +73,12 @@ import com.israrxy.raazi.viewmodel.searchOnboardingTaste
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val TOTAL_ONBOARDING_PAGES = 8
+private const val TOTAL_ONBOARDING_PAGES = 9
 private const val AI_KEY_PAGE = 4
 private const val TASTE_PICKER_PAGE = 5
-private const val PRIVACY_PAGE = 6
-private const val ACCOUNT_PAGE = 7
+private const val PERMISSIONS_PAGE = 6
+private const val PRIVACY_PAGE = 7
+private const val ACCOUNT_PAGE = 8
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -173,9 +180,23 @@ fun OnboardingScreen(
         }
     }
 
-    // Disable swiping past Privacy page until accepted
+    var permissionsSatisfied by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        )
+    }
+
+    // Disable swiping past Permissions or Privacy page until satisfied/accepted
     val isSwipeAllowed = pagerState.currentPage != ACCOUNT_PAGE &&
-        (pagerState.currentPage != PRIVACY_PAGE || privacyAccepted)
+        (pagerState.currentPage != PRIVACY_PAGE || privacyAccepted) &&
+        (pagerState.currentPage != PERMISSIONS_PAGE || permissionsSatisfied)
 
     Box(
         modifier = Modifier
@@ -311,7 +332,12 @@ fun OnboardingScreen(
                         }
                     },
                     onSkipStep = {
-                        scope.launch { pagerState.animateScrollToPage(PRIVACY_PAGE) }
+                        scope.launch { pagerState.animateScrollToPage(PERMISSIONS_PAGE) }
+                    }
+                )
+                PERMISSIONS_PAGE -> OnboardingPermissionsPage(
+                    onPermissionsUpdated = { granted ->
+                        permissionsSatisfied = granted
                     }
                 )
                 PRIVACY_PAGE -> OnboardingPrivacyPage(
@@ -339,10 +365,12 @@ fun OnboardingScreen(
             TextButton(
                 onClick = {
                     scope.launch {
-                        if (privacyAccepted) {
-                            finishOnboarding()
-                        } else {
+                        if (!permissionsSatisfied) {
+                            pagerState.animateScrollToPage(PERMISSIONS_PAGE)
+                        } else if (!privacyAccepted) {
                             pagerState.animateScrollToPage(PRIVACY_PAGE)
+                        } else {
+                            finishOnboarding()
                         }
                     }
                 },
@@ -361,110 +389,31 @@ fun OnboardingScreen(
 
         // Bottom controller & Page Indicators
         if (!isWebViewVisible) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(24.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Back Button
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart
-                ) {
+            val canProceed = (pagerState.currentPage != PRIVACY_PAGE || privacyAccepted) &&
+                (pagerState.currentPage != PERMISSIONS_PAGE || permissionsSatisfied)
+            OnboardingBottomBar(
+                currentPage = pagerState.currentPage,
+                totalPages = TOTAL_ONBOARDING_PAGES,
+                canProceed = canProceed,
+                isLastPage = pagerState.currentPage == ACCOUNT_PAGE,
+                onBack = {
                     if (pagerState.currentPage > 0) {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                }
-                            },
-                            modifier = Modifier.height(48.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Back", fontWeight = FontWeight.SemiBold)
+                        scope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
                         }
                     }
-                }
-
-                // Page Indicator Dots
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(TOTAL_ONBOARDING_PAGES) { index ->
-                        val isSelected = pagerState.currentPage == index
-                        val width by animateDpAsState(
-                            targetValue = if (isSelected) 20.dp else 6.dp,
-                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                            label = "dot_width"
-                        )
-                        val color by animateColorAsState(
-                            targetValue = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-                            },
-                            label = "dot_color"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .height(6.dp)
-                                .width(width)
-                                .clip(CircleShape)
-                                .background(color)
-                        )
+                },
+                onNext = {
+                    if (pagerState.currentPage < ACCOUNT_PAGE) {
+                        scope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
+                    } else {
+                        finishOnboarding()
                     }
-                }
-
-                // Next / Finish Button
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    val canProceed = pagerState.currentPage != PRIVACY_PAGE || privacyAccepted
-                    Button(
-                        onClick = {
-                            if (pagerState.currentPage < ACCOUNT_PAGE) {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                }
-                            } else {
-                                finishOnboarding()
-                            }
-                        },
-                        enabled = canProceed,
-                        modifier = Modifier.height(48.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
-                    ) {
-                        val isLastPage = pagerState.currentPage == ACCOUNT_PAGE
-                        Text(
-                            text = if (isLastPage) "Start" else "Next",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Icon(
-                            imageVector = if (isLastPage) {
-                                Icons.Default.PlayArrow
-                            } else {
-                                Icons.AutoMirrored.Filled.ArrowForward
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
 
         // Region Selection Dialog

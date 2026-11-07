@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 13,
-    "latestVersionName": "6.6.5",
+    "latestVersionCode": 14,
+    "latestVersionName": "6.8.0",
     "downloadUrl": "https://raazi.pages.dev",
     "forceUpdate": false,
-    "releaseNotes": "v6.6.5 — Downloads Section & Playlist Updates\n\n• Dedicated Downloads Section: Instant access to all your downloaded music directly in your Library alongside Liked Songs.\n• Downloads Quick Access: Added 1-tap Downloads button right in the Library header.\n• Play All & Shuffle Offline: Easily play all downloaded tracks or shuffle offline with complete queue support.\n• Equalizer Tuning & Reset Flat: Fixed EQ flat preset and slider scaling, added instant 1-tap 'Reset Flat' button.\n• In-App Privacy & Transparency: Clear privacy policy with user acceptance in onboarding and settings.\n• Active Device Telemetry: Lightweight, privacy-respecting install counter with full opt-out control."
+    "releaseNotes": "v6.8.0 — Security, Architecture & Performance Release\n\n• Code Hardening: Full R8 minification, resource shrinking, and comprehensive ProGuard rules enabled for smaller and faster APKs.\n• Security First: Enforced strict HTTPS network security configuration, disabling cleartext traffic.\n• YouTube Engine: Consolidated NewPipe Extractor v0.26.5 for enhanced audio stream extraction.\n• Modern Foundation: Updated Compose BOM to 2026.09.00 for improved UI smoothness and stability.\n• Modular Architecture: Optimized onboarding and AI components into modular, high-performance layers."
 }

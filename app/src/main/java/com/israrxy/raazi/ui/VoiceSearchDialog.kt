@@ -23,9 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,8 +54,13 @@ import com.israrxy.raazi.viewmodel.VoiceSearchUiState
 internal fun VoiceSearchDialog(
     state: VoiceSearchUiState,
     onCancel: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRequestPermission: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
+    val isPermissionError = state.error?.contains("permission", ignoreCase = true) == true ||
+        state.error?.contains("microphone", ignoreCase = true) == true
+
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -80,15 +88,36 @@ internal fun VoiceSearchDialog(
                     }
                 }
 
-                PulsingMic(active = state.isListening && state.error == null)
-                Spacer(modifier = Modifier.height(18.dp))
-                VoiceWaveform(
-                    level = state.rms,
-                    active = state.isListening && state.error == null
-                )
-                Spacer(modifier = Modifier.height(18.dp))
+                if (isPermissionError) {
+                    Box(
+                        modifier = Modifier
+                            .size(84.dp)
+                            .background(
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MicOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                } else {
+                    PulsingMic(active = state.isListening && state.error == null)
+                    Spacer(modifier = Modifier.height(18.dp))
+                    VoiceWaveform(
+                        level = state.rms,
+                        active = state.isListening && state.error == null
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
 
                 val headline = when {
+                    isPermissionError -> "Microphone Permission Required"
                     state.error != null -> "Couldn't hear you"
                     state.partialText.isNotBlank() -> state.partialText
                     else -> "Listening…"
@@ -97,22 +126,47 @@ internal fun VoiceSearchDialog(
                     text = headline,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isPermissionError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(6.dp))
+                val description = when {
+                    isPermissionError -> "Raazi needs microphone access to listen to your voice and search for music. Please allow permission to proceed."
+                    else -> state.error ?: "Say a song, artist, or lyric"
+                }
                 Text(
-                    text = state.error ?: "Say a song, artist, or lyric",
+                    text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                if (state.error != null) {
+                if (isPermissionError) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Settings")
+                        }
+                        Button(
+                            onClick = onRequestPermission,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Allow", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else if (state.error != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     TextButton(onClick = onRetry) {
                         Text("Try again")

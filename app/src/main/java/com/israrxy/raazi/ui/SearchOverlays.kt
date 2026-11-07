@@ -1,7 +1,10 @@
 package com.israrxy.raazi.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -92,6 +95,16 @@ private fun VoiceSearchOverlay(
             viewModel.cancel()
             onDismiss()
         },
-        onRetry = { viewModel.startListening() }
+        onRetry = { viewModel.startListening() },
+        onRequestPermission = {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        },
+        onOpenSettings = {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        }
     )
 }

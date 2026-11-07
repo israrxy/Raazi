@@ -287,6 +287,12 @@ internal fun SettingsCategoryDetailList(
                 )
             }
 
+            SettingsCategory.PERMISSIONS -> {
+                item {
+                    com.israrxy.raazi.ui.settings.SettingsPermissionsSection()
+                }
+            }
+
             SettingsCategory.FEEDBACK -> {
                 item {
                     SettingsSection(title = "Send Feedback") {

@@ -17,8 +17,8 @@ android {
         applicationId = "com.israrxy.raazi"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
-        versionName = "6.6.5"
+        versionCode = 14
+        versionName = "6.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -71,7 +71,8 @@ android {
             signingConfig = signingConfigs.getByName("debugConfig")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -118,8 +119,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     
-    // NewPipe Extractor - Real YouTube Music extraction
-    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.26.5")
+    // NewPipe Extractor - Real YouTube Music extraction (version in catalog)
+    // Hardcoded version removed — using libs.newpipe.extractor below
     
     // JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
