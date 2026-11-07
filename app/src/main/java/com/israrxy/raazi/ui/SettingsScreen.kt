@@ -269,6 +269,7 @@ fun SettingsScreen(
                                         SettingsCategory.LYRICS_AI -> if (translateLyrics) targetLanguage.uppercase() else "Off"
                                         SettingsCategory.DOWNLOADS -> downloadQuality
                                         SettingsCategory.SECURITY -> if (biometricLock) "On" else "Off"
+                                        SettingsCategory.PERMISSIONS -> "Manage"
                                         SettingsCategory.ABOUT -> "v${BuildConfig.VERSION_NAME}"
                                         SettingsCategory.FEEDBACK -> "Tell us"
                                     }
