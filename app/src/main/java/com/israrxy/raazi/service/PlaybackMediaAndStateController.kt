@@ -221,11 +221,9 @@ internal fun MusicPlaybackService.getCurrentTrackImpl(): MusicItem? {
 
 internal fun MusicPlaybackService.setPlaybackMediaModeImpl(mode: PlaybackMediaMode): Boolean {
     if (mediaMode == mode) {
-        if (isPlayerInitialized() && !exoPlayer.isPlaying && currentPlaylist.isNotEmpty()) {
-            resume()
-        } else {
-            notifyPlaybackState()
-        }
+        // Selecting the mode that is already active is a no-op for playback:
+        // never start a paused player just because the user switched tabs.
+        notifyPlaybackState()
         return true
     }
     mediaMode = mode
