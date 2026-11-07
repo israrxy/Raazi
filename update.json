@@ -1,7 +1,7 @@
 {
-    "latestVersionCode": 13,
+    "latestVersionCode": 14,
     "latestVersionName": "6.6.5",
-    "downloadUrl": "https://raazi.pages.dev",
+    "downloadUrl": "https://github.com/israrxy/Raazi/releases/download/v6.6.5/Raazi-v6.6.5.apk",
     "forceUpdate": false,
-    "releaseNotes": "v6.6.5 — Downloads Section & Playlist Updates\n\n• Dedicated Downloads Section: Instant access to all your downloaded music directly in your Library alongside Liked Songs.\n• Downloads Quick Access: Added 1-tap Downloads button right in the Library header.\n• Play All & Shuffle Offline: Easily play all downloaded tracks or shuffle offline with complete queue support.\n• Equalizer Tuning & Reset Flat: Fixed EQ flat preset and slider scaling, added instant 1-tap 'Reset Flat' button.\n• In-App Privacy & Transparency: Clear privacy policy with user acceptance in onboarding and settings.\n• Active Device Telemetry: Lightweight, privacy-respecting install counter with full opt-out control."
+    "releaseNotes": "v6.6.5 — In-App Update Test\n\n• The app now downloads update APKs inside the app with a live progress indicator.\n• After downloading, it opens the system installer directly.\n• If the download or install fails, you can retry or open the website manually.\n• This test build points at the latest v6.6.5 APK in israrxy/Raazi."
 }

@@ -378,10 +378,16 @@ fun SettingsScreen(
                                 scope.launch {
                                     val config = updateManager.checkUpdate()
                                     isCheckingForUpdate = false
-                                    if (config != null && config.latestVersionCode > BuildConfig.VERSION_CODE) {
-                                        updateConfig = config
-                                    } else {
-                                        Toast.makeText(
+                                    when {
+                                        config == null -> Toast.makeText(
+                                            context,
+                                            "Couldn't check for updates. Try again.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        config.latestVersionCode > BuildConfig.VERSION_CODE -> {
+                                            updateConfig = config
+                                        }
+                                        else -> Toast.makeText(
                                             context,
                                             "Up to date (v${BuildConfig.VERSION_NAME})",
                                             Toast.LENGTH_SHORT
