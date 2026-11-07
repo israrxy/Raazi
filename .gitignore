@@ -62,3 +62,11 @@ signing/
 metadata.json
 public/
 /public/
+
+# Scratch & development directories
+.mimocode/
+/.mimocode/
+.freebuff/
+/.freebuff/
+docs/
+/docs/
