@@ -1,16 +1,10 @@
 package com.israrxy.raazi.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -19,9 +13,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,13 +29,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
 import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.data.remote.Lyrics
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun BoxScope.LyricsSettingsDropdownMenu(
+internal fun LyricsOptionsSheet(
     visible: Boolean,
     lyrics: Lyrics?,
     hasWordSync: Boolean,
@@ -71,26 +68,25 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
         else -> "None"
     }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically(initialOffsetY = { -it / 5 }) + fadeIn() + scaleIn(initialScale = 0.97f),
-        exit = slideOutVertically(targetOffsetY = { -it / 5 }) + fadeOut() + scaleOut(targetScale = 0.97f),
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-            .zIndex(10f)
+    if (!visible) return
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141417),
+        contentColor = Color.White,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.25f))
+        }
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = Color(0xFF141417),
-            shadowElevation = 20.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.09f))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -389,5 +385,4 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                 }
             }
         }
-    }
 }

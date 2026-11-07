@@ -7,9 +7,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,7 +22,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -211,18 +208,6 @@ internal fun LyricsScreen(
                 )
         )
 
-        if (showOptionsMenu) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(5f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onDismissOptionsMenu() }
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -245,29 +230,6 @@ internal fun LyricsScreen(
             )
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                LyricsSettingsDropdownMenu(
-                    visible = showOptionsMenu,
-                    lyrics = lyrics,
-                    hasWordSync = hasWordSync,
-                    isSynced = isSynced,
-                    availableVariants = availableVariants,
-                    selectedVariant = selectedVariant,
-                    onSelectVariant = presentation.onSelectVariant,
-                    hasTranslationSupport = true,
-                    showTranslation = showTranslation,
-                    translateLang = translateLang,
-                    onToggleTranslation = presentation.onToggleTranslation,
-                    hideBrackets = hideBrackets,
-                    onToggleHideBrackets = presentation.onToggleHideBrackets,
-                    lyricsScriptFilter = lyricsScriptFilter,
-                    onDismiss = onDismissOptionsMenu,
-                    onOpenLyricsBrowser = onOpenLyricsBrowser,
-                    onOpenTrackDetails = { showTrackDetails = true },
-                    onRetryLyricsFetch = { viewModel.retryLyricsFetch() },
-                    onClearSavedLyricsSelection = { viewModel.clearSavedLyricsSelection() },
-                    onSelectScriptFilter = { viewModel.setLyricsScriptFilter(it) }
-                )
-
                 LyricsMainViewportContent(
                     isLoading = isLoading,
                     isUnavailable = isUnavailable,
@@ -289,6 +251,29 @@ internal fun LyricsScreen(
                 )
             }
         }
+
+        LyricsOptionsSheet(
+            visible = showOptionsMenu,
+            lyrics = lyrics,
+            hasWordSync = hasWordSync,
+            isSynced = isSynced,
+            availableVariants = availableVariants,
+            selectedVariant = selectedVariant,
+            onSelectVariant = presentation.onSelectVariant,
+            hasTranslationSupport = true,
+            showTranslation = showTranslation,
+            translateLang = translateLang,
+            onToggleTranslation = presentation.onToggleTranslation,
+            hideBrackets = hideBrackets,
+            onToggleHideBrackets = presentation.onToggleHideBrackets,
+            lyricsScriptFilter = lyricsScriptFilter,
+            onDismiss = onDismissOptionsMenu,
+            onOpenLyricsBrowser = onOpenLyricsBrowser,
+            onOpenTrackDetails = { showTrackDetails = true },
+            onRetryLyricsFetch = { viewModel.retryLyricsFetch() },
+            onClearSavedLyricsSelection = { viewModel.clearSavedLyricsSelection() },
+            onSelectScriptFilter = { viewModel.setLyricsScriptFilter(it) }
+        )
 
         SongDetailsDialog(
             visible = showTrackDetails,
