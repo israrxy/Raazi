@@ -143,9 +143,10 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val microPlayerEnabled by settingsDataStore.microPlayerEnabled.collectAsStateWithLifecycle(initialValue = true)
     val onRingtoneScreen = currentDestination?.route == "ringtone_trimmer"
     val onSettingsScreen = currentDestination?.route == "settings" || currentDestination?.route?.startsWith("settings") == true
-    val onPlaylistScreen = currentDestination?.route?.startsWith("playlist") == true
+    val onPlaylistScreen = currentDestination?.route?.startsWith("playlist/") == true
+    val onPlaylistMakerScreen = currentDestination?.route == "playlist_maker"
     val showBottomBar = (currentDestination.isTopLevelDestination() || onPlaylistScreen) && !onRingtoneScreen
-    val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen
+    val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen || onPlaylistMakerScreen
     val showMiniPlayerBar = currentTrack != null && (!isFloatingCollapsed || !microPlayerEnabled) && !isMiniPlayerSuppressed
     val showFloatingBubble = currentTrack != null && isFloatingCollapsed && microPlayerEnabled && !isMiniPlayerSuppressed
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

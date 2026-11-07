@@ -62,7 +62,8 @@ fun LibraryScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
     onNavigateToSpotifyImport: () -> Unit = {},
-    onNavigateToYouTubeLogin: () -> Unit = onNavigateToSettings
+    onNavigateToYouTubeLogin: () -> Unit = onNavigateToSettings,
+    onNavigateToPlaylistMaker: () -> Unit = {}
 ) {
     val liked by viewModel.favoriteTracks.collectAsStateWithLifecycle()
     val history by viewModel.playbackHistory.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -104,6 +105,7 @@ fun LibraryScreen(
     var syncCardDismissed by rememberSaveable { mutableStateOf(false) }
 
     // Dialog state.
+    var showCreateChoiceDialog by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var playlistName by remember { mutableStateOf("") }
     var createSynced by remember { mutableStateOf(false) }
@@ -221,9 +223,7 @@ fun LibraryScreen(
             scope.launch { viewModel.settingsDataStore.setDismissYoutubeConnectPrompt(true) }
         },
         createPlaylist = {
-            createSynced = loggedIn
-            playlistName = ""
-            showCreateDialog = true
+            showCreateChoiceDialog = true
         },
         renamePlaylist = { playlistId ->
             playlists.firstOrNull { it.playlist.id == playlistId }?.playlist?.let { playlist ->
@@ -447,6 +447,18 @@ fun LibraryScreen(
                 selectedTracks.clear()
                 isTrackSelectionMode = false
             }
+        },
+        showCreateChoiceDialog = showCreateChoiceDialog,
+        onDismissCreateChoice = { showCreateChoiceDialog = false },
+        onCreateEmptyPlaylist = {
+            showCreateChoiceDialog = false
+            playlistName = ""
+            createSynced = loggedIn
+            showCreateDialog = true
+        },
+        onBuildPlaylistWithSearch = {
+            showCreateChoiceDialog = false
+            onNavigateToPlaylistMaker()
         },
         showCreateDialog = showCreateDialog,
         playlistName = playlistName,

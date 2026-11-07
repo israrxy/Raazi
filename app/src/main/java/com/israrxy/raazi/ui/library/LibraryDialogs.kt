@@ -135,6 +135,10 @@ internal fun LibraryScreenDialogs(
     tracksForPlaylistAdd: List<MusicItem>,
     onDismissAddToPlaylist: () -> Unit,
     onPlaylistSelectedForAdd: (PlaylistEntity) -> Unit,
+    showCreateChoiceDialog: Boolean,
+    onDismissCreateChoice: () -> Unit,
+    onCreateEmptyPlaylist: () -> Unit,
+    onBuildPlaylistWithSearch: () -> Unit,
     showCreateDialog: Boolean,
     playlistName: String,
     onPlaylistNameChange: (String) -> Unit,
@@ -160,6 +164,14 @@ internal fun LibraryScreenDialogs(
             tracksToAdd = tracksForPlaylistAdd,
             onDismiss = onDismissAddToPlaylist,
             onPlaylistSelected = onPlaylistSelectedForAdd
+        )
+    }
+
+    if (showCreateChoiceDialog) {
+        PlaylistCreateChoiceDialog(
+            onDismiss = onDismissCreateChoice,
+            onCreateEmpty = onCreateEmptyPlaylist,
+            onBuildWithSearch = onBuildPlaylistWithSearch
         )
     }
 

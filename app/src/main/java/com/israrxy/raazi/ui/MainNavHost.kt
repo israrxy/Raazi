@@ -128,7 +128,8 @@ internal fun MainNavHost(
                     }
                 },
                 onNavigateToSpotifyImport = { navController.navigate("spotify_import") },
-                onNavigateToYouTubeLogin = { navController.navigate("youtube_login") }
+                onNavigateToYouTubeLogin = { navController.navigate("youtube_login") },
+                onNavigateToPlaylistMaker = { navController.navigate("playlist_maker") }
             )
         }
         composable("settings") {
@@ -186,6 +187,21 @@ internal fun MainNavHost(
                     val cleanId = cleanPlaylistId(id)
                     navController.navigate("playlist/${Uri.encode(cleanId)}") {
                         popUpTo("library")
+                    }
+                }
+            )
+        }
+        composable("playlist_maker") {
+            com.israrxy.raazi.ui.playlistmaker.PlaylistMakerScreen(
+                onClose = { navController.popBackStack() },
+                onCreated = { id ->
+                    val cleanId = cleanPlaylistId(id)
+                    if (cleanId.isBlank()) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate("playlist/${Uri.encode(cleanId)}") {
+                            popUpTo("playlist_maker") { inclusive = true }
+                        }
                     }
                 }
             )
