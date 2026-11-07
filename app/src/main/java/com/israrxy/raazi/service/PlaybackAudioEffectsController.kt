@@ -39,6 +39,22 @@ internal class PlaybackAudioEffectsController(
     private var cachedVirtualizerStrength: Short = 0
     private var cachedReverbPreset: Int = 0
     private val visualizerListeners = CopyOnWriteArraySet<(ByteArray) -> Unit>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private var visualizerRequested = false
+    private var visualizerSessionId = 0
+    private var visualizerRetryCount = 0
+    private var visualizerFailureCount = 0
+
+    private val visualizerRetryRunnable = Runnable {
+        if (isDestroyedProvider() || !visualizerRequested || visualizerUnsupported) return@Runnable
+        if (ensureVisualizerInitialized()) {
+            visualizerRetryCount = 0
+            runCatching { visualizer?.enabled = true }
+        } else {
+            scheduleVisualizerRetry()
+        }
+    }
 
     private fun isEmulatorAudioHal(): Boolean {
         val hardware = Build.HARDWARE.lowercase()
@@ -82,32 +98,34 @@ internal class PlaybackAudioEffectsController(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun isVisualizerEffectAvailable(): Boolean {
-        if (visualizerUnsupported || isEmulatorAudioHal()) return false
-        val visualizerUuid = UUID.fromString("e46b26a0-dddd-11db-8afd-0002a5d5c51b")
-        return isAudioEffectAvailable(visualizerUuid, requireInsertMode = false)
-    }
-
     fun initializeAudioEffects() {
-        if (isDestroyedProvider() || audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
-            if (audioEffectsInitRetryCount >= MAX_AUDIO_EFFECTS_RETRIES) {
-                Log.w("MusicService", "Max audio effects init retries reached")
-            }
-            return
-        }
+        if (isDestroyedProvider()) return
         try {
             val player = exoPlayerProvider() ?: return
             val audioSessionId = player.audioSessionId
             if (audioSessionId == 0) {
-                audioEffectsInitRetryCount++
-                Log.w("MusicService", "Audio session not ready, retry $audioEffectsInitRetryCount/$MAX_AUDIO_EFFECTS_RETRIES")
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (!isDestroyedProvider()) initializeAudioEffects()
-                }, 1000)
+                if (audioEffectsInitRetryCount < MAX_AUDIO_EFFECTS_RETRIES) {
+                    audioEffectsInitRetryCount++
+                    Log.w(
+                        "MusicService",
+                        "Audio session not ready, retry $audioEffectsInitRetryCount/$MAX_AUDIO_EFFECTS_RETRIES"
+                    )
+                    mainHandler.postDelayed({
+                        if (!isDestroyedProvider()) initializeAudioEffects()
+                    }, 1000L)
+                }
                 return
             }
+            audioEffectsInitRetryCount = 0
 
             if (initializedSessionId == audioSessionId && audioEqualizer != null) {
+                // Equalizer already lives on this session; only make sure the
+                // visualizer is attached to it as well.
+                if (visualizerRequested && hasRecordAudioPermission()) {
+                    if (ensureVisualizerInitialized()) {
+                        runCatching { visualizer?.enabled = true }
+                    }
+                }
                 return
             }
 
@@ -115,6 +133,7 @@ internal class PlaybackAudioEffectsController(
             bassBoost?.release()
             virtualizer?.release()
             presetReverb?.release()
+            releaseVisualizer()
             audioEqualizer = null
             bassBoost = null
             virtualizer = null
@@ -141,8 +160,10 @@ internal class PlaybackAudioEffectsController(
                 setReverbPreset(cachedReverbPreset)
             }
 
-            if (visualizerListeners.isNotEmpty() && hasRecordAudioPermission() && isVisualizerEffectAvailable()) {
-                ensureVisualizerInitialized()
+            if (visualizerRequested && hasRecordAudioPermission()) {
+                if (ensureVisualizerInitialized()) {
+                    runCatching { visualizer?.enabled = true }
+                }
             }
 
             Log.d("MusicService", "Advanced audio effects initialized successfully")
@@ -213,12 +234,13 @@ internal class PlaybackAudioEffectsController(
 
     private fun ensureVisualizerInitialized(): Boolean {
         if (isDestroyedProvider() || visualizerUnsupported) return false
-        if (visualizer != null) return true
-        if (!hasRecordAudioPermission() || !isVisualizerEffectAvailable()) {
-            return false
-        }
+        if (!hasRecordAudioPermission()) return false
+
         val audioSessionId = runCatching { exoPlayerProvider()?.audioSessionId ?: 0 }.getOrDefault(0)
         if (audioSessionId == 0) return false
+
+        if (visualizer != null && visualizerSessionId == audioSessionId) return true
+        if (visualizer != null) releaseVisualizer()
 
         return runCatching {
             val createdVisualizer = Visualizer(audioSessionId)
@@ -227,29 +249,69 @@ internal class PlaybackAudioEffectsController(
             if (captureRange.size >= 2) {
                 createdVisualizer.captureSize = captureRange[1]
             }
-            createdVisualizer.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+            val captureListener = object : Visualizer.OnDataCaptureListener {
                 override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
                 override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
                     fft?.let { data ->
-                        visualizerData = data
+                        // The capture buffer is only valid during this callback.
+                        // Copy it before caching/emitting: the engine may reuse
+                        // the same array, which would also make StateFlow skip
+                        // updates (ByteArray compares by reference).
+                        val snapshot = data.copyOf()
+                        visualizerData = snapshot
                         visualizerListeners.forEach { listener ->
                             try {
-                                listener(data)
+                                listener(snapshot)
                             } catch (e: Exception) {
                                 Log.w("MusicService", "Error notifying visualizer listener: ${e.message}")
                             }
                         }
                     }
                 }
-            }, Visualizer.getMaxCaptureRate() / 2, false, true)
+            }
+            val captureResult = createdVisualizer.setDataCaptureListener(
+                captureListener,
+                Visualizer.getMaxCaptureRate() / 2,
+                false,
+                true
+            )
+            if (captureResult != Visualizer.SUCCESS) {
+                error("setDataCaptureListener failed: $captureResult")
+            }
             visualizer = createdVisualizer
-            Log.d("MusicService", "Visualizer initialized successfully")
+            visualizerSessionId = audioSessionId
+            visualizerFailureCount = 0
+            Log.d("MusicService", "Visualizer initialized on session $audioSessionId")
             true
         }.getOrElse { e ->
-            visualizerUnsupported = true
-            Log.w("MusicService", "Visualizer unavailable on this session: ${e.message}")
+            visualizerFailureCount++
+            if (e is UnsupportedOperationException || visualizerFailureCount >= MAX_VISUALIZER_FAILURES) {
+                visualizerUnsupported = true
+            }
+            Log.w(
+                "MusicService",
+                "Visualizer unavailable on session $audioSessionId (${e.message}), attempt $visualizerFailureCount"
+            )
             false
         }
+    }
+
+    private fun releaseVisualizer() {
+        mainHandler.removeCallbacks(visualizerRetryRunnable)
+        runCatching { visualizer?.release() }
+        visualizer = null
+        visualizerSessionId = 0
+    }
+
+    private fun scheduleVisualizerRetry() {
+        if (isDestroyedProvider() || !visualizerRequested || visualizerUnsupported) return
+        if (visualizerRetryCount >= MAX_VISUALIZER_RETRIES) {
+            Log.w("MusicService", "Visualizer retries exhausted")
+            return
+        }
+        visualizerRetryCount++
+        mainHandler.removeCallbacks(visualizerRetryRunnable)
+        mainHandler.postDelayed(visualizerRetryRunnable, VISUALIZER_RETRY_DELAY_MS)
     }
 
     fun getEqualizerBands(): Short = audioEqualizer?.numberOfBands ?: 0
@@ -323,20 +385,39 @@ internal class PlaybackAudioEffectsController(
 
     fun getFrequencyData(): ByteArray? = visualizerData
 
-    fun isVisualizerSupported(): Boolean {
-        return visualizer != null || (hasRecordAudioPermission() && isVisualizerEffectAvailable())
-    }
+    fun isVisualizerSupported(): Boolean =
+        visualizer != null || (hasRecordAudioPermission() && !visualizerUnsupported)
 
     fun enableVisualizer(enable: Boolean) {
-        try {
-            if (enable && !ensureVisualizerInitialized()) {
-                return
-            }
-            visualizer?.enabled = enable
-            Log.d("MusicService", "Visualizer enabled: $enable")
-        } catch (e: Exception) {
-            Log.w("MusicService", "Could not toggle visualizer: ${e.message}")
+        visualizerRequested = enable
+        if (!enable) {
+            mainHandler.removeCallbacks(visualizerRetryRunnable)
+            runCatching { visualizer?.enabled = false }
+                .onFailure { Log.w("MusicService", "Could not disable visualizer: ${it.message}") }
+            return
         }
+        visualizerRetryCount = 0
+        if (ensureVisualizerInitialized()) {
+            runCatching { visualizer?.enabled = true }
+                .onFailure { Log.w("MusicService", "Could not enable visualizer: ${it.message}") }
+            Log.d("MusicService", "Visualizer enabled")
+        } else if (!visualizerUnsupported && hasRecordAudioPermission()) {
+            // No playback session yet (nothing playing). Keep polling so the
+            // spectrum starts as soon as audio actually begins.
+            scheduleVisualizerRetry()
+        }
+    }
+
+    fun onPlaybackReady() {
+        val currentSessionId = runCatching { exoPlayerProvider()?.audioSessionId ?: 0 }.getOrDefault(0)
+        if (currentSessionId == 0) return
+        if (currentSessionId != initializedSessionId) {
+            audioEffectsInitRetryCount = 0
+            visualizerUnsupported = false
+            visualizerFailureCount = 0
+            initializeAudioEffects()
+        }
+        if (visualizerRequested) enableVisualizer(true)
     }
 
     fun addVisualizerListener(listener: (ByteArray) -> Unit) {
@@ -345,18 +426,15 @@ internal class PlaybackAudioEffectsController(
 
     fun removeVisualizerListener(listener: (ByteArray) -> Unit) {
         visualizerListeners.remove(listener)
-        if (visualizerListeners.isEmpty() && visualizer != null) {
+        if (visualizerListeners.isEmpty()) {
             enableVisualizer(false)
         }
     }
 
     fun release() {
-        try {
-            visualizer?.release()
-            visualizer = null
-        } catch (e: Exception) {
-            Log.w("MusicService", "Error releasing visualizer: ${e.message}")
-        }
+        visualizerRequested = false
+        visualizerRetryCount = 0
+        releaseVisualizer()
         try {
             audioEqualizer?.release()
             bassBoost?.release()
@@ -370,5 +448,8 @@ internal class PlaybackAudioEffectsController(
 
     companion object {
         private const val MAX_AUDIO_EFFECTS_RETRIES = 3
+        private const val MAX_VISUALIZER_RETRIES = 20
+        private const val VISUALIZER_RETRY_DELAY_MS = 750L
+        private const val MAX_VISUALIZER_FAILURES = 4
     }
 }

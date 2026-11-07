@@ -17,7 +17,12 @@ internal fun MusicPlaybackService.createPlayerListenerImpl() = object : Player.L
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         updateMediaSessionState()
         notifyPlaybackState(refreshNotification = true)
-        if (isPlaying) startPositionUpdates() else stopPositionUpdates()
+        if (isPlaying) {
+            retryVisualizerIfReady()
+            startPositionUpdates()
+        } else {
+            stopPositionUpdates()
+        }
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -45,6 +50,7 @@ internal fun MusicPlaybackService.createPlayerListenerImpl() = object : Player.L
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         if (playbackState == Player.STATE_READY) {
+            retryVisualizerIfReady()
             currentTrackRetryCount = 0
             val currentTrackId = getCurrentTrack()?.id
             val dur = exoPlayer.duration

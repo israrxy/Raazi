@@ -452,6 +452,7 @@ class MusicPlaybackService : Service() {
     fun enableVisualizer(enable: Boolean) = audioEffectsController.enableVisualizer(enable)
     fun addVisualizerListener(listener: (ByteArray) -> Unit) = audioEffectsController.addVisualizerListener(listener)
     fun removeVisualizerListener(listener: (ByteArray) -> Unit) = audioEffectsController.removeVisualizerListener(listener)
+    internal fun retryVisualizerIfReady() = audioEffectsController.onPlaybackReady()
 
     // Queue delegation
     fun addToQueue(items: List<MusicItem>) = addToQueueImpl(items)

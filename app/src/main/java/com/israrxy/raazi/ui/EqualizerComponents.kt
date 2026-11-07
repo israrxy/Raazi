@@ -401,16 +401,18 @@ private fun processFftData(fftData: ByteArray, bandCount: Int): List<Float> {
     val samplesPerBand = (fftSize / bandCount).coerceAtLeast(1)
     for (i in 0 until bandCount) {
         var magnitude = 0f
-        val start = i * samplesPerBand + 1
+        val start = (i * samplesPerBand).coerceAtLeast(1)
         val end = minOf((i + 1) * samplesPerBand, fftSize)
+        var bins = 0
         for (j in start until end) {
             if (j * 2 + 1 < fftData.size) {
                 val real = fftData[j * 2].toFloat()
                 val imag = fftData[j * 2 + 1].toFloat()
                 magnitude += kotlin.math.sqrt(real * real + imag * imag)
+                bins++
             }
         }
-        val norm = (magnitude / samplesPerBand) / 128f
+        val norm = if (bins == 0) 0f else (magnitude / bins) / 128f
         val smoothed = (norm * 0.7f + (out.lastOrNull() ?: 0f) * 0.3f).coerceIn(0f, 1f)
         out.add(smoothed)
     }
