@@ -216,9 +216,11 @@ class GeminiClient {
             "Gemini rejected that API key. Check it in Settings → AI & Gemini."
 
         private val PREFERRED_MODELS = listOf(
+            "gemini-3.5-flash-lite",
             "gemini-3.8-flash",
             "gemini-3.5-flash",
             "gemini-3-flash",
+            "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.0-flash"
         )

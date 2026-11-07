@@ -71,8 +71,12 @@ class GeminiKeyStore(context: Context) {
         }
     }
 
-    fun readModel(): String =
-        prefs.getString(KEY_MODEL, null)?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
+    fun readModel(): String {
+        val stored = prefs.getString(KEY_MODEL, null)?.takeIf { it.isNotBlank() }
+        // Installs that saved the old default adopt the new default. An
+        // explicit model choice is kept.
+        return stored?.takeIf { it != LEGACY_DEFAULT_MODEL } ?: DEFAULT_MODEL
+    }
 
     fun saveModel(model: String) {
         val normalized = model.trim()
@@ -105,7 +109,9 @@ class GeminiKeyStore(context: Context) {
 
     companion object {
         /** Default requested model. Availability is verified when the key is tested. */
-        const val DEFAULT_MODEL = "gemini-3.8-flash"
+        const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
+
+        private const val LEGACY_DEFAULT_MODEL = "gemini-3.8-flash"
 
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "raazi_gemini_key_v1"

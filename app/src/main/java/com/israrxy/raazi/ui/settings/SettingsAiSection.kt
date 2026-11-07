@@ -281,13 +281,13 @@ private fun StateLine(state: AiSettingsUiState) {
 }
 
 private val MODEL_OPTIONS = listOf(
-    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite"
 )
 
 private val MODEL_DESCRIPTIONS = mapOf(
-    "gemini-3.8-flash" to "Best accuracy. Verified against your key when saved.",
+    "gemini-3.5-flash-lite" to "Default. Fast vision with higher free limits.",
     "gemini-2.5-flash" to "Widely available free-tier fallback.",
-    "gemini-2.5-flash-lite" to "Faster with higher free limits, slightly less accurate."
+    "gemini-2.5-flash-lite" to "Fastest with the highest free limits, less accurate."
 )
