@@ -106,7 +106,7 @@ class YouTubeChartsExtractor {
             val requestBody = payload.toString().toRequestBody("application/json".toMediaType())
 
             val request = Request.Builder()
-                .url("$API_URL?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX3") // Key from OuterTune
+                .url("$API_URL?key=${PublicClientKeys.INNER_TUBE_KEY}") // Public key for charts API
                 .post(requestBody)
                 .apply {
                     headers.forEach { (k, v) -> addHeader(k, v) }

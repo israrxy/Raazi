@@ -48,9 +48,13 @@
 -dontwarn io.ktor.**
 -keep class io.ktor.** { *; }
 
-# ---- NewPipe Extractor ----
+# ---- NewPipe Extractor & Rhino ----
 -keep class org.schabi.newpipe.extractor.** { *; }
 -dontwarn org.schabi.newpipe.extractor.**
+-dontwarn java.beans.**
+-dontwarn javax.script.**
+-dontwarn org.mozilla.javascript.**
+-keep class org.mozilla.javascript.** { *; }
 
 # ---- InnerTube vendored code ----
 -keep class com.zionhuang.innertube.** { *; }

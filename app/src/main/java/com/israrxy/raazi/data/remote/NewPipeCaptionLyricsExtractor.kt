@@ -353,8 +353,8 @@ class NewPipeCaptionLyricsExtractor(
     internal fun parseCaptionsToLrc(raw: String): String? = CaptionTranscriptParser.parseCaptionsToLrc(raw)
 
     companion object {
-        private const val YT_PLAYER_API = "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STvLGLRnjIzNdFu-5C38"
-        private const val YT_SEARCH_API = "https://www.youtube.com/youtubei/v1/search?key=AIzaSyAO_FJ2SlqU8Q4STvLGLRnjIzNdFu-5C38"
+        private val YT_PLAYER_API get() = "https://www.youtube.com/youtubei/v1/player?key=${PublicClientKeys.YOUTUBE_WEB_KEY}"
+        private val YT_SEARCH_API get() = "https://www.youtube.com/youtubei/v1/search?key=${PublicClientKeys.YOUTUBE_WEB_KEY}"
         private const val ANDROID_USER_AGENT = "com.google.android.youtube/20.22.38 (Linux; U; Android 14) gzip"
         private const val IOS_USER_AGENT = "com.google.ios.youtube/20.22.3 (iPhone16,2; U; CPU iOS 18_5 like Mac OS X;)"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()

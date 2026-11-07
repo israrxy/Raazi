@@ -1,5 +1,6 @@
 package com.zionhuang.innertube
 
+import com.israrxy.raazi.data.remote.PublicClientKeys
 import com.zionhuang.innertube.models.Context
 import com.zionhuang.innertube.models.YouTubeClient
 import com.zionhuang.innertube.models.YouTubeLocale
@@ -268,7 +269,7 @@ class InnerTube {
         client: YouTubeClient,
         videoId: String,
     ) = httpClient.post("https://music.youtube.com/youtubei/v1/get_transcript") {
-        parameter("key", "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX3")
+        parameter("key", PublicClientKeys.INNER_TUBE_KEY)
         headers {
             append("Content-Type", "application/json")
         }
