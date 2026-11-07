@@ -19,19 +19,21 @@
   <a href="#features">Features</a> •
   <a href="#screenshots">Screenshots</a> •
   <a href="#tech-stack">Tech Stack</a> •
+  <a href="#permissions">Permissions</a> •
   <a href="#installation">Installation</a> •
-  <a href="#permissions--privacy">Permissions</a> •
   <a href="#license">License</a>
 </p>
 
 ---
 
+<a id="overview"></a>
 ## 🌟 Overview
 
 **Raazi** is a high-performance Android music player designed from the ground up for privacy, speed, and aesthetics. It provides ad-free background playback directly from YouTube Music with advanced audio features, synchronized multi-source lyrics, on-device AI song recognition, and offline music management — with zero user tracking and no account required.
 
 ---
 
+<a id="features"></a>
 ## ✨ Features
 
 ### 🎧 Pure Audio Experience
@@ -75,6 +77,7 @@
 
 ---
 
+<a id="screenshots"></a>
 ## 📱 Screenshots
 
 <p align="center">
@@ -85,6 +88,7 @@
 
 ---
 
+<a id="tech-stack"></a>
 ## 🛠️ Tech Stack
 
 Raazi is architected with modern Android development standards:
@@ -104,6 +108,7 @@ Raazi is architected with modern Android development standards:
 
 ---
 
+<a id="permissions"></a>
 ## 🔐 Permissions & Privacy
 
 Raazi is strictly privacy-first: **no telemetry, no accounts required, and zero user data collection**.
@@ -118,6 +123,7 @@ Raazi is strictly privacy-first: **no telemetry, no accounts required, and zero 
 
 ---
 
+<a id="installation"></a>
 ## 🚀 Installation
 
 Download the latest signed release APK from the **[GitHub Releases](https://github.com/israrxy/Raazi/releases)** page:
@@ -129,6 +135,7 @@ Download the latest signed release APK from the **[GitHub Releases](https://gith
 
 ---
 
+<a id="building"></a>
 ## 💻 Building from Source
 
 To build Raazi locally:
@@ -147,6 +154,7 @@ cd Raazi
 
 ---
 
+<a id="license"></a>
 ## 📄 License
 
 Raazi is licensed under the **[GNU General Public License v3.0](LICENSE)**.
@@ -166,5 +174,5 @@ the Free Software Foundation, either version 3 of the License, or
 ## 🙏 Acknowledgements
 
 - **[TeamNewPipe](https://github.com/TeamNewPipe/NewPipeExtractor)** for the YouTube extraction engine.
-- **[OuterTune](https://github.com/dd injustices/OuterTune)** & **[InnerTube](https://github.com/zionhuang/InnerTube)** for API inspiration.
+- **[OuterTune](https://github.com/ddinjustices/OuterTune)** & **[InnerTune](https://github.com/z-huang/innertune)** for inspiration.
 - The **Android Open Source Community** for modern Jetpack libraries.
