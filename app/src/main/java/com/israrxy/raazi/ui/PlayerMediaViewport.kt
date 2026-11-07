@@ -28,10 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -64,6 +65,8 @@ internal fun PlayerTopModeHeader(
     onLyricsVisibilityChange: (Boolean) -> Unit,
     onSetPlaybackMediaMode: (PlaybackMediaMode) -> Unit,
     onShowOptionsSheet: () -> Unit,
+    optionsIcon: ImageVector = Icons.Default.MoreVert,
+    optionsContentDescription: String = "Options",
     modifier: Modifier = Modifier
 ) {
     Spacer(modifier = Modifier.height(8.dp))
@@ -192,8 +195,8 @@ internal fun PlayerTopModeHeader(
             modifier = Modifier.size(48.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "Options",
+                imageVector = optionsIcon,
+                contentDescription = optionsContentDescription,
                 tint = if (sleepTimerActive) Emerald500 else Color.White,
                 modifier = Modifier.size(24.dp)
             )

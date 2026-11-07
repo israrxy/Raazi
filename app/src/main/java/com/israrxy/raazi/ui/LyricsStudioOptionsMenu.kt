@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -54,6 +55,7 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
     lyricsScriptFilter: LyricsScriptFilter,
     onDismiss: () -> Unit,
     onOpenLyricsBrowser: () -> Unit,
+    onOpenTrackDetails: () -> Unit = {},
     onRetryLyricsFetch: () -> Unit,
     onClearSavedLyricsSelection: () -> Unit,
     onSelectScriptFilter: (LyricsScriptFilter) -> Unit
@@ -101,19 +103,42 @@ internal fun BoxScope.LyricsSettingsDropdownMenu(
                         color = Color.White
                     )
 
-                    Surface(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(alpha = 0.07f)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color.White.copy(alpha = 0.75f),
-                            modifier = Modifier
-                                .padding(5.dp)
-                                .size(15.dp)
-                        )
+                        Surface(
+                            onClick = {
+                                onDismiss()
+                                onOpenTrackDetails()
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.White.copy(alpha = 0.07f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Song details",
+                                tint = Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier
+                                    .padding(5.dp)
+                                    .size(15.dp)
+                            )
+                        }
+
+                        Surface(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.White.copy(alpha = 0.07f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier
+                                    .padding(5.dp)
+                                    .size(15.dp)
+                            )
+                        }
                     }
                 }
 

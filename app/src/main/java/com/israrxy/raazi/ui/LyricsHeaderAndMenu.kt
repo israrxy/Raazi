@@ -1,23 +1,21 @@
 package com.israrxy.raazi.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,10 +24,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.israrxy.raazi.data.lyrics.LyricsScriptFilter
-import com.israrxy.raazi.data.lyrics.LyricsViewVariant
 import com.israrxy.raazi.model.MusicItem
 import com.israrxy.raazi.ui.theme.Zinc800
 import com.israrxy.raazi.utils.ThumbnailUtils
@@ -37,40 +32,14 @@ import com.israrxy.raazi.utils.ThumbnailUtils
 @Composable
 internal fun LyricsNowPlayingStrip(
     currentTrack: MusicItem?,
-    lyricsSource: String?,
-    isSynced: Boolean,
-    lyricsStatusBadge: String,
     isTrackLiked: Boolean,
     isPlaying: Boolean,
     currentPosition: Long = 0L,
     duration: Long,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
-    showOptionsMenu: Boolean,
-    availableVariants: List<LyricsViewVariant>,
-    selectedVariant: LyricsViewVariant,
-    onSelectVariant: (LyricsViewVariant) -> Unit,
-    showTranslation: Boolean,
-    isTranslating: Boolean,
-    translateLang: String,
-    onToggleTranslation: () -> Unit,
-    hideBrackets: Boolean,
-    onToggleHideBrackets: () -> Unit,
-    lyricsScriptFilter: LyricsScriptFilter,
-    onToggleOptionsMenu: () -> Unit,
-    onOpenLyricsBrowser: () -> Unit,
-    onOpenTrackDetails: () -> Unit,
     onToggleFavorite: (MusicItem) -> Unit
 ) {
-    val cleanSourceLabel = remember(lyricsSource, isSynced) {
-        val src = lyricsSource?.removePrefix("Saved ")?.trim().orEmpty()
-        when {
-            src.isNotBlank() && isSynced -> "$src • Synced"
-            src.isNotBlank() -> src
-            else -> lyricsStatusBadge.lowercase().replaceFirstChar { it.uppercase() }
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -132,7 +101,6 @@ internal fun LyricsNowPlayingStrip(
                 }
             }
 
-            // Small play/pause button (about 38dp circle, white at 12% alpha)
             Surface(
                 onClick = onPlayPause,
                 shape = CircleShape,
@@ -157,132 +125,6 @@ internal fun LyricsNowPlayingStrip(
             onSeek = onSeek,
             modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
         )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                onClick = onOpenLyricsBrowser,
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = cleanSourceLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.86f),
-                        fontSize = 11.sp,
-                        maxLines = 1
-                    )
-                    Icon(
-                        imageVector = Icons.Default.UnfoldMore,
-                        contentDescription = "Switch source",
-                        tint = Color.White.copy(alpha = 0.56f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-
-            if (availableVariants.size > 1) {
-                availableVariants.forEach { variant ->
-                    val selected = selectedVariant == variant
-                    Surface(
-                        onClick = { onSelectVariant(variant) },
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selected) Color.White else Color.White.copy(alpha = 0.07f)
-                    ) {
-                        Text(
-                            text = variant.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selected) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
-                    }
-                }
-            }
-
-            Surface(
-                onClick = onToggleTranslation,
-                shape = RoundedCornerShape(8.dp),
-                color = if (showTranslation) Color.White else Color.White.copy(alpha = 0.07f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    if (isTranslating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(11.dp),
-                            strokeWidth = 1.5.dp,
-                            color = if (showTranslation) Color(0xFF09090B) else Color.White
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Translate,
-                            contentDescription = null,
-                            tint = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.75f),
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-                    Text(
-                        text = if (showTranslation) "Translated (${translateLang.uppercase()})" else "Translate",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (showTranslation) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (showTranslation) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f)
-                    )
-                }
-            }
-
-            Surface(
-                onClick = onToggleHideBrackets,
-                shape = RoundedCornerShape(8.dp),
-                color = if (hideBrackets) Color.White else Color.White.copy(alpha = 0.07f)
-            ) {
-                Text(
-                    text = if (hideBrackets) "Hide [ ]" else "Show [ ]",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (hideBrackets) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (hideBrackets) Color(0xFF09090B) else Color.White.copy(alpha = 0.78f),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
-            }
-
-            Surface(
-                onClick = onOpenTrackDetails,
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White.copy(alpha = 0.07f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Details",
-                        tint = Color.White.copy(alpha = 0.75f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = "Info",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.78f)
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -303,7 +145,7 @@ internal fun SongDetailsDialog(
         else -> "Song"
     }
 
-    AlertDialog(
+    androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Song details") },
         text = {
@@ -318,7 +160,7 @@ internal fun SongDetailsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Done") }
         },
         containerColor = Color(0xFF18181B),
         titleContentColor = Color.White,

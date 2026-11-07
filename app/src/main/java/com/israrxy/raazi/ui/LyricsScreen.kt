@@ -46,6 +46,8 @@ internal fun LyricsScreen(
     viewModel: MusicPlayerViewModel,
     presentation: LyricsPresentation,
     onOpenLyricsBrowser: () -> Unit = {},
+    showOptionsMenu: Boolean = false,
+    onDismissOptionsMenu: () -> Unit = {},
     topBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -94,7 +96,6 @@ internal fun LyricsScreen(
         currentTrack != null && favoriteTracks.any { it.id == currentTrack.id }
     }
 
-    var showOptionsMenu by remember { mutableStateOf(false) }
     var showTrackDetails by remember { mutableStateOf(false) }
 
     // Active line index using binary search
@@ -171,30 +172,6 @@ internal fun LyricsScreen(
         }
     }
 
-    val lyricsStatusBadge = remember(isLoading, isUnavailable, lyrics, isSynced, hasWordSync) {
-        val rawProvider = lyrics?.source?.removePrefix("Saved ")?.trim()?.uppercase().orEmpty()
-        val isSaved = lyrics?.source?.startsWith("Saved") == true
-        when {
-            isLoading -> "SEARCHING..."
-            isUnavailable || lyrics == null -> "NO LYRICS"
-            hasWordSync -> buildString {
-                if (isSaved) append("PINNED • ")
-                if (rawProvider.isNotBlank()) append("$rawProvider • ")
-                append("WORD SYNC")
-            }
-            isSynced -> buildString {
-                if (isSaved) append("PINNED • ")
-                if (rawProvider.isNotBlank()) append("$rawProvider • ")
-                append("SYNCED")
-            }
-            else -> buildString {
-                if (isSaved) append("PINNED • ")
-                if (rawProvider.isNotBlank()) append("$rawProvider • ")
-                append("PLAIN")
-            }
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF09090B))) {
         if (currentTrack != null) {
             val isAndroid12 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -242,7 +219,7 @@ internal fun LyricsScreen(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { showOptionsMenu = false }
+                    ) { onDismissOptionsMenu() }
             )
         }
 
@@ -255,9 +232,6 @@ internal fun LyricsScreen(
 
             LyricsNowPlayingStrip(
                 currentTrack = currentTrack,
-                lyricsSource = lyrics?.source,
-                isSynced = isSynced,
-                lyricsStatusBadge = lyricsStatusBadge,
                 isTrackLiked = isTrackLiked,
                 isPlaying = isPlaying,
                 currentPosition = smoothPositionMs,
@@ -267,20 +241,6 @@ internal fun LyricsScreen(
                     if (isPlaying) viewModel.pause() else viewModel.resume()
                 },
                 onSeek = { viewModel.seekTo(it) },
-                showOptionsMenu = showOptionsMenu,
-                availableVariants = availableVariants,
-                selectedVariant = selectedVariant,
-                onSelectVariant = presentation.onSelectVariant,
-                showTranslation = showTranslation,
-                isTranslating = isTranslating,
-                translateLang = translateLang,
-                onToggleTranslation = presentation.onToggleTranslation,
-                hideBrackets = hideBrackets,
-                onToggleHideBrackets = presentation.onToggleHideBrackets,
-                lyricsScriptFilter = lyricsScriptFilter,
-                onToggleOptionsMenu = { showOptionsMenu = !showOptionsMenu },
-                onOpenLyricsBrowser = onOpenLyricsBrowser,
-                onOpenTrackDetails = { showTrackDetails = true },
                 onToggleFavorite = { viewModel.toggleFavorite(it) }
             )
 
@@ -300,8 +260,9 @@ internal fun LyricsScreen(
                     hideBrackets = hideBrackets,
                     onToggleHideBrackets = presentation.onToggleHideBrackets,
                     lyricsScriptFilter = lyricsScriptFilter,
-                    onDismiss = { showOptionsMenu = false },
+                    onDismiss = onDismissOptionsMenu,
                     onOpenLyricsBrowser = onOpenLyricsBrowser,
+                    onOpenTrackDetails = { showTrackDetails = true },
                     onRetryLyricsFetch = { viewModel.retryLyricsFetch() },
                     onClearSavedLyricsSelection = { viewModel.clearSavedLyricsSelection() },
                     onSelectScriptFilter = { viewModel.setLyricsScriptFilter(it) }

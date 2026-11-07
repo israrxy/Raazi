@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -99,7 +101,11 @@ fun PlayerScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val videoQuality by viewModel.videoQuality.collectAsStateWithLifecycle()
     var showLyricsBrowser by remember { mutableStateOf(false) }
+    var showLyricsOptions by remember { mutableStateOf(false) }
     var showOptionsSheet by remember { mutableStateOf(false) }
+    LaunchedEffect(isLyricsVisible) {
+        if (!isLyricsVisible) showLyricsOptions = false
+    }
     var showCreditsSheet by remember { mutableStateOf(false) }
     val optionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -291,6 +297,8 @@ fun PlayerScreen(
                     showLyricsBrowser = true
                     viewModel.searchLyricsOptions(lyricsSearchTitle, lyricsSearchArtist)
                 },
+                showOptionsMenu = showLyricsOptions,
+                onDismissOptionsMenu = { showLyricsOptions = false },
                 topBar = {
                     Box(
                         modifier = Modifier
@@ -305,7 +313,9 @@ fun PlayerScreen(
                                 onCollapse = onCollapse,
                                 onLyricsVisibilityChange = onLyricsVisibilityChange,
                                 onSetPlaybackMediaMode = { viewModel.setPlaybackMediaMode(it) },
-                                onShowOptionsSheet = { showOptionsSheet = true },
+                                onShowOptionsSheet = { showLyricsOptions = true },
+                                optionsIcon = Icons.Default.Settings,
+                                optionsContentDescription = "Lyrics options",
                                 modifier = dismissModifier
                             )
                         }
