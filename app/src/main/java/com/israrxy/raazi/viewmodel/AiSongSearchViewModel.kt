@@ -4,14 +4,13 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.israrxy.raazi.data.ai.AiFinderPreferences
 import com.israrxy.raazi.data.ai.AudioPayload
 import com.israrxy.raazi.data.ai.GeminiClient
 import com.israrxy.raazi.data.ai.GeminiException
 import com.israrxy.raazi.data.ai.GeminiKeyStore
 import com.israrxy.raazi.data.ai.ImagePayload
 import com.israrxy.raazi.data.ai.SongIdentification
-import com.israrxy.raazi.data.ai.WebVerifyLevel
-import com.israrxy.raazi.data.ai.WebVerifyUsage
 import com.israrxy.raazi.data.ai.WebVerifyUsageStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -20,32 +19,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-enum class AiInputMode { PHOTO, LISTEN }
-
-data class AiSongSearchUiState(
-    val keyConfigured: Boolean = false,
-    val mode: AiInputMode = AiInputMode.PHOTO,
-    val imageUri: Uri? = null,
-    val isIdentifying: Boolean = false,
-    val identification: SongIdentification? = null,
-    val searchQuery: String = "",
-    val pendingSearch: String? = null,
-    val error: String? = null,
-    val isRecording: Boolean = false,
-    val recordingElapsedMs: Long = 0L,
-    val recordingMaxMs: Long = AudioPayload.MAX_DURATION_MS,
-    val recordingLevels: List<Float> = emptyList(),
-    val usage: WebVerifyUsage = WebVerifyUsage(
-        used = 0,
-        cap = WebVerifyUsageStore.DEFAULT_CAP,
-        enabled = true,
-        resetLabel = "",
-        level = WebVerifyLevel.NORMAL,
-        showCapExplanation = false
-    ),
-    val webNotice: String? = null
-)
 
 /**
  * Runs the photo/audio -> Gemini -> optional web verification -> YouTube-query
@@ -56,12 +29,14 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
 
     private val keyStore = GeminiKeyStore(app)
     private val usageStore = WebVerifyUsageStore(app)
+    private val finderPreferences = AiFinderPreferences(app)
     private val client = GeminiClient()
 
     private val _state = MutableStateFlow(
         AiSongSearchUiState(
             keyConfigured = keyStore.isConfigured(),
-            usage = usageStore.read()
+            usage = usageStore.read(),
+            autoSearch = finderPreferences.isAutoSearchEnabled()
         )
     )
     val state: StateFlow<AiSongSearchUiState> = _state.asStateFlow()
@@ -73,11 +48,15 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile
     private var stopRecordingRequested = false
 
+    @Volatile
+    private var recordingLimitMs = AudioPayload.MAX_DURATION_MS
+
     fun refreshKeyState() {
         _state.update {
             it.copy(
                 keyConfigured = keyStore.isConfigured(),
-                usage = usageStore.read()
+                usage = usageStore.read(),
+                autoSearch = finderPreferences.isAutoSearchEnabled()
             )
         }
     }
@@ -85,14 +64,21 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
     /** Refreshes key and usage state when the sheet opens. */
     fun onSheetOpened() {
         val usage = usageStore.read()
-        val notice = buildWebNotice(usage)
+        val notice = buildWebNotice(usage) { usageStore.markCapExplanationShown() }
         _state.update {
             it.copy(
                 keyConfigured = keyStore.isConfigured(),
                 usage = usage,
+                autoSearch = finderPreferences.isAutoSearchEnabled(),
                 webNotice = notice
             )
         }
+    }
+
+    /** Persists the auto-search toggle and applies it to the next result. */
+    fun setAutoSearch(enabled: Boolean) {
+        finderPreferences.setAutoSearchEnabled(enabled)
+        _state.update { it.copy(autoSearch = enabled) }
     }
 
     fun onImagePicked(uri: Uri) {
@@ -105,7 +91,6 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                 mode = AiInputMode.PHOTO,
                 imageUri = uri,
                 identification = null,
-                searchQuery = "",
                 pendingSearch = null,
                 error = null
             )
@@ -135,6 +120,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         audioJob = null
         lastAudio = null
         stopRecordingRequested = false
+        recordingLimitMs = AudioPayload.MAX_DURATION_MS
 
         audioJob = viewModelScope.launch {
             _state.update {
@@ -144,10 +130,10 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                     imageUri = null,
                     isRecording = true,
                     recordingElapsedMs = 0L,
+                    recordingMaxMs = recordingLimitMs,
                     recordingLevels = emptyList(),
                     isIdentifying = false,
                     identification = null,
-                    searchQuery = "",
                     pendingSearch = null,
                     error = null
                 )
@@ -156,6 +142,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val wav = AudioPayload.record(
                     shouldStop = { stopRecordingRequested },
+                    maxDuration = { recordingLimitMs },
                     onProgress = { elapsed, maxMs ->
                         _state.update { current ->
                             if (current.isRecording) {
@@ -212,6 +199,14 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.isRecording) stopRecordingRequested = true
     }
 
+    /** Adds another 15 seconds while a clip is still recording. */
+    fun extendRecording() {
+        if (!_state.value.isRecording) return
+        recordingLimitMs = (recordingLimitMs + AudioPayload.EXTEND_STEP_MS)
+            .coerceAtMost(AudioPayload.MAX_EXTENDED_DURATION_MS)
+        _state.update { it.copy(recordingMaxMs = recordingLimitMs) }
+    }
+
     /** Stops recording without sending audio, for example when leaving the sheet. */
     fun cancelRecording() {
         if (!_state.value.isRecording) return
@@ -263,7 +258,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
     fun searchNow(query: String) {
         val trimmed = query.trim()
         if (trimmed.isBlank()) return
-        _state.update { it.copy(searchQuery = trimmed, pendingSearch = trimmed) }
+        _state.update { it.copy(pendingSearch = trimmed) }
     }
 
     fun consumePendingSearch() {
@@ -280,7 +275,8 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         lastAudio = null
         _state.value = AiSongSearchUiState(
             keyConfigured = keyStore.isConfigured(),
-            usage = usageStore.read()
+            usage = usageStore.read(),
+            autoSearch = finderPreferences.isAutoSearchEnabled()
         )
     }
 
@@ -315,7 +311,8 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                 val first = identifyWithFallback(apiKey) { model ->
                     client.identify(apiKey, model, jpeg)
                 }
-                applyResult(verifyIfUseful(apiKey, first, AiInputMode.PHOTO))
+                val enriched = identifyFromLyricsIfNeeded(apiKey, first)
+                applyResult(verifyIfUseful(apiKey, enriched, AiInputMode.PHOTO))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -345,7 +342,8 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
             val first = identifyWithFallback(apiKey) { model ->
                 client.identifyAudio(apiKey, model, wav)
             }
-            applyResult(verifyIfUseful(apiKey, first, AiInputMode.LISTEN))
+            val enriched = identifyFromLyricsIfNeeded(apiKey, first)
+            applyResult(verifyIfUseful(apiKey, enriched, AiInputMode.LISTEN))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -361,15 +359,52 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun applyResult(result: SongIdentification) {
         val query = result.primaryQuery()
-        val autoSearch = result.isConfident && query.isNotBlank()
+        val autoSearch = _state.value.autoSearch && result.isConfident && query.isNotBlank()
         _state.update {
             it.copy(
                 isIdentifying = false,
                 identification = result,
-                searchQuery = query,
                 pendingSearch = if (autoSearch) query else null,
                 error = null
             )
+        }
+    }
+
+    /**
+     * When the first pass found lyrics but no song, ask Gemini to identify the
+     * song from those lyrics. This is a text-only request; the photo/audio is
+     * not sent again.
+     */
+    private suspend fun identifyFromLyricsIfNeeded(
+        apiKey: String,
+        result: SongIdentification
+    ): SongIdentification {
+        if (result.hasCandidate || !result.hasLyrics) return result
+        val lyrics = result.detectedText?.trim().orEmpty()
+        if (lyrics.isBlank()) return result
+
+        return try {
+            val fromLyrics = identifyWithFallback(apiKey) { model ->
+                client.identifyFromLyrics(apiKey, model, lyrics)
+            }
+            if (!fromLyrics.hasCandidate) return result
+            result.copy(
+                identified = true,
+                title = fromLyrics.title ?: result.title,
+                artist = fromLyrics.artist ?: result.artist,
+                album = fromLyrics.album ?: result.album,
+                year = fromLyrics.year ?: result.year,
+                confidencePercent = fromLyrics.confidencePercent ?: result.confidencePercent,
+                searchQuery = fromLyrics.searchQuery ?: result.searchQuery,
+                alternatives = (fromLyrics.alternatives + result.alternatives)
+                    .distinctBy { it.query.lowercase() }
+                    .take(3),
+                message = fromLyrics.message ?: result.message
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            result
         }
     }
 
@@ -398,12 +433,17 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                 }
             )
             val usage = usageStore.record(verification.searchQueries)
-            val notice = buildWebNotice(usage)
+            val notice = buildWebNotice(usage) { usageStore.markCapExplanationShown() }
             _state.update {
                 it.copy(usage = usage, webNotice = notice)
             }
             val verified = verification.identification
-            if (verified.hasCandidate || verified.hasLyrics) verified else result
+            when {
+                verified.hasCandidate -> verified
+                result.hasCandidate -> result
+                verified.hasLyrics -> verified
+                else -> result
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -414,24 +454,6 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
     private fun shouldVerify(result: SongIdentification, mode: AiInputMode): Boolean {
         if (!result.hasCandidate && !result.hasLyrics) return false
         return mode == AiInputMode.LISTEN || result.hasLyrics || !result.isConfident
-    }
-
-    private fun buildWebNotice(usage: WebVerifyUsage): String? {
-        if (!usage.enabled) return null
-        return when {
-            usage.level == WebVerifyLevel.AT_CAP ->
-                "Web check limit reached — using Gemini's first match until ${usage.resetLabel}."
-
-            usage.level == WebVerifyLevel.NEAR_CAP ->
-                "Web checks almost used — ${usage.remaining} left this month."
-
-            usage.showCapExplanation -> {
-                usageStore.markCapExplanationShown()
-                "Web checks are capped at ${usage.cap}/month to avoid charges."
-            }
-
-            else -> null
-        }
     }
 
     private suspend fun identifyWithFallback(

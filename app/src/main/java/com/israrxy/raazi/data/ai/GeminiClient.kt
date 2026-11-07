@@ -124,6 +124,34 @@ class GeminiClient {
         )
     }
 
+    /**
+     * Text-only pass used when the first request detected lyrics but could not
+     * name the song. Gemini can usually identify a song from its lyrics alone.
+     */
+    suspend fun identifyFromLyrics(
+        apiKey: String,
+        model: String,
+        lyrics: String
+    ): SongIdentification = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonArray("contents") {
+                addJsonObject {
+                    put("role", "user")
+                    putJsonArray("parts") {
+                        addJsonObject {
+                            put("text", LYRICS_IDENTIFY_PROMPT + "\n\nLyrics:\n" + lyrics.take(1500))
+                        }
+                    }
+                }
+            }
+            putJsonObject("generationConfig") {
+                put("maxOutputTokens", 1200)
+                put("responseMimeType", "application/json")
+            }
+        }.toString()
+        parseIdentification(executeGenerate(apiKey, model, body))
+    }
+
     private fun buildIdentifyBody(
         prompt: String,
         mimeType: String,
@@ -415,9 +443,41 @@ class GeminiClient {
 
             Rules:
             - Never invent a song. If you cannot identify it, set identified to false.
+            - If the image contains lyrics, identify the song from those lyrics and set identified to true whenever you can name it.
             - search_query must be tuned for YouTube (for example "Ed Sheeran Perfect").
             - confidence must reflect your real certainty.
             - detected_text should contain lyrics only when they are visible.
+            - Keep alternatives to at most 3 likely matches.
+        """.trimIndent()
+
+        private val LYRICS_IDENTIFY_PROMPT = """
+            You identify a song from lyrics that were detected in a photo or a
+            short audio clip. The lyrics may be partial, misheard, or slightly
+            wrong.
+
+            Use the words, phrasing, and any distinctive lines to identify the
+            most likely song. Prefer the original studio recording by the
+            credited artist. If you are not reasonably sure, set identified to
+            false instead of inventing a song.
+
+            Return ONLY a JSON object with exactly this shape:
+            {
+              "identified": true or false,
+              "title": "song title or null",
+              "artist": "artist name or null",
+              "album": "album name or null",
+              "year": "release year or null",
+              "confidence": 0.0 to 1.0,
+              "search_query": "best YouTube search query or null",
+              "detected_text": "the lyrics you were given, max 300 chars, or null",
+              "alternatives": [{"title": "other match", "artist": "artist"}],
+              "message": "short explanation when not identified, else null"
+            }
+
+            Rules:
+            - If the lyrics clearly match a song, set identified to true and fill title and artist.
+            - Never invent lyrics or a song that does not match.
+            - confidence must reflect your real certainty.
             - Keep alternatives to at most 3 likely matches.
         """.trimIndent()
 

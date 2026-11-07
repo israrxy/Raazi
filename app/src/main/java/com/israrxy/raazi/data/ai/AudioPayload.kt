@@ -15,11 +15,14 @@ import kotlin.math.sqrt
 /**
  * Records a short mono clip from the microphone and wraps it in a WAV header.
  * 16 kHz / 16-bit mono keeps a 15 second clip around 480 KB, well inside
- * Gemini's inline request limit. Nothing is written to disk.
+ * Gemini's inline request limit. Users can extend up to 60 seconds. Nothing is
+ * written to disk.
  */
 object AudioPayload {
 
     const val MAX_DURATION_MS = 15_000L
+    const val EXTEND_STEP_MS = 15_000L
+    const val MAX_EXTENDED_DURATION_MS = 60_000L
 
     private const val SAMPLE_RATE = 16_000
     private const val PROGRESS_INTERVAL_MS = 200L
@@ -28,6 +31,7 @@ object AudioPayload {
     @SuppressLint("MissingPermission")
     suspend fun record(
         shouldStop: () -> Boolean,
+        maxDuration: () -> Long = { MAX_DURATION_MS },
         onProgress: (elapsedMs: Long, maxMs: Long) -> Unit,
         onLevel: (Float) -> Unit
     ): ByteArray = withContext(Dispatchers.IO) {
@@ -64,8 +68,9 @@ object AudioPayload {
 
             while (true) {
                 coroutineContext.ensureActive()
+                val limit = maxDuration()
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
-                if (elapsed >= MAX_DURATION_MS || shouldStop()) break
+                if (elapsed >= limit || shouldStop()) break
 
                 val read = recorder.read(buffer, 0, buffer.size)
                 if (read < 0) {
@@ -80,12 +85,12 @@ object AudioPayload {
 
                 if (elapsed - lastProgress >= PROGRESS_INTERVAL_MS) {
                     lastProgress = elapsed
-                    onProgress(elapsed, MAX_DURATION_MS)
+                    onProgress(elapsed, limit)
                 }
             }
 
             val elapsed = SystemClock.elapsedRealtime() - startedAt
-            onProgress(minOf(elapsed, MAX_DURATION_MS), MAX_DURATION_MS)
+            onProgress(minOf(elapsed, maxDuration()), maxDuration())
 
             if (elapsed < MIN_DURATION_MS) {
                 throw IllegalArgumentException(

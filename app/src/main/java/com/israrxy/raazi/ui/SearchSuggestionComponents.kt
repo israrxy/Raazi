@@ -45,8 +45,7 @@ internal fun SearchSuggestionsAndHistoryList(
     onSubmitSuggestionOrHistory: (String) -> Unit,
     onFillQuery: (String) -> Unit = onSubmitSuggestionOrHistory,
     onPreviewItemClick: (MusicItem) -> Unit,
-    onHistorySongClick: (SearchHistoryEntity) -> Unit = { onSubmitSuggestionOrHistory(it.query) },
-    onOpenSongFinder: (() -> Unit)? = null
+    onHistorySongClick: (SearchHistoryEntity) -> Unit = { onSubmitSuggestionOrHistory(it.query) }
 ) {
     LazyColumn(
         state = suggestionsListState,
@@ -54,11 +53,6 @@ internal fun SearchSuggestionsAndHistoryList(
         contentPadding = PaddingValues(bottom = 88.dp)
     ) {
         if (normalizedSearchQuery.isEmpty()) {
-            if (onOpenSongFinder != null) {
-                item(key = "find_song_from_photo") {
-                    SearchFromMediaCard(onClick = onOpenSongFinder)
-                }
-            }
             if (searchHistory.isNotEmpty()) {
                 item(key = "recent_searches_header") {
                     SearchSectionTitle(

@@ -15,15 +15,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -99,7 +103,9 @@ internal fun FinderRecordingPanel(
     elapsedMs: Long,
     maxMs: Long,
     levels: List<Float>,
+    canExtend: Boolean,
     onCancel: () -> Unit,
+    onExtend: () -> Unit,
     onStop: () -> Unit
 ) {
     Surface(
@@ -123,10 +129,21 @@ internal fun FinderRecordingPanel(
             }
             Spacer(modifier = Modifier.height(10.dp))
             LevelMeter(levels = levels)
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Keep the phone near the speaker and avoid talking.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onCancel) {
                     Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (canExtend) {
+                    TextButton(onClick = onExtend) {
+                        Text("+15s")
+                    }
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = onStop) {
@@ -338,6 +355,103 @@ internal fun FinderSecondaryActions(
                 Text(onChangeInputLabel)
             }
         }
+    }
+}
+
+@Composable
+internal fun FinderToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+internal fun FinderInstructions() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "How it works",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            FinderInstructionRow(
+                icon = Icons.Filled.PhotoLibrary,
+                title = "Photo",
+                subtitle = "Album art, screenshot, or lyrics"
+            )
+            FinderInstructionRow(
+                icon = Icons.Filled.Mic,
+                title = "Listen",
+                subtitle = "Play the song near your phone"
+            )
+            FinderInstructionRow(
+                icon = Icons.Filled.AutoAwesome,
+                title = "Auto search",
+                subtitle = "Opens the best match without a tap"
+            )
+        }
+    }
+}
+
+@Composable
+private fun FinderInstructionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(modifier = Modifier.width(9.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

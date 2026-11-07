@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.data.region.RegionManager
 import com.israrxy.raazi.model.MusicItem
+import com.israrxy.raazi.ui.onboarding.OnboardingAiKeyPage
 import com.israrxy.raazi.ui.onboarding.OnboardingAudioLyricsPage
 import com.israrxy.raazi.ui.onboarding.OnboardingHeroPage
 import com.israrxy.raazi.ui.onboarding.OnboardingPersonalizePage
@@ -66,10 +67,11 @@ import com.israrxy.raazi.viewmodel.searchOnboardingTaste
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val TOTAL_ONBOARDING_PAGES = 7
-private const val TASTE_PICKER_PAGE = 4
-private const val PRIVACY_PAGE = 5
-private const val ACCOUNT_PAGE = 6
+private const val TOTAL_ONBOARDING_PAGES = 8
+private const val AI_KEY_PAGE = 4
+private const val TASTE_PICKER_PAGE = 5
+private const val PRIVACY_PAGE = 6
+private const val ACCOUNT_PAGE = 7
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -275,6 +277,14 @@ fun OnboardingScreen(
                     },
                     onDownloadWifiOnlyToggle = { enabled ->
                         scope.launch { settingsDataStore.setDownloadWifiOnly(enabled) }
+                    }
+                )
+                AI_KEY_PAGE -> OnboardingAiKeyPage(
+                    onContinue = {
+                        scope.launch { pagerState.animateScrollToPage(TASTE_PICKER_PAGE) }
+                    },
+                    onSkip = {
+                        scope.launch { pagerState.animateScrollToPage(TASTE_PICKER_PAGE) }
                     }
                 )
                 TASTE_PICKER_PAGE -> OnboardingTastePickerPage(

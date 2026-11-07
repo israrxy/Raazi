@@ -47,6 +47,7 @@ fun SearchScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
     var showSongFinder by remember { mutableStateOf(false) }
+    var showVoiceSearch by remember { mutableStateOf(false) }
 
     val searchResults by searchViewModel.searchResults.collectAsState()
     val isSearching by searchViewModel.isSearching.collectAsState()
@@ -234,6 +235,10 @@ fun SearchScreen(
             onOpenSongFinder = {
                 dismissKeyboard()
                 showSongFinder = true
+            },
+            onVoiceSearch = {
+                dismissKeyboard()
+                showVoiceSearch = true
             }
         )
 
@@ -443,35 +448,36 @@ fun SearchScreen(
                     onHistorySongClick = { history ->
                         dismissKeyboard()
                         searchViewModel.resolvePlayableHistoryItem(history, handleOpenOrPlayItem)
-                    },
-                    onOpenSongFinder = {
-                        dismissKeyboard()
-                        showSongFinder = true
                     }
                 )
             }
         }
     }
 
-    if (showSongFinder) {
-        com.israrxy.raazi.ui.ai.SongFinderSheet(
-            onDismiss = { showSongFinder = false },
-            onSearch = { query ->
-                searchQuery = query
-                searchViewModel.performSearch(query)
-                dismissKeyboard()
-                showSongFinder = false
-            },
-            onOpenSettings = {
-                showSongFinder = false
-                onOpenSettings()
-            },
-            onOpenGuide = {
-                showSongFinder = false
-                onOpenGuide()
-            }
-        )
-    }
+    SearchOverlays(
+        showSongFinder = showSongFinder,
+        showVoiceSearch = showVoiceSearch,
+        onDismissSongFinder = { showSongFinder = false },
+        onSongSearch = { query ->
+            searchQuery = query
+            searchViewModel.performSearch(query)
+            dismissKeyboard()
+        },
+        onOpenSettings = {
+            showSongFinder = false
+            onOpenSettings()
+        },
+        onOpenGuide = {
+            showSongFinder = false
+            onOpenGuide()
+        },
+        onDismissVoiceSearch = { showVoiceSearch = false },
+        onVoiceResult = { query ->
+            searchQuery = query
+            searchViewModel.performSearch(query)
+            dismissKeyboard()
+        }
+    )
 
     val targetForPlaylist = showAddToPlaylistItem?.let { listOf(it) } ?: tracksToAddToPlaylist
     if (targetForPlaylist != null) {
