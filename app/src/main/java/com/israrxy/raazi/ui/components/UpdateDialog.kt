@@ -41,6 +41,11 @@ import java.io.File
 
 private const val WEBSITE_URL = "https://raazi.pages.dev"
 
+private fun isDirectApkUrl(url: String): Boolean {
+    val path = runCatching { Uri.parse(url).path }.getOrNull().orEmpty()
+    return path.endsWith(".apk", ignoreCase = true)
+}
+
 private enum class UpdatePhase {
     READY,
     DOWNLOADING,
@@ -106,7 +111,20 @@ fun UpdateDialog(
         }
     }
 
+    fun openInBrowser(url: String) {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+    }
+
     fun downloadOrInstall() {
+        if (!isDirectApkUrl(config.downloadUrl)) {
+            // A website link (the normal release config) keeps the classic
+            // behavior: open it in the browser instead of downloading it.
+            openInBrowser(config.downloadUrl)
+            return
+        }
+
         val cached = downloadedApk
         if (cached != null && cached.isFile) {
             // A completed download is reused: never fetch the same APK twice.
@@ -140,9 +158,7 @@ fun UpdateDialog(
     }
 
     fun visitWebsite() {
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEBSITE_URL)))
-        }
+        openInBrowser(WEBSITE_URL)
         if (!config.forceUpdate) onDismiss()
     }
 
@@ -186,8 +202,13 @@ fun UpdateDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Version ${config.latestVersionName} is available. " +
-                            "Download it inside the app and install it directly.",
+                        text = if (isDirectApkUrl(config.downloadUrl)) {
+                            "Version ${config.latestVersionName} is available. " +
+                                "Download it inside the app and install it directly."
+                        } else {
+                            "Version ${config.latestVersionName} is available. " +
+                                "Open the download page to get the update."
+                        },
                         fontWeight = FontWeight.Medium
                     )
                     if (config.releaseNotes.isNotBlank()) {
