@@ -20,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ private const val WEBSITE_URL = "https://raazi.pages.dev"
 private enum class UpdatePhase {
     READY,
     DOWNLOADING,
+    READY_TO_INSTALL,
     INSTALLING,
     INSTALLER_OPENED,
     FAILED
@@ -79,10 +81,42 @@ fun UpdateDialog(
         }
     }
 
-    fun beginDownload() {
+    fun openInstaller(apk: File) {
+        if (ApkInstaller.canInstall(context)) {
+            ApkInstaller.install(context, apk)
+                .onSuccess { phase = UpdatePhase.INSTALLER_OPENED }
+                .onFailure {
+                    phase = UpdatePhase.FAILED
+                    errorMessage = it.message ?: "Could not open the installer"
+                }
+        } else {
+            phase = UpdatePhase.INSTALLING
+            permissionLauncher.launch(ApkInstaller.unknownSourcesSettingsIntent(context))
+        }
+    }
+
+    // A finished download survives dialog dismissal and app restarts. If it is
+    // still valid, skip downloading entirely and offer the install prompt.
+    LaunchedEffect(config.latestVersionCode, config.downloadUrl) {
+        if (phase == UpdatePhase.READY) {
+            updateManager.findDownloadedApk(context, config)?.let { cached ->
+                downloadedApk = cached
+                phase = UpdatePhase.READY_TO_INSTALL
+            }
+        }
+    }
+
+    fun downloadOrInstall() {
+        val cached = downloadedApk
+        if (cached != null && cached.isFile) {
+            // A completed download is reused: never fetch the same APK twice.
+            openInstaller(cached)
+            return
+        }
+
+        downloadedApk = null
         phase = UpdatePhase.DOWNLOADING
         progress = 0
-        downloadedApk = null
         errorMessage = null
         scope.launch {
             val result = updateManager.downloadApk(context, config) { percent ->
@@ -90,22 +124,19 @@ fun UpdateDialog(
             }
             result.onSuccess { apk ->
                 downloadedApk = apk
-                phase = UpdatePhase.INSTALLING
-                if (ApkInstaller.canInstall(context)) {
-                    ApkInstaller.install(context, apk)
-                        .onSuccess { phase = UpdatePhase.INSTALLER_OPENED }
-                        .onFailure {
-                            phase = UpdatePhase.FAILED
-                            errorMessage = it.message ?: "Could not open the installer"
-                        }
-                } else {
-                    permissionLauncher.launch(ApkInstaller.unknownSourcesSettingsIntent(context))
-                }
+                phase = UpdatePhase.READY_TO_INSTALL
+                openInstaller(apk)
             }.onFailure {
                 phase = UpdatePhase.FAILED
                 errorMessage = it.message ?: "Download failed"
             }
         }
+    }
+
+    fun retry() {
+        // Reuse the downloaded APK when it is still on disk; only fall back to
+        // downloading when the cache was cleared or the download never finished.
+        downloadOrInstall()
     }
 
     fun visitWebsite() {
@@ -139,6 +170,7 @@ fun UpdateDialog(
                 text = when (phase) {
                     UpdatePhase.READY -> "Update available"
                     UpdatePhase.DOWNLOADING -> "Downloading update"
+                    UpdatePhase.READY_TO_INSTALL -> "Ready to install"
                     UpdatePhase.INSTALLING -> "Opening installer"
                     UpdatePhase.INSTALLER_OPENED -> "Finish installing"
                     UpdatePhase.FAILED -> "Update failed"
@@ -183,6 +215,19 @@ fun UpdateDialog(
                     )
                 }
 
+                UpdatePhase.READY_TO_INSTALL -> Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "The update is already downloaded.",
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Open the system installer to finish. " +
+                            "There is no need to download it again."
+                    )
+                }
+
                 UpdatePhase.INSTALLING -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -200,7 +245,7 @@ fun UpdateDialog(
                     )
                     Text(
                         text = "If the installer didn't open or the installation failed, " +
-                            "try again or open the website to get the update manually."
+                            "open it again or use the website to get the update manually."
                     )
                 }
 
@@ -212,14 +257,19 @@ fun UpdateDialog(
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "Try downloading again, or open the website to get the update manually."
+                        text = if (downloadedApk?.isFile == true) {
+                            "The update is still downloaded, so you can retry the " +
+                                "installer without downloading it again."
+                        } else {
+                            "Try again, or open the website to get the update manually."
+                        }
                     )
                 }
             }
         },
         confirmButton = {
             when (phase) {
-                UpdatePhase.READY -> Button(onClick = { beginDownload() }) {
+                UpdatePhase.READY -> Button(onClick = { downloadOrInstall() }) {
                     Text("Update now")
                 }
                 UpdatePhase.DOWNLOADING -> {
@@ -227,24 +277,23 @@ fun UpdateDialog(
                         TextButton(onClick = onDismiss) { Text("Cancel") }
                     }
                 }
+                UpdatePhase.READY_TO_INSTALL -> Button(
+                    onClick = {
+                        downloadedApk?.let { openInstaller(it) } ?: downloadOrInstall()
+                    }
+                ) {
+                    Text("Install now")
+                }
                 UpdatePhase.INSTALLING -> Unit
                 UpdatePhase.INSTALLER_OPENED -> Button(
                     onClick = {
-                        val apk = downloadedApk
-                        if (apk != null) {
-                            ApkInstaller.install(context, apk).onFailure {
-                                phase = UpdatePhase.FAILED
-                                errorMessage = it.message ?: "Could not open the installer"
-                            }
-                        } else {
-                            beginDownload()
-                        }
+                        downloadedApk?.let { openInstaller(it) } ?: downloadOrInstall()
                     }
                 ) {
                     Text("Open installer again")
                 }
-                UpdatePhase.FAILED -> Button(onClick = { beginDownload() }) {
-                    Text("Download again")
+                UpdatePhase.FAILED -> Button(onClick = { retry() }) {
+                    Text("Try again")
                 }
             }
         },
@@ -256,15 +305,9 @@ fun UpdateDialog(
                     }
                 }
                 UpdatePhase.DOWNLOADING -> Unit
-                UpdatePhase.INSTALLING -> Unit
-                UpdatePhase.INSTALLER_OPENED -> Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    TextButton(onClick = { visitWebsite() }) { Text("Visit website") }
-                    if (!config.forceUpdate) {
-                        TextButton(onClick = onDismiss) { Text("Done") }
-                    }
-                }
+                UpdatePhase.READY_TO_INSTALL,
+                UpdatePhase.INSTALLING,
+                UpdatePhase.INSTALLER_OPENED,
                 UpdatePhase.FAILED -> Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
