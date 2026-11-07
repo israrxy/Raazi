@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +37,9 @@ fun SearchScreen(
     playerViewModel: MusicPlayerViewModel,
     onNavigateToPlayer: () -> Unit,
     onNavigateToArtist: (String, String) -> Unit,
-    onNavigateToPlaylist: (String) -> Unit
+    onNavigateToPlaylist: (String) -> Unit,
+    onNavigateToPhotoSearch: () -> Unit = {},
+    initialQuery: String? = null
 ) {
     val context = LocalContext.current
     val searchViewModel: SearchViewModel = viewModel()
@@ -56,6 +59,17 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val dismissKeyboard: () -> Unit = { keyboardController?.hide(); focusManager.clearFocus() }
+
+    var appliedInitialQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(initialQuery) {
+        val trimmed = initialQuery?.trim().orEmpty()
+        if (trimmed.isNotEmpty() && appliedInitialQuery != trimmed) {
+            appliedInitialQuery = trimmed
+            searchQuery = trimmed
+            searchViewModel.performSearch(trimmed)
+            dismissKeyboard()
+        }
+    }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedTracks by remember { mutableStateOf(setOf<MusicItem>()) }
@@ -162,91 +176,45 @@ fun SearchScreen(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
     ) {
-        AnimatedVisibility(
+        SearchSelectionBar(
             visible = isSelectionMode,
-            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                tonalElevation = 6.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val allPlayableSelected = currentPlayableItems.isNotEmpty() && currentPlayableItems.all { selectedTracks.contains(it) }
-                    Checkbox(
-                        checked = allPlayableSelected,
-                        onCheckedChange = { checkAll ->
-                            selectedTracks = if (checkAll) {
-                                selectedTracks + currentPlayableItems
-                            } else {
-                                selectedTracks - currentPlayableItems.toSet()
-                            }
-                        },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            uncheckedColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "${selectedTracks.size} selected",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = {
-                        if (selectedTracks.isNotEmpty()) {
-                            dismissKeyboard()
-                            playerViewModel.playPlaylist(selectedTracks.toList(), 0)
-                            isSelectionMode = false
-                            selectedTracks = emptySet()
-                            onNavigateToPlayer()
-                        }
-                    }) {
-                        Icon(Icons.Default.PlayArrow, "Play Selected", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                    IconButton(onClick = {
-                        if (selectedTracks.isNotEmpty()) {
-                            val count = selectedTracks.size
-                            playerViewModel.addToQueue(selectedTracks.toList())
-                            Toast.makeText(context, "Added $count songs to queue", Toast.LENGTH_SHORT).show()
-                            isSelectionMode = false
-                            selectedTracks = emptySet()
-                        }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.QueueMusic, "Add to Queue", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                    IconButton(onClick = {
-                        if (selectedTracks.isNotEmpty()) {
-                            tracksToAddToPlaylist = selectedTracks.toList()
-                        }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                    IconButton(onClick = {
-                        selectedTracks.forEach { playerViewModel.downloadTrack(it) }
-                        Toast.makeText(context, "Downloading ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
-                        isSelectionMode = false
-                        selectedTracks = emptySet()
-                    }) {
-                        Icon(Icons.Default.Download, "Download", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                    IconButton(onClick = {
-                        isSelectionMode = false
-                        selectedTracks = emptySet()
-                    }) {
-                        Icon(Icons.Default.Close, "Cancel", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
+            selectedTracks = selectedTracks,
+            currentPlayableItems = currentPlayableItems,
+            onSelectionChange = { selectedTracks = it },
+            onPlaySelected = {
+                if (selectedTracks.isNotEmpty()) {
+                    dismissKeyboard()
+                    playerViewModel.playPlaylist(selectedTracks.toList(), 0)
+                    isSelectionMode = false
+                    selectedTracks = emptySet()
+                    onNavigateToPlayer()
                 }
+            },
+            onAddToQueue = {
+                if (selectedTracks.isNotEmpty()) {
+                    val count = selectedTracks.size
+                    playerViewModel.addToQueue(selectedTracks.toList())
+                    Toast.makeText(context, "Added $count songs to queue", Toast.LENGTH_SHORT).show()
+                    isSelectionMode = false
+                    selectedTracks = emptySet()
+                }
+            },
+            onAddToPlaylist = {
+                if (selectedTracks.isNotEmpty()) {
+                    tracksToAddToPlaylist = selectedTracks.toList()
+                }
+            },
+            onDownload = {
+                selectedTracks.forEach { playerViewModel.downloadTrack(it) }
+                Toast.makeText(context, "Downloading ${selectedTracks.size} tracks", Toast.LENGTH_SHORT).show()
+                isSelectionMode = false
+                selectedTracks = emptySet()
+            },
+            onCancel = {
+                isSelectionMode = false
+                selectedTracks = emptySet()
             }
-        }
+        )
 
         SearchHeader(
             query = searchQuery,
@@ -260,7 +228,8 @@ fun SearchScreen(
                     searchViewModel.performSearch(normalizedSearchQuery)
                     dismissKeyboard()
                 }
-            }
+            },
+            onOpenPhotoSearch = onNavigateToPhotoSearch
         )
 
         Box(modifier = Modifier.weight(1f)) {
@@ -469,7 +438,8 @@ fun SearchScreen(
                     onHistorySongClick = { history ->
                         dismissKeyboard()
                         searchViewModel.resolvePlayableHistoryItem(history, handleOpenOrPlayItem)
-                    }
+                    },
+                    onOpenPhotoSearch = onNavigateToPhotoSearch
                 )
             }
         }

@@ -90,7 +90,8 @@ internal fun SearchHeader(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
-    onSearch: () -> Unit
+    onSearch: () -> Unit,
+    onOpenPhotoSearch: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -98,12 +99,29 @@ internal fun SearchHeader(
             .padding(horizontal = 16.dp)
             .padding(top = 14.dp, bottom = 8.dp)
     ) {
-        Text(
-            text = "Search",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Search",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            if (onOpenPhotoSearch != null) {
+                IconButton(
+                    onClick = onOpenPhotoSearch,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoCamera,
+                        contentDescription = "Find song from photo",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         TextField(
             value = query,

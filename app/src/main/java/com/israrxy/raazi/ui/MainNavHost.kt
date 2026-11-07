@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.israrxy.raazi.ui.downloads.DownloadsScreen
 import com.israrxy.raazi.ui.home.HomeScreen
 import com.israrxy.raazi.ui.library.LibraryScreen
@@ -99,15 +101,28 @@ internal fun MainNavHost(
                 lazyListState = homeLazyListState
             )
         }
-        composable("search") {
+        composable(
+            route = "search?query={query}",
+            arguments = listOf(
+                navArgument("query") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
             SearchScreen(
                 playerViewModel = viewModel,
+                initialQuery = backStackEntry.arguments?.getString("query"),
                 onNavigateToPlayer = openPlayerSheet,
                 onNavigateToArtist = { artistId, artistName ->
                     navController.navigate("artist/$artistId?name=${Uri.encode(artistName)}")
                 },
                 onNavigateToPlaylist = { id ->
                     navController.navigateToPlaylist(id)
+                },
+                onNavigateToPhotoSearch = {
+                    navController.navigate("ai_song_search")
                 }
             )
         }
@@ -132,10 +147,40 @@ internal fun MainNavHost(
                 onNavigateToPlaylistMaker = { navController.navigate("playlist_maker") }
             )
         }
-        composable("settings") {
+        composable(
+            route = "settings?category={category}",
+            arguments = listOf(
+                navArgument("category") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
             SettingsScreen(
                 viewModel = viewModel,
-                onNavigateToYouTubeLogin = { navController.navigate("youtube_login") }
+                onNavigateToYouTubeLogin = { navController.navigate("youtube_login") },
+                onNavigateToGeminiGuide = { navController.navigate("gemini_guide") },
+                initialCategory = backStackEntry.arguments?.getString("category")
+            )
+        }
+        composable("ai_song_search") {
+            com.israrxy.raazi.ui.ai.AiSongSearchScreen(
+                onClose = { navController.popBackStack() },
+                onSearch = { query ->
+                    navController.navigate("search?query=${Uri.encode(query)}") {
+                        launchSingleTop = true
+                    }
+                },
+                onOpenSettings = {
+                    navController.navigate("settings?category=AI_GEMINI")
+                },
+                onOpenGuide = { navController.navigate("gemini_guide") }
+            )
+        }
+        composable("gemini_guide") {
+            com.israrxy.raazi.ui.ai.GeminiKeyGuideScreen(
+                onClose = { navController.popBackStack() }
             )
         }
         composable("youtube_login") {

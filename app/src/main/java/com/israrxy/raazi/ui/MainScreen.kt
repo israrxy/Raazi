@@ -145,8 +145,11 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val onSettingsScreen = currentDestination?.route == "settings" || currentDestination?.route?.startsWith("settings") == true
     val onPlaylistScreen = currentDestination?.route?.startsWith("playlist/") == true
     val onPlaylistMakerScreen = currentDestination?.route == "playlist_maker"
+    val onAiScreen = currentDestination?.route == "ai_song_search" ||
+        currentDestination?.route == "gemini_guide"
     val showBottomBar = (currentDestination.isTopLevelDestination() || onPlaylistScreen) && !onRingtoneScreen
-    val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen || onPlaylistMakerScreen
+    val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen ||
+        onPlaylistMakerScreen || onAiScreen
     val showMiniPlayerBar = currentTrack != null && (!isFloatingCollapsed || !microPlayerEnabled) && !isMiniPlayerSuppressed
     val showFloatingBubble = currentTrack != null && isFloatingCollapsed && microPlayerEnabled && !isMiniPlayerSuppressed
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import com.israrxy.raazi.BuildConfig
 import com.israrxy.raazi.data.local.SettingsDataStore
 import com.israrxy.raazi.viewmodel.MusicPlayerViewModel
@@ -51,6 +52,7 @@ internal fun SettingsCategoryDetailList(
     isSyncingYouTubeLibrary: Boolean,
     youTubeSyncStatus: String?,
     onNavigateToYouTubeLogin: () -> Unit,
+    onNavigateToGeminiGuide: () -> Unit,
     lastFmSessionKey: String?,
     lastFmUsername: String?,
     isScrobblingEnabled: Boolean,
@@ -237,6 +239,17 @@ internal fun SettingsCategoryDetailList(
                     settingsDataStore = settingsDataStore,
                     scope = scope
                 )
+            }
+
+            SettingsCategory.AI_GEMINI -> {
+                item {
+                    val aiViewModel: com.israrxy.raazi.viewmodel.AiSettingsViewModel =
+                        composeViewModel()
+                    com.israrxy.raazi.ui.settings.SettingsAiSection(
+                        viewModel = aiViewModel,
+                        onOpenGuide = onNavigateToGeminiGuide
+                    )
+                }
             }
 
             SettingsCategory.LYRICS_AI -> {

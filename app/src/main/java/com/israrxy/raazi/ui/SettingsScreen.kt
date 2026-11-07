@@ -59,6 +59,11 @@ internal enum class SettingsCategory(
         subtitle = "Streaming quality & crossfade",
         icon = Icons.AutoMirrored.Filled.VolumeUp
     ),
+    AI_GEMINI(
+        title = "AI & Gemini",
+        subtitle = "Photo song finder · own free key",
+        icon = Icons.Filled.AutoAwesome
+    ),
     LYRICS_AI(
         title = "Lyrics & Translation",
         subtitle = "Google Neural translation & Hinglish",
@@ -89,7 +94,9 @@ internal enum class SettingsCategory(
 @Composable
 fun SettingsScreen(
     viewModel: MusicPlayerViewModel,
-    onNavigateToYouTubeLogin: () -> Unit = {}
+    onNavigateToYouTubeLogin: () -> Unit = {},
+    onNavigateToGeminiGuide: () -> Unit = {},
+    initialCategory: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,7 +145,11 @@ fun SettingsScreen(
     val isSyncingYouTubeLibrary by viewModel.isSyncingYouTubeLibrary.collectAsStateWithLifecycle()
     val youTubeSyncStatus by viewModel.youTubeSyncStatus.collectAsStateWithLifecycle()
 
-    var selectedCategory by rememberSaveable { mutableStateOf<SettingsCategory?>(null) }
+    var selectedCategory by rememberSaveable {
+        mutableStateOf(
+            SettingsCategory.entries.firstOrNull { it.name == initialCategory }
+        )
+    }
 
     // Dialog States
     var showAudioQualityDialog by remember { mutableStateOf(false) }
@@ -249,6 +260,7 @@ fun SettingsScreen(
                                             ?: "Not signed in"
                                         SettingsCategory.APPEARANCE -> appTheme
                                         SettingsCategory.PLAYBACK -> audioQuality
+                                        SettingsCategory.AI_GEMINI -> "Free key"
                                         SettingsCategory.LYRICS_AI -> if (translateLyrics) targetLanguage.uppercase() else "Off"
                                         SettingsCategory.DOWNLOADS -> downloadQuality
                                         SettingsCategory.SECURITY -> if (biometricLock) "On" else "Off"
@@ -329,6 +341,7 @@ fun SettingsScreen(
                         isSyncingYouTubeLibrary = isSyncingYouTubeLibrary,
                         youTubeSyncStatus = youTubeSyncStatus,
                         onNavigateToYouTubeLogin = onNavigateToYouTubeLogin,
+                        onNavigateToGeminiGuide = onNavigateToGeminiGuide,
                         lastFmSessionKey = lastFmSessionKey,
                         lastFmUsername = lastFmUsername,
                         isScrobblingEnabled = isScrobblingEnabled,

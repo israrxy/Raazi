@@ -273,7 +273,10 @@ internal fun SimpleBottomNavBar(
 }
 
 internal fun NavDestination?.matchesRoute(route: String): Boolean {
-    return this?.hierarchy?.any { it.route == route } == true
+    return this?.hierarchy?.any { destination ->
+        val destinationRoute = destination.route ?: return@any false
+        destinationRoute == route || destinationRoute.substringBefore("?") == route
+    } == true
 }
 
 internal fun NavDestination?.isTopLevelDestination(): Boolean {
