@@ -376,7 +376,7 @@ fun SettingsScreen(
                             if (!isCheckingForUpdate) {
                                 isCheckingForUpdate = true
                                 scope.launch {
-                                    val config = updateManager.checkUpdate()
+                                    val config = updateManager.checkUpdate(context, force = true)
                                     isCheckingForUpdate = false
                                     when {
                                         config == null -> Toast.makeText(

@@ -1,7 +1,9 @@
 package com.israrxy.raazi.ui.components
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,6 +69,7 @@ fun UpdateDialog(
 
     var phase by remember(config.latestVersionCode) { mutableStateOf(UpdatePhase.READY) }
     var progress by remember(config.latestVersionCode) { mutableIntStateOf(0) }
+    var totalBytes by remember(config.latestVersionCode) { mutableLongStateOf(0L) }
     var downloadedApk by remember { mutableStateOf<File?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -135,10 +139,12 @@ fun UpdateDialog(
         downloadedApk = null
         phase = UpdatePhase.DOWNLOADING
         progress = 0
+        totalBytes = 0L
         errorMessage = null
         scope.launch {
-            val result = updateManager.downloadApk(context, config) { percent ->
+            val result = updateManager.downloadApk(context, config) { percent, bytes ->
                 progress = percent
+                totalBytes = bytes
             }
             result.onSuccess { apk ->
                 downloadedApk = apk
@@ -160,6 +166,10 @@ fun UpdateDialog(
     fun visitWebsite() {
         openInBrowser(WEBSITE_URL)
         if (!config.forceUpdate) onDismiss()
+    }
+
+    fun exitApp() {
+        (context as? Activity)?.finishAffinity()
     }
 
     val properties = if (config.forceUpdate) {
@@ -229,7 +239,14 @@ fun UpdateDialog(
                         progress = { progress / 100f },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text(text = "Downloading… $progress%")
+                    Text(
+                        text = if (totalBytes > 0L) {
+                            "Downloading… $progress% of " +
+                                Formatter.formatShortFileSize(context, totalBytes)
+                        } else {
+                            "Downloading… $progress%"
+                        }
+                    )
                     Text(
                         text = "Keep the app open until the download finishes.",
                         fontWeight = FontWeight.Normal
@@ -320,8 +337,13 @@ fun UpdateDialog(
         },
         dismissButton = {
             when (phase) {
-                UpdatePhase.READY -> {
-                    if (!config.forceUpdate) {
+                UpdatePhase.READY -> Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(onClick = { visitWebsite() }) { Text("Visit website") }
+                    if (config.forceUpdate) {
+                        TextButton(onClick = { exitApp() }) { Text("Exit") }
+                    } else {
                         TextButton(onClick = onDismiss) { Text("Later") }
                     }
                 }
@@ -333,7 +355,9 @@ fun UpdateDialog(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     TextButton(onClick = { visitWebsite() }) { Text("Visit website") }
-                    if (!config.forceUpdate) {
+                    if (config.forceUpdate) {
+                        TextButton(onClick = { exitApp() }) { Text("Exit") }
+                    } else {
                         TextButton(onClick = onDismiss) { Text("Later") }
                     }
                 }

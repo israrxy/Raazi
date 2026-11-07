@@ -81,7 +81,8 @@ class MainActivity : FragmentActivity() {
             var showUpdateDialog by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
-                val config = updateManager.checkUpdate()
+                updateManager.cleanupInstalledUpdate(context)
+                val config = updateManager.checkUpdate(context)
                 if (config != null && config.latestVersionCode > BuildConfig.VERSION_CODE) {
                     updateConfig = config
                     showUpdateDialog = true

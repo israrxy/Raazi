@@ -30,7 +30,7 @@ object ApkInstaller {
         return Intent(
             Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
             Uri.parse("package:${context.packageName}")
-        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 
     fun install(context: Context, apkFile: File): Result<Unit> {
