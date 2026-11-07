@@ -79,7 +79,7 @@ internal fun AiNoKeyState(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Photo song search uses your own free Gemini API key. " +
+            text = "Photo and audio song search use your own free Gemini API key. " +
                 "It takes a minute to create and costs nothing.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -169,7 +169,7 @@ internal fun AiPhotoPreview(uri: Uri) {
 }
 
 @Composable
-internal fun AiIdentifyingCard() {
+internal fun AiIdentifyingCard(isListening: Boolean = false) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -187,12 +187,16 @@ internal fun AiIdentifyingCard() {
             Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(
-                    text = "Reading your photo…",
+                    text = if (isListening) "Checking the clip…" else "Reading your photo…",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Gemini is looking for the song. This usually takes a few seconds.",
+                    text = if (isListening) {
+                        "Gemini is listening for a match. This usually takes a few seconds."
+                    } else {
+                        "Gemini is looking for the song. This usually takes a few seconds."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

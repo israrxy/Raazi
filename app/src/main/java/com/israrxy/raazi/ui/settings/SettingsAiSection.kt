@@ -78,7 +78,7 @@ internal fun SettingsAiSection(
         SettingsDivider()
         SettingsSelectItem(
             icon = Icons.Filled.Memory,
-            title = "Vision model",
+            title = "Vision & audio model",
             value = state.model,
             onClick = { showModelDialog = true }
         )
@@ -114,8 +114,8 @@ internal fun SettingsAiSection(
         Text(
             text = "Your key is encrypted with Android Keystore and stays on this device. " +
                 "It is never synced to Raazi Drive or stored in the app's normal settings. " +
-                "A photo is sent directly to Google Gemini only when you tap Identify. " +
-                "Google's free tier limits apply.",
+                "A photo or audio clip is sent directly to Google Gemini only when you start " +
+                "a search. Google's free tier limits apply.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp)

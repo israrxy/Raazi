@@ -51,34 +51,64 @@ class GeminiClient {
         jpegBytes: ByteArray
     ): SongIdentification = withContext(Dispatchers.IO) {
         val encodedImage = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
-        val body = buildJsonObject {
-            putJsonArray("contents") {
-                addJsonObject {
-                    put("role", "user")
-                    putJsonArray("parts") {
-                        addJsonObject { put("text", IDENTIFY_PROMPT) }
-                        addJsonObject {
-                            putJsonObject("inline_data") {
-                                put("mime_type", "image/jpeg")
-                                put("data", encodedImage)
-                            }
+        val body = buildIdentifyBody(
+            prompt = PHOTO_IDENTIFY_PROMPT,
+            mimeType = "image/jpeg",
+            base64Data = encodedImage
+        )
+        parseIdentification(executeGenerate(apiKey, model, body))
+    }
+
+    /**
+     * Sends a short recorded clip. Gemini can use vocals/lyrics and melody, but
+     * it is not a fingerprinting service, so the prompt asks it to stay honest
+     * about low confidence.
+     */
+    suspend fun identifyAudio(
+        apiKey: String,
+        model: String,
+        wavBytes: ByteArray
+    ): SongIdentification = withContext(Dispatchers.IO) {
+        val encodedAudio = Base64.encodeToString(wavBytes, Base64.NO_WRAP)
+        val body = buildIdentifyBody(
+            prompt = AUDIO_IDENTIFY_PROMPT,
+            mimeType = "audio/wav",
+            base64Data = encodedAudio
+        )
+        parseIdentification(executeGenerate(apiKey, model, body))
+    }
+
+    private fun buildIdentifyBody(
+        prompt: String,
+        mimeType: String,
+        base64Data: String
+    ): String = buildJsonObject {
+        putJsonArray("contents") {
+            addJsonObject {
+                put("role", "user")
+                putJsonArray("parts") {
+                    addJsonObject { put("text", prompt) }
+                    addJsonObject {
+                        putJsonObject("inline_data") {
+                            put("mime_type", mimeType)
+                            put("data", base64Data)
                         }
                     }
                 }
             }
-            putJsonObject("generationConfig") {
-                put("temperature", 0.2)
-                put("maxOutputTokens", 1200)
-                put("responseMimeType", "application/json")
-            }
         }
+        putJsonObject("generationConfig") {
+            put("maxOutputTokens", 1200)
+            put("responseMimeType", "application/json")
+        }
+    }.toString()
 
-        val responseText = executeGenerate(apiKey, model, body.toString())
+    private fun parseIdentification(responseText: String): SongIdentification {
         val answer = extractText(responseText)
-        SongIdentificationParser.parse(answer)
+        return SongIdentificationParser.parse(answer)
             ?: throw GeminiException(
                 0,
-                "Gemini returned an unexpected answer. Try another photo."
+                "Gemini returned an unexpected answer. Try again."
             )
     }
 
@@ -94,7 +124,6 @@ class GeminiClient {
                 }
             }
             putJsonObject("generationConfig") {
-                put("temperature", 0.0)
                 put("maxOutputTokens", 16)
             }
         }
@@ -195,7 +224,7 @@ class GeminiClient {
             code == 400 && apiMessage?.contains("API key", ignoreCase = true) == true ->
                 INVALID_KEY_MESSAGE
             code == 400 ->
-                "Gemini could not read that image. Try a brighter, sharper photo."
+                "Gemini could not read that photo or clip. Try a different one."
             code == 401 || code == 403 ->
                 INVALID_KEY_MESSAGE
             code == 404 ->
@@ -244,7 +273,7 @@ class GeminiClient {
                 ?: available.first()
         }
 
-        private val IDENTIFY_PROMPT = """
+        private val PHOTO_IDENTIFY_PROMPT = """
             You identify music from an image. The image may be an album cover, a
             single cover, a screenshot of a song, or a photo of printed lyrics.
 
@@ -272,6 +301,41 @@ class GeminiClient {
             - search_query must be tuned for YouTube (for example "Ed Sheeran Perfect").
             - confidence must reflect your real certainty.
             - detected_text should contain lyrics only when they are visible.
+            - Keep alternatives to at most 3 likely matches.
+        """.trimIndent()
+
+        private val AUDIO_IDENTIFY_PROMPT = """
+            You identify music from a short audio clip. The clip may contain a
+            song playing in the background, someone humming or singing, or an
+            instrumental passage.
+
+            Listen for lyrics, vocal words, melody, harmony, instruments, and
+            production style.
+            - If vocals or lyrics are audible, use them to identify the song.
+            - If it is hummed or instrumental, match only a melody you recognise
+              with real confidence.
+            - Prefer the original artist and studio track. Mention a cover, live
+              version, or remix only when it is clearly audible.
+
+            Return ONLY a JSON object with exactly this shape:
+            {
+              "identified": true or false,
+              "title": "song title or null",
+              "artist": "artist name or null",
+              "album": "album name or null",
+              "year": "release year or null",
+              "confidence": 0.0 to 1.0,
+              "search_query": "best YouTube search query or null",
+              "detected_text": "lyrics or vocal words you can hear, max 300 chars, or null",
+              "alternatives": [{"title": "other match", "artist": "artist"}],
+              "message": "short explanation when not identified, else null"
+            }
+
+            Rules:
+            - Never invent a song. If you cannot identify it, set identified to false.
+            - Audio matching is much harder than reading text. Keep confidence honest.
+            - search_query must be tuned for YouTube.
+            - detected_text should contain lyrics only when they are audible.
             - Keep alternatives to at most 3 likely matches.
         """.trimIndent()
     }

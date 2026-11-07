@@ -1,5 +1,7 @@
 package com.israrxy.raazi.ui.ai
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,13 +30,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.israrxy.raazi.data.ai.SongCandidate
+import com.israrxy.raazi.viewmodel.AiInputMode
+import com.israrxy.raazi.viewmodel.AiSongSearchUiState
 import com.israrxy.raazi.viewmodel.AiSongSearchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,11 +55,14 @@ fun AiSongSearchScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshKeyState()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.refreshKeyState()
+                Lifecycle.Event.ON_STOP -> viewModel.cancelRecording()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -65,10 +75,32 @@ fun AiSongSearchScreen(
         if (uri != null) viewModel.onImagePicked(uri)
     }
 
+    val micPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.startListening()
+        } else {
+            viewModel.onMicPermissionDenied()
+        }
+    }
+
     val pickPhoto: () -> Unit = {
         photoPicker.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
         )
+    }
+
+    val requestListen: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            viewModel.startListening()
+        } else {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     Scaffold(
@@ -77,7 +109,7 @@ fun AiSongSearchScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Find song from photo",
+                        text = "Find a song",
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -108,59 +140,155 @@ fun AiSongSearchScreen(
                 .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            when {
-                !state.keyConfigured -> {
-                    AiNoKeyState(
-                        onOpenSettings = onOpenSettings,
-                        onOpenGuide = onOpenGuide
+            if (!state.keyConfigured) {
+                AiNoKeyState(
+                    onOpenSettings = onOpenSettings,
+                    onOpenGuide = onOpenGuide
+                )
+            } else {
+                AiInputModeSwitch(
+                    selected = state.mode,
+                    onSelect = viewModel::setMode
+                )
+                when (state.mode) {
+                    AiInputMode.PHOTO -> PhotoSearchBody(
+                        state = state,
+                        onPickPhoto = pickPhoto,
+                        onSearch = onSearch,
+                        onRetry = viewModel::retry,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        onAlternative = viewModel::useAlternative,
+                        onUseLyrics = viewModel::useDetectedLyrics
                     )
-                }
 
-                state.imageUri == null -> {
-                    AiPhotoPickerState(onPick = pickPhoto)
-                }
-
-                else -> {
-                    AiPhotoPreview(uri = state.imageUri!!)
-
-                    when {
-                        state.isIdentifying -> AiIdentifyingCard()
-
-                        state.error != null -> {
-                            AiErrorCard(
-                                message = state.error ?: "Could not identify that photo.",
-                                onRetry = viewModel::retry
-                            )
-                        }
-
-                        state.identification != null -> {
-                            AiResultCard(
-                                identification = state.identification!!,
-                                query = state.searchQuery,
-                                onQueryChange = viewModel::updateSearchQuery,
-                                onSearch = {
-                                    val query = state.searchQuery.trim()
-                                    if (query.isNotBlank()) onSearch(query)
-                                },
-                                onAlternative = viewModel::useAlternative,
-                                onUseLyrics = viewModel::useDetectedLyrics
-                            )
-                        }
-                    }
-
-                    AiChangePhotoButton(onPick = pickPhoto)
-
-                    Text(
-                        text = "Photos are sent directly to Google Gemini using your key. " +
-                            "Raazi does not store or upload them anywhere else.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp)
+                    AiInputMode.LISTEN -> ListenSearchBody(
+                        state = state,
+                        onStart = requestListen,
+                        onStop = viewModel::stopListening,
+                        onSearch = onSearch,
+                        onRetry = viewModel::retry,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        onAlternative = viewModel::useAlternative,
+                        onUseLyrics = viewModel::useDetectedLyrics
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun PhotoSearchBody(
+    state: AiSongSearchUiState,
+    onPickPhoto: () -> Unit,
+    onSearch: (String) -> Unit,
+    onRetry: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAlternative: (SongCandidate) -> Unit,
+    onUseLyrics: () -> Unit
+) {
+    val imageUri = state.imageUri
+    if (imageUri == null) {
+        AiPhotoPickerState(onPick = onPickPhoto)
+        return
+    }
+
+    AiPhotoPreview(uri = imageUri)
+
+    val identification = state.identification
+    when {
+        state.isIdentifying -> AiIdentifyingCard()
+
+        state.error != null -> {
+            AiErrorCard(
+                message = state.error ?: "Could not identify that photo.",
+                onRetry = onRetry
+            )
+        }
+
+        identification != null -> {
+            AiResultCard(
+                identification = identification,
+                query = state.searchQuery,
+                onQueryChange = onQueryChange,
+                onSearch = {
+                    val query = state.searchQuery.trim()
+                    if (query.isNotBlank()) onSearch(query)
+                },
+                onAlternative = onAlternative,
+                onUseLyrics = onUseLyrics
+            )
+        }
+    }
+
+    AiChangePhotoButton(onPick = onPickPhoto)
+
+    Text(
+        text = "Photos are sent directly to Google Gemini using your key. " +
+            "Raazi does not store or upload them anywhere else.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+    )
+}
+
+@Composable
+private fun ListenSearchBody(
+    state: AiSongSearchUiState,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onSearch: (String) -> Unit,
+    onRetry: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAlternative: (SongCandidate) -> Unit,
+    onUseLyrics: () -> Unit
+) {
+    val identification = state.identification
+    when {
+        state.isRecording -> {
+            AiListeningCard(
+                elapsedMs = state.recordingElapsedMs,
+                maxMs = state.recordingMaxMs,
+                onStop = onStop
+            )
+        }
+
+        state.isIdentifying -> AiIdentifyingCard(isListening = true)
+
+        state.error != null -> {
+            AiErrorCard(
+                message = state.error ?: "Could not identify that song.",
+                onRetry = onRetry
+            )
+        }
+
+        identification != null -> {
+            AiResultCard(
+                identification = identification,
+                query = state.searchQuery,
+                onQueryChange = onQueryChange,
+                onSearch = {
+                    val query = state.searchQuery.trim()
+                    if (query.isNotBlank()) onSearch(query)
+                },
+                onAlternative = onAlternative,
+                onUseLyrics = onUseLyrics
+            )
+            AiListenAgainButton(onStart = onStart)
+        }
+
+        else -> AiListenStartCard(onStart = onStart)
+    }
+
+    Text(
+        text = "Clips are sent directly to Google Gemini using your key. Nothing " +
+            "is saved by Raazi. Only record audio you have permission to capture.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+    )
 }

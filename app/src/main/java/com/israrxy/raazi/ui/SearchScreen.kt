@@ -38,7 +38,7 @@ fun SearchScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToArtist: (String, String) -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToPhotoSearch: () -> Unit = {},
+    onNavigateToSongFinder: () -> Unit = {},
     initialQuery: String? = null
 ) {
     val context = LocalContext.current
@@ -229,7 +229,7 @@ fun SearchScreen(
                     dismissKeyboard()
                 }
             },
-            onOpenPhotoSearch = onNavigateToPhotoSearch
+            onOpenSongFinder = onNavigateToSongFinder
         )
 
         Box(modifier = Modifier.weight(1f)) {
@@ -439,7 +439,7 @@ fun SearchScreen(
                         dismissKeyboard()
                         searchViewModel.resolvePlayableHistoryItem(history, handleOpenOrPlayItem)
                     },
-                    onOpenPhotoSearch = onNavigateToPhotoSearch
+                    onOpenSongFinder = onNavigateToSongFinder
                 )
             }
         }

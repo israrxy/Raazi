@@ -132,7 +132,7 @@ fun GeminiKeyGuideScreen(onClose: () -> Unit) {
                         GuideNote("The free tier has per-minute and per-day limits. If you hit one, wait a moment and retry.")
                         GuideNote("Keep the key private. Anyone with it can use your free quota.")
                         GuideNote("Raazi stores the key on this device with Android Keystore encryption. It is not synced.")
-                        GuideNote("Photos are sent to Google only when you tap Identify on the photo search screen.")
+                        GuideNote("Only the photo or audio clip you start a search with is sent to Google.")
                         GuideNote("Availability and free limits are controlled by Google and can change.")
                     }
                 }
@@ -210,7 +210,8 @@ private enum class GuideStep(val title: String, val body: String) {
         "Go to Settings → AI & Gemini → API key, paste, then tap Save & test."
     ),
     USE(
-        "Find a song from a photo",
-        "Open Search, tap the photo icon, and pick an album cover or lyrics screenshot."
+        "Find a song from a photo or clip",
+        "Open Search, tap the camera icon, then choose Photo or Listen. " +
+            "Pick an image, or record 15 seconds of the song playing nearby."
     )
 }

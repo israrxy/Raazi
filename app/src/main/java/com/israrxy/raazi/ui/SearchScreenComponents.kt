@@ -91,7 +91,7 @@ internal fun SearchHeader(
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
     onSearch: () -> Unit,
-    onOpenPhotoSearch: (() -> Unit)? = null
+    onOpenSongFinder: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -109,14 +109,14 @@ internal fun SearchHeader(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.weight(1f)
             )
-            if (onOpenPhotoSearch != null) {
+            if (onOpenSongFinder != null) {
                 IconButton(
-                    onClick = onOpenPhotoSearch,
+                    onClick = onOpenSongFinder,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoCamera,
-                        contentDescription = "Find song from photo",
+                        contentDescription = "Find a song from a photo or audio",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }

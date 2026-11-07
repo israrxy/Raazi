@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.israrxy.raazi.ui.theme.Emerald500
 
 @Composable
-internal fun SearchFromPhotoCard(onClick: () -> Unit) {
+internal fun SearchFromMediaCard(onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -56,13 +56,13 @@ internal fun SearchFromPhotoCard(onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Find song from photo",
+                    text = "Find a song",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Album cover, screenshot, or lyrics",
+                    text = "From a photo or a short audio clip",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

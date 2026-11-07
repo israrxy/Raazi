@@ -61,7 +61,7 @@ internal enum class SettingsCategory(
     ),
     AI_GEMINI(
         title = "AI & Gemini",
-        subtitle = "Photo song finder · own free key",
+        subtitle = "Photo & audio song finder · own free key",
         icon = Icons.Filled.AutoAwesome
     ),
     LYRICS_AI(

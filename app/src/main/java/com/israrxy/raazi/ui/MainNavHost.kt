@@ -121,7 +121,7 @@ internal fun MainNavHost(
                 onNavigateToPlaylist = { id ->
                     navController.navigateToPlaylist(id)
                 },
-                onNavigateToPhotoSearch = {
+                onNavigateToSongFinder = {
                     navController.navigate("ai_song_search")
                 }
             )
