@@ -121,8 +121,11 @@ internal fun MainNavHost(
                 onNavigateToPlaylist = { id ->
                     navController.navigateToPlaylist(id)
                 },
-                onNavigateToSongFinder = {
-                    navController.navigate("ai_song_search")
+                onOpenSettings = {
+                    navController.navigate("settings?category=AI_GEMINI")
+                },
+                onOpenGuide = {
+                    navController.navigate("gemini_guide")
                 }
             )
         }
@@ -162,20 +165,6 @@ internal fun MainNavHost(
                 onNavigateToYouTubeLogin = { navController.navigate("youtube_login") },
                 onNavigateToGeminiGuide = { navController.navigate("gemini_guide") },
                 initialCategory = backStackEntry.arguments?.getString("category")
-            )
-        }
-        composable("ai_song_search") {
-            com.israrxy.raazi.ui.ai.AiSongSearchScreen(
-                onClose = { navController.popBackStack() },
-                onSearch = { query ->
-                    navController.navigate("search?query=${Uri.encode(query)}") {
-                        launchSingleTop = true
-                    }
-                },
-                onOpenSettings = {
-                    navController.navigate("settings?category=AI_GEMINI")
-                },
-                onOpenGuide = { navController.navigate("gemini_guide") }
             )
         }
         composable("gemini_guide") {

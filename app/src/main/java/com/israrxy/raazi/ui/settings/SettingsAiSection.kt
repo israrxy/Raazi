@@ -17,7 +17,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -25,17 +27,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,14 +48,19 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.israrxy.raazi.data.ai.WebVerifyLevel
+import com.israrxy.raazi.data.ai.WebVerifyUsage
+import com.israrxy.raazi.data.ai.WebVerifyUsageStore
 import com.israrxy.raazi.ui.SelectionDialog
 import com.israrxy.raazi.ui.SettingsActionItem
 import com.israrxy.raazi.ui.SettingsDivider
 import com.israrxy.raazi.ui.SettingsSection
 import com.israrxy.raazi.ui.SettingsSelectItem
+import com.israrxy.raazi.ui.SettingsSwitchItem
 import com.israrxy.raazi.ui.theme.Emerald500
 import com.israrxy.raazi.viewmodel.AiSettingsUiState
 import com.israrxy.raazi.viewmodel.AiSettingsViewModel
+import java.util.Locale
 
 @Composable
 internal fun SettingsAiSection(
@@ -60,6 +70,9 @@ internal fun SettingsAiSection(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+    var showCapDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     SettingsSection(title = "Gemini API") {
         SettingsActionItem(
@@ -110,12 +123,32 @@ internal fun SettingsAiSection(
 
     StatusMessage(state = state)
 
+    SettingsSection(title = "Web verification") {
+        SettingsSwitchItem(
+            icon = Icons.Filled.Language,
+            title = "Web-verify matches",
+            subtitle = "Use Google Search to confirm songs. Audio is always checked; photos when unsure.",
+            checked = state.usage.enabled,
+            onCheckedChange = viewModel::setWebVerifyEnabled
+        )
+        SettingsDivider()
+        WebVerifyUsageBlock(usage = state.usage)
+        SettingsDivider()
+        SettingsSelectItem(
+            icon = Icons.Filled.Tune,
+            title = "Monthly limit",
+            value = formatCap(state.usage.cap),
+            onClick = { showCapDialog = true }
+        )
+    }
+
     SettingsSection(title = "Privacy") {
         Text(
             text = "Your key is encrypted with Android Keystore and stays on this device. " +
                 "It is never synced to Raazi Drive or stored in the app's normal settings. " +
                 "A photo or audio clip is sent directly to Google Gemini only when you start " +
-                "a search. Google's free tier limits apply.",
+                "a search. Web verification sends only text, never the clip again. " +
+                "Google's free tier limits apply.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp)
@@ -135,7 +168,7 @@ internal fun SettingsAiSection(
 
     if (showModelDialog) {
         SelectionDialog(
-            title = "Vision model",
+            title = "Vision & audio model",
             options = MODEL_OPTIONS,
             selectedOption = state.model,
             onOptionSelected = { model ->
@@ -146,7 +179,97 @@ internal fun SettingsAiSection(
             descriptions = MODEL_DESCRIPTIONS
         )
     }
+
+    if (showCapDialog) {
+        SelectionDialog(
+            title = "Monthly web-check limit",
+            options = WebVerifyUsageStore.CAP_OPTIONS.map(::formatCap),
+            selectedOption = formatCap(state.usage.cap),
+            onOptionSelected = { label ->
+                WebVerifyUsageStore.CAP_OPTIONS
+                    .firstOrNull { formatCap(it) == label }
+                    ?.let(viewModel::setWebCheckCap)
+                showCapDialog = false
+            },
+            onDismiss = { showCapDialog = false },
+            descriptions = CAP_DESCRIPTIONS
+        )
+    }
 }
+
+@Composable
+private fun WebVerifyUsageBlock(usage: WebVerifyUsage) {
+    val accent = when (usage.level) {
+        WebVerifyLevel.AT_CAP -> MaterialTheme.colorScheme.error
+        WebVerifyLevel.NEAR_CAP -> Color(0xFFF59E0B)
+        WebVerifyLevel.NORMAL -> Emerald500
+    }
+    val status = when {
+        !usage.enabled -> "Off. Gemini's first match is used without a web check."
+        usage.level == WebVerifyLevel.AT_CAP ->
+            "Cap reached — first match will be used until ${usage.resetLabel}."
+        usage.level == WebVerifyLevel.NEAR_CAP ->
+            "${usage.remaining} left · resets ${usage.resetLabel}."
+        else -> "Resets ${usage.resetLabel}."
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Web checks this month",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${usage.used} / ${formatCap(usage.cap)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = accent
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { usage.fraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp),
+            color = accent,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        Spacer(modifier = Modifier.height(7.dp))
+        Text(
+            text = status,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (usage.enabled && usage.level != WebVerifyLevel.NORMAL) {
+                accent
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = "Counted on this device only. Your key may be used elsewhere.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+        )
+    }
+}
+
+private fun formatCap(cap: Int): String = String.format(Locale.US, "%,d", cap)
+
+private val CAP_DESCRIPTIONS = mapOf(
+    "100" to "Light use.",
+    "300" to "Occasional checking.",
+    "900" to "Default · recommended.",
+    "1,500" to "Heavy use.",
+    "3,000" to "Very heavy use.",
+    "5,000" to "Matches Google's free grounding allowance."
+)
 
 @Composable
 private fun StatusMessage(state: AiSettingsUiState) {

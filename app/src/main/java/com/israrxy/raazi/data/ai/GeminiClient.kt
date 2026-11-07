@@ -26,6 +26,12 @@ class GeminiException(
     override val message: String
 ) : Exception(message)
 
+/** Result of a grounded second pass, plus how many billable searches it used. */
+data class WebVerification(
+    val identification: SongIdentification,
+    val searchQueries: Int
+)
+
 /**
  * Thin client for the Gemini REST API. Runs entirely on the user's own key and
  * talks to Google directly; Raazi never proxies or stores requests.
@@ -76,6 +82,46 @@ class GeminiClient {
             base64Data = encodedAudio
         )
         parseIdentification(executeGenerate(apiKey, model, body))
+    }
+
+    /**
+     * Second, text-only pass that asks Gemini to confirm the first result with
+     * Google Search. The audio/photo is never re-uploaded here.
+     *
+     * Grounding and structured output have not always coexisted reliably, so
+     * this request asks for JSON in the prompt and parses the answer
+     * tolerantly instead of setting responseMimeType.
+     */
+    suspend fun verifyWithWebSearch(
+        apiKey: String,
+        model: String,
+        identification: SongIdentification,
+        source: String
+    ): WebVerification = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonArray("contents") {
+                addJsonObject {
+                    put("role", "user")
+                    putJsonArray("parts") {
+                        addJsonObject { put("text", webVerifyPrompt(identification, source)) }
+                    }
+                }
+            }
+            putJsonArray("tools") {
+                addJsonObject { putJsonObject("google_search") {} }
+            }
+            putJsonObject("generationConfig") {
+                put("maxOutputTokens", 1200)
+            }
+        }.toString()
+
+        val raw = executeGenerate(apiKey, model, body)
+        val parsed = SongIdentificationParser.parse(extractText(raw))
+            ?: throw GeminiException(0, "Gemini could not verify that match.")
+        WebVerification(
+            identification = parsed.copy(verifiedByWeb = hasGroundingMetadata(raw)),
+            searchQueries = countWebSearchQueries(raw)
+        )
     }
 
     private fun buildIdentifyBody(
@@ -208,6 +254,77 @@ class GeminiClient {
                 .orEmpty()
             if (methods.isNotEmpty() && "generateContent" !in methods) null else name
         }.distinct()
+    }
+
+    private fun groundingMetadata(raw: String): JsonObject? = runCatching {
+        val root = json.parseToJsonElement(raw).jsonObject
+        val candidate = (root["candidates"] as? JsonArray)
+            ?.firstOrNull()
+            ?.let { it as? JsonObject }
+        candidate?.get("groundingMetadata") as? JsonObject
+    }.getOrNull()
+
+    private fun hasGroundingMetadata(raw: String): Boolean = groundingMetadata(raw) != null
+
+    private fun countWebSearchQueries(raw: String): Int {
+        val queries = groundingMetadata(raw)
+            ?.get("webSearchQueries") as? JsonArray
+        return queries?.size?.takeIf { it > 0 } ?: 1
+    }
+
+    private fun webVerifyPrompt(
+        identification: SongIdentification,
+        source: String
+    ): String {
+        val title = identification.title ?: "unknown"
+        val artist = identification.artist ?: "unknown"
+        val album = identification.album ?: "unknown"
+        val year = identification.year ?: "unknown"
+        val confidence = identification.confidencePercent?.let { "$it%" } ?: "unknown"
+        val lyrics = identification.detectedText?.take(500) ?: "none"
+        val query = identification.searchQuery ?: "none"
+        val alternatives = identification.alternatives
+            .take(3)
+            .joinToString("; ") { "${it.title} — ${it.artist}" }
+            .ifBlank { "none" }
+        return """
+            You verify a music match using Google Search.
+
+            A first pass identified this song from $source:
+            - Title: $title
+            - Artist: $artist
+            - Album: $album
+            - Year: $year
+            - Confidence: $confidence
+            - YouTube query: $query
+            - Detected lyrics: $lyrics
+            - Other guesses: $alternatives
+
+            Search the web to confirm the canonical song. Prefer the original
+            studio recording by the credited artist. If the first pass is wrong,
+            return the correct song. If no song can be confirmed, set identified
+            to false.
+
+            Return ONLY a JSON object with exactly this shape:
+            {
+              "identified": true or false,
+              "title": "song title or null",
+              "artist": "artist name or null",
+              "album": "album name or null",
+              "year": "release year or null",
+              "confidence": 0.0 to 1.0,
+              "search_query": "best YouTube search query or null",
+              "detected_text": "confirmed lyrics excerpt, max 300 chars, or null",
+              "alternatives": [{"title": "other match", "artist": "artist"}],
+              "message": "short explanation when not identified, else null"
+            }
+
+            Rules:
+            - Use the search results. Never invent a song.
+            - search_query must be tuned for YouTube (for example "Ed Sheeran Perfect").
+            - confidence must reflect your real certainty after searching.
+            - Keep alternatives to at most 3 likely matches.
+        """.trimIndent()
     }
 
     private fun messageFor(code: Int, body: String): String {

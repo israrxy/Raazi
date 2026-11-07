@@ -5,8 +5,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="raazi_gemini.xml" />
+        <exclude domain="sharedpref" path="raazi_web_verify.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="raazi_gemini.xml" />
+        <exclude domain="sharedpref" path="raazi_web_verify.xml" />
     </device-transfer>
 </data-extraction-rules>

@@ -145,8 +145,7 @@ fun MainScreen(viewModel: MusicPlayerViewModel) {
     val onSettingsScreen = currentDestination?.route == "settings" || currentDestination?.route?.startsWith("settings") == true
     val onPlaylistScreen = currentDestination?.route?.startsWith("playlist/") == true
     val onPlaylistMakerScreen = currentDestination?.route == "playlist_maker"
-    val onAiScreen = currentDestination?.route == "ai_song_search" ||
-        currentDestination?.route == "gemini_guide"
+    val onAiScreen = currentDestination?.route == "gemini_guide"
     val showBottomBar = (currentDestination.isTopLevelDestination() || onPlaylistScreen) && !onRingtoneScreen
     val isMiniPlayerSuppressed = onSettingsScreen || isSelectionModeActive || onRingtoneScreen ||
         onPlaylistMakerScreen || onAiScreen

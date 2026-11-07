@@ -38,13 +38,15 @@ fun SearchScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToArtist: (String, String) -> Unit,
     onNavigateToPlaylist: (String) -> Unit,
-    onNavigateToSongFinder: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
     initialQuery: String? = null
 ) {
     val context = LocalContext.current
     val searchViewModel: SearchViewModel = viewModel()
     var searchQuery by remember { mutableStateOf("") }
     var showAddToPlaylistItem by remember { mutableStateOf<MusicItem?>(null) }
+    var showSongFinder by remember { mutableStateOf(false) }
 
     val searchResults by searchViewModel.searchResults.collectAsState()
     val isSearching by searchViewModel.isSearching.collectAsState()
@@ -229,7 +231,10 @@ fun SearchScreen(
                     dismissKeyboard()
                 }
             },
-            onOpenSongFinder = onNavigateToSongFinder
+            onOpenSongFinder = {
+                dismissKeyboard()
+                showSongFinder = true
+            }
         )
 
         Box(modifier = Modifier.weight(1f)) {
@@ -439,10 +444,33 @@ fun SearchScreen(
                         dismissKeyboard()
                         searchViewModel.resolvePlayableHistoryItem(history, handleOpenOrPlayItem)
                     },
-                    onOpenSongFinder = onNavigateToSongFinder
+                    onOpenSongFinder = {
+                        dismissKeyboard()
+                        showSongFinder = true
+                    }
                 )
             }
         }
+    }
+
+    if (showSongFinder) {
+        com.israrxy.raazi.ui.ai.SongFinderSheet(
+            onDismiss = { showSongFinder = false },
+            onSearch = { query ->
+                searchQuery = query
+                searchViewModel.performSearch(query)
+                dismissKeyboard()
+                showSongFinder = false
+            },
+            onOpenSettings = {
+                showSongFinder = false
+                onOpenSettings()
+            },
+            onOpenGuide = {
+                showSongFinder = false
+                onOpenGuide()
+            }
+        )
     }
 
     val targetForPlaylist = showAddToPlaylistItem?.let { listOf(it) } ?: tracksToAddToPlaylist

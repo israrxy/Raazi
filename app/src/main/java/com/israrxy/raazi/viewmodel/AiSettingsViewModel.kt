@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.israrxy.raazi.data.ai.GeminiClient
 import com.israrxy.raazi.data.ai.GeminiException
 import com.israrxy.raazi.data.ai.GeminiKeyStore
+import com.israrxy.raazi.data.ai.WebVerifyLevel
+import com.israrxy.raazi.data.ai.WebVerifyUsage
+import com.israrxy.raazi.data.ai.WebVerifyUsageStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +20,15 @@ data class AiSettingsUiState(
     val model: String = GeminiKeyStore.DEFAULT_MODEL,
     val isBusy: Boolean = false,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val usage: WebVerifyUsage = WebVerifyUsage(
+        used = 0,
+        cap = WebVerifyUsageStore.DEFAULT_CAP,
+        enabled = true,
+        resetLabel = "",
+        level = WebVerifyLevel.NORMAL,
+        showCapExplanation = false
+    )
 )
 
 /**
@@ -27,12 +38,14 @@ data class AiSettingsUiState(
 class AiSettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val keyStore = GeminiKeyStore(app)
+    private val usageStore = WebVerifyUsageStore(app)
     private val client = GeminiClient()
 
     private val _state = MutableStateFlow(
         AiSettingsUiState(
             hasKey = keyStore.isConfigured(),
-            model = keyStore.readModel()
+            model = keyStore.readModel(),
+            usage = usageStore.read()
         )
     )
     val state: StateFlow<AiSettingsUiState> = _state.asStateFlow()
@@ -41,9 +54,20 @@ class AiSettingsViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 hasKey = keyStore.isConfigured(),
-                model = keyStore.readModel()
+                model = keyStore.readModel(),
+                usage = usageStore.read()
             )
         }
+    }
+
+    fun setWebVerifyEnabled(enabled: Boolean) {
+        usageStore.setEnabled(enabled)
+        _state.update { it.copy(usage = usageStore.read()) }
+    }
+
+    fun setWebCheckCap(cap: Int) {
+        usageStore.setCap(cap)
+        _state.update { it.copy(usage = usageStore.read()) }
     }
 
     fun clearStatus() {

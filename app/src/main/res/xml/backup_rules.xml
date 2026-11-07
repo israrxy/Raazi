@@ -4,4 +4,5 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="raazi_gemini.xml" />
+    <exclude domain="sharedpref" path="raazi_web_verify.xml" />
 </full-backup-content>

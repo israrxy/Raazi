@@ -36,10 +36,18 @@ data class SongIdentification(
     val searchQuery: String?,
     val detectedText: String?,
     val alternatives: List<SongCandidate>,
-    val message: String?
+    val message: String?,
+    val verifiedByWeb: Boolean = false
 ) {
     val hasCandidate: Boolean
         get() = identified && (!title.isNullOrBlank() || !artist.isNullOrBlank())
+
+    val hasLyrics: Boolean
+        get() = !detectedText.isNullOrBlank()
+
+    /** A named song with enough confidence to leave the sheet automatically. */
+    val isConfident: Boolean
+        get() = hasCandidate && (confidencePercent ?: 0) >= CONFIDENT_PERCENT
 
     fun primaryQuery(): String = listOfNotNull(
         searchQuery?.takeIf { it.isNotBlank() },
@@ -52,6 +60,10 @@ data class SongIdentification(
 
     fun lyricsQuery(): String =
         detectedText?.trim()?.take(120)?.takeIf { it.isNotBlank() }.orEmpty()
+
+    private companion object {
+        const val CONFIDENT_PERCENT = 70
+    }
 }
 
 /**
