@@ -31,7 +31,8 @@ data class AiSongSearchUiState(
     val error: String? = null,
     val isRecording: Boolean = false,
     val recordingElapsedMs: Long = 0L,
-    val recordingMaxMs: Long = AudioPayload.MAX_DURATION_MS
+    val recordingMaxMs: Long = AudioPayload.MAX_DURATION_MS,
+    val recordingLevels: List<Float> = emptyList()
 )
 
 /**
@@ -75,7 +76,8 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                 searchQuery = "",
                 error = null,
                 isRecording = false,
-                recordingElapsedMs = 0L
+                recordingElapsedMs = 0L,
+                recordingLevels = emptyList()
             )
         }
     }
@@ -122,6 +124,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                     mode = AiInputMode.LISTEN,
                     isRecording = true,
                     recordingElapsedMs = 0L,
+                    recordingLevels = emptyList(),
                     isIdentifying = false,
                     identification = null,
                     searchQuery = "",
@@ -143,6 +146,18 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                                 current
                             }
                         }
+                    },
+                    onLevel = { level ->
+                        _state.update { current ->
+                            if (current.isRecording) {
+                                current.copy(
+                                    recordingLevels = (current.recordingLevels + level)
+                                        .takeLast(MAX_LEVEL_SAMPLES)
+                                )
+                            } else {
+                                current
+                            }
+                        }
                     }
                 )
                 lastAudio = wav
@@ -150,7 +165,11 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                 identifyAudio(apiKey, wav)
             } catch (e: CancellationException) {
                 _state.update {
-                    it.copy(isRecording = false, recordingElapsedMs = 0L)
+                    it.copy(
+                        isRecording = false,
+                        recordingElapsedMs = 0L,
+                        recordingLevels = emptyList()
+                    )
                 }
                 throw e
             } catch (e: Exception) {
@@ -158,6 +177,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         isRecording = false,
                         recordingElapsedMs = 0L,
+                        recordingLevels = emptyList(),
                         isIdentifying = false,
                         error = e.message ?: "Could not listen to that clip. Try again."
                     )
@@ -178,7 +198,11 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         audioJob?.cancel()
         audioJob = null
         _state.update {
-            it.copy(isRecording = false, recordingElapsedMs = 0L)
+            it.copy(
+                isRecording = false,
+                recordingElapsedMs = 0L,
+                recordingLevels = emptyList()
+            )
         }
     }
 
@@ -186,6 +210,7 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 isRecording = false,
+                recordingLevels = emptyList(),
                 error = "Microphone permission is needed. Allow it for Raazi in " +
                     "system settings, then try again."
             )
@@ -338,5 +363,9 @@ class AiSongSearchViewModel(app: Application) : AndroidViewModel(app) {
         audioJob?.cancel()
         identifyJob?.cancel()
         super.onCleared()
+    }
+
+    private companion object {
+        const val MAX_LEVEL_SAMPLES = 40
     }
 }

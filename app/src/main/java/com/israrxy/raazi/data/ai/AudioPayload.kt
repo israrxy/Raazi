@@ -10,6 +10,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import kotlin.coroutines.coroutineContext
+import kotlin.math.sqrt
 
 /**
  * Records a short mono clip from the microphone and wraps it in a WAV header.
@@ -27,7 +28,8 @@ object AudioPayload {
     @SuppressLint("MissingPermission")
     suspend fun record(
         shouldStop: () -> Boolean,
-        onProgress: (elapsedMs: Long, maxMs: Long) -> Unit
+        onProgress: (elapsedMs: Long, maxMs: Long) -> Unit,
+        onLevel: (Float) -> Unit
     ): ByteArray = withContext(Dispatchers.IO) {
         val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
@@ -71,7 +73,10 @@ object AudioPayload {
                         "The microphone stopped unexpectedly. Try again."
                     )
                 }
-                if (read > 0) pcm.write(buffer, 0, read)
+                if (read > 0) {
+                    pcm.write(buffer, 0, read)
+                    onLevel(levelOf(buffer, read))
+                }
 
                 if (elapsed - lastProgress >= PROGRESS_INTERVAL_MS) {
                     lastProgress = elapsed
@@ -99,6 +104,21 @@ object AudioPayload {
             runCatching { recorder.stop() }
             recorder.release()
         }
+    }
+
+    private fun levelOf(buffer: ByteArray, read: Int): Float {
+        val sampleCount = read / 2
+        if (sampleCount <= 0) return 0f
+        var sumSquares = 0.0
+        var index = 0
+        while (index + 1 < read) {
+            val raw = (buffer[index].toInt() and 0xff) or (buffer[index + 1].toInt() shl 8)
+            val sample = raw.toShort().toInt()
+            sumSquares += sample.toDouble() * sample
+            index += 2
+        }
+        val rms = sqrt(sumSquares / sampleCount)
+        return ((rms / 32768.0) * 4.0).coerceIn(0.0, 1.0).toFloat()
     }
 
     private fun wrapWav(pcm: ByteArray): ByteArray {

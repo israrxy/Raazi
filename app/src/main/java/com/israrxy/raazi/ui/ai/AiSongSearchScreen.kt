@@ -5,6 +5,11 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -108,10 +113,17 @@ fun AiSongSearchScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Find a song",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = "Find a song",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Photo or audio · your Gemini key",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
@@ -137,8 +149,8 @@ fun AiSongSearchScreen(
                 .imePadding()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (!state.keyConfigured) {
                 AiNoKeyState(
@@ -150,28 +162,48 @@ fun AiSongSearchScreen(
                     selected = state.mode,
                     onSelect = viewModel::setMode
                 )
-                when (state.mode) {
-                    AiInputMode.PHOTO -> PhotoSearchBody(
-                        state = state,
-                        onPickPhoto = pickPhoto,
-                        onSearch = onSearch,
-                        onRetry = viewModel::retry,
-                        onQueryChange = viewModel::updateSearchQuery,
-                        onAlternative = viewModel::useAlternative,
-                        onUseLyrics = viewModel::useDetectedLyrics
-                    )
 
-                    AiInputMode.LISTEN -> ListenSearchBody(
-                        state = state,
-                        onStart = requestListen,
-                        onStop = viewModel::stopListening,
-                        onSearch = onSearch,
-                        onRetry = viewModel::retry,
-                        onQueryChange = viewModel::updateSearchQuery,
-                        onAlternative = viewModel::useAlternative,
-                        onUseLyrics = viewModel::useDetectedLyrics
-                    )
+                AnimatedContent(
+                    targetState = state.mode,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(200)) togetherWith
+                            fadeOut(animationSpec = tween(120))
+                    },
+                    label = "aiInputMode"
+                ) { mode ->
+                    when (mode) {
+                        AiInputMode.PHOTO -> PhotoSearchBody(
+                            state = state,
+                            onPickPhoto = pickPhoto,
+                            onSearch = onSearch,
+                            onRetry = viewModel::retry,
+                            onQueryChange = viewModel::updateSearchQuery,
+                            onAlternative = viewModel::useAlternative,
+                            onUseLyrics = viewModel::useDetectedLyrics
+                        )
+
+                        AiInputMode.LISTEN -> ListenSearchBody(
+                            state = state,
+                            onStart = requestListen,
+                            onStop = viewModel::stopListening,
+                            onSearch = onSearch,
+                            onRetry = viewModel::retry,
+                            onQueryChange = viewModel::updateSearchQuery,
+                            onAlternative = viewModel::useAlternative,
+                            onUseLyrics = viewModel::useDetectedLyrics
+                        )
+                    }
                 }
+
+                AiPrivacyNote(
+                    text = if (state.mode == AiInputMode.LISTEN) {
+                        "The clip goes straight to Google Gemini with your key. " +
+                            "Raazi never saves it. Only record audio you may capture."
+                    } else {
+                        "Your photo goes straight to Google Gemini with your key. " +
+                            "Raazi never stores or uploads it anywhere else."
+                    }
+                )
             }
         }
     }
@@ -222,16 +254,6 @@ private fun PhotoSearchBody(
     }
 
     AiChangePhotoButton(onPick = onPickPhoto)
-
-    Text(
-        text = "Photos are sent directly to Google Gemini using your key. " +
-            "Raazi does not store or upload them anywhere else.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-    )
 }
 
 @Composable
@@ -248,9 +270,10 @@ private fun ListenSearchBody(
     val identification = state.identification
     when {
         state.isRecording -> {
-            AiListeningCard(
+            AiListeningHero(
                 elapsedMs = state.recordingElapsedMs,
                 maxMs = state.recordingMaxMs,
+                levels = state.recordingLevels,
                 onStop = onStop
             )
         }
@@ -279,16 +302,6 @@ private fun ListenSearchBody(
             AiListenAgainButton(onStart = onStart)
         }
 
-        else -> AiListenStartCard(onStart = onStart)
+        else -> AiListenHero(onStart = onStart)
     }
-
-    Text(
-        text = "Clips are sent directly to Google Gemini using your key. Nothing " +
-            "is saved by Raazi. Only record audio you have permission to capture.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-    )
 }

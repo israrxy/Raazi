@@ -3,35 +3,32 @@ package com.israrxy.raazi.ui.ai
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,13 +36,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.israrxy.raazi.data.ai.SongCandidate
-import com.israrxy.raazi.data.ai.SongIdentification
 import com.israrxy.raazi.ui.theme.Emerald500
 
 @Composable
@@ -53,106 +50,153 @@ internal fun AiNoKeyState(
     onOpenSettings: () -> Unit,
     onOpenGuide: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .size(76.dp)
-                .background(Emerald500.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.Key,
-                contentDescription = null,
-                tint = Emerald500,
-                modifier = Modifier.size(34.dp)
+            Box(
+                modifier = Modifier
+                    .size(84.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Emerald500.copy(alpha = 0.26f),
+                                Emerald500.copy(alpha = 0.08f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Key,
+                    contentDescription = null,
+                    tint = Emerald500,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+            Text(
+                text = "Add your Gemini key",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
             )
-        }
-        Text(
-            text = "Add your Gemini key",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Photo and audio song search use your own free Gemini API key. " +
-                "It takes a minute to create and costs nothing.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-        Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-            Text("Open AI settings")
-        }
-        TextButton(onClick = onOpenGuide) {
-            Text("How to get a free key")
+            Text(
+                text = "Photo and audio song search run on your own free Gemini " +
+                    "key. It takes a minute to create and costs you nothing.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(percent = 50)
+            ) {
+                Text("Open AI settings", fontWeight = FontWeight.SemiBold)
+            }
+            TextButton(onClick = onOpenGuide) {
+                Text("How to get a free key")
+            }
         }
     }
 }
 
 @Composable
 internal fun AiPhotoPickerState(onPick: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    val shape = RoundedCornerShape(28.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Emerald500.copy(alpha = 0.18f),
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                )
+            )
+            .border(1.dp, Emerald500.copy(alpha = 0.2f), shape)
+            .padding(24.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(Emerald500.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.PhotoCamera,
                     contentDescription = null,
                     tint = Emerald500,
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(40.dp)
                 )
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = "Pick a photo",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+            }
+            Text(
+                text = "Find a song from a photo",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Pick album art, a song screenshot, or printed lyrics. " +
+                    "Gemini reads it and matches the track.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Album art · Screenshot · Lyrics",
+                style = MaterialTheme.typography.labelMedium,
+                color = Emerald500,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Button(
+                onClick = onPick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(percent = 50)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PhotoCamera,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
-                Text(
-                    text = "Album cover, song screenshot, or printed lyrics",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(18.dp))
-                Button(onClick = onPick) {
-                    Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Choose photo")
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Choose photo", fontWeight = FontWeight.SemiBold)
             }
         }
-        Text(
-            text = "Only the photo you pick is sent, and only to Google Gemini. " +
-                "Raazi does not upload it anywhere else.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
     }
 }
 
 @Composable
 internal fun AiPhotoPreview(uri: Uri) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         AsyncImage(
             model = uri,
@@ -160,11 +204,33 @@ internal fun AiPhotoPreview(uri: Uri) {
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(250.dp)
                 .padding(8.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
         )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(14.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(Color.Black.copy(alpha = 0.62f))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = Emerald500,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = "Photo selected",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White
+            )
+        }
     }
 }
 
@@ -172,18 +238,30 @@ internal fun AiPhotoPreview(uri: Uri) {
 internal fun AiIdentifyingCard(isListening: Boolean = false) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
     ) {
         Row(
             modifier = Modifier.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.5.dp,
-                color = Emerald500
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Emerald500.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(26.dp),
+                    strokeWidth = 2.5.dp,
+                    color = Emerald500
+                )
+            }
             Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(
@@ -212,179 +290,60 @@ internal fun AiErrorCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.ErrorOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Couldn't identify the song",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            TextButton(onClick = onRetry) { Text("Try again") }
-        }
-    }
-}
-
-@Composable
-internal fun AiResultCard(
-    identification: SongIdentification,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
-    onAlternative: (SongCandidate) -> Unit,
-    onUseLyrics: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+        )
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (identification.hasCandidate) {
-                Text(
-                    text = identification.title ?: "Unknown song",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                val details = listOfNotNull(
-                    identification.artist?.takeIf { it.isNotBlank() },
-                    identification.album?.takeIf { it.isNotBlank() },
-                    identification.year?.takeIf { it.isNotBlank() }
-                ).joinToString(" · ")
-                if (details.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = details,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Couldn't identify the song",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                identification.confidencePercent?.let { confidence ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LinearProgressIndicator(
-                            progress = { confidence / 100f },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .clip(CircleShape),
-                            color = Emerald500,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "$confidence%",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "No song found",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Text(
-                    text = identification.message
-                        ?: "Gemini couldn't name this one. You can still search the visible text.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-
-            identification.detectedText?.takeIf { it.isNotBlank() }?.let { detected ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Detected text",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = detected,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (!identification.hasCandidate) {
-                        TextButton(
-                            onClick = onUseLyrics,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)
-                        ) {
-                            Text("Search these lyrics instead")
-                        }
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                label = { Text("YouTube search") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(
-                onClick = onSearch,
-                enabled = query.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
+            FilledTonalButton(
+                onClick = onRetry,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(percent = 50)
             ) {
-                Icon(Icons.Filled.Search, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Search YouTube")
-            }
-
-            if (identification.alternatives.isNotEmpty()) {
-                Text(
-                    text = "Other matches",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(identification.alternatives) { candidate ->
-                        SuggestionChip(
-                            onClick = { onAlternative(candidate) },
-                            label = {
-                                Text(
-                                    text = candidate.query,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Try again")
             }
         }
     }
@@ -394,7 +353,10 @@ internal fun AiResultCard(
 internal fun AiChangePhotoButton(onPick: () -> Unit) {
     OutlinedButton(
         onClick = onPick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        shape = RoundedCornerShape(percent = 50)
     ) {
         Icon(
             imageVector = Icons.Filled.PhotoCamera,
@@ -403,5 +365,28 @@ internal fun AiChangePhotoButton(onPick: () -> Unit) {
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text("Try another photo")
+    }
+}
+
+@Composable
+internal fun AiPrivacyNote(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
